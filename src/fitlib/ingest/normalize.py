@@ -33,10 +33,27 @@ VALUE_COLUMNS = [c for c in SCHEMA if c not in ("t", "timestamp", "active")]
 
 
 def empty_frame() -> pl.DataFrame:
+    """A frame with no rows but every column of ``SCHEMA``.
+
+    Returns:
+        The empty frame.
+    """
     return pl.DataFrame(schema=SCHEMA)
 
 
 def to_frame(records: list[dict[str, Any]]) -> pl.DataFrame:
+    """Put decoded records on a 1-second grid from the first record to the last.
+
+    Timestamps are truncated to whole seconds; when two records land on the same second the
+    later one wins. Gaps up to ``MAX_FILL_GAP_S`` are filled with the previous values; longer
+    gaps become paused rows (``active`` false, values null).
+
+    Args:
+        records: Decoded records (see ``DecodedActivity.records``), in any order.
+
+    Returns:
+        A frame with the columns and types of ``SCHEMA``; empty if there are no records.
+    """
     if not records:
         return empty_frame()
 

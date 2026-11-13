@@ -1,3 +1,5 @@
+"""In-memory catalog for tests. Behaves exactly like the SQLite catalog."""
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -14,11 +16,29 @@ from fitlib.store.interfaces import (
 
 
 def _matches_text(ride: Ride, text: str) -> bool:
+    """Check a ride against a text search, the same way FTS5 prefix queries do.
+
+    Args:
+        ride: The ride.
+        text: The search text.
+
+    Returns:
+        ``True`` if every word of ``text`` starts some word of the ride's searchable text.
+    """
     ride_words = [w for field in searchable_text(ride).values() for w in words(field)]
     return all(any(w.startswith(q) for w in ride_words) for q in words(text))
 
 
 def _matches(ride: Ride, f: Filters) -> bool:
+    """Check a ride against every filter.
+
+    Args:
+        ride: The ride.
+        f: The filters; ``None`` fields match everything.
+
+    Returns:
+        ``True`` if the ride passes them all.
+    """
     s = ride.summary
     checks = [
         f.text is None or _matches_text(ride, f.text),
@@ -34,6 +54,15 @@ def _matches(ride: Ride, f: Filters) -> bool:
 
 
 def _sort_value(ride: Ride, sort: SortKey) -> float | None:
+    """The value a ride is sorted by.
+
+    Args:
+        ride: The ride.
+        sort: The sort key.
+
+    Returns:
+        A number to sort on, or ``None`` if the ride has no value for the key.
+    """
     s = ride.summary
     match sort:
         case SortKey.START:
@@ -47,21 +76,54 @@ def _sort_value(ride: Ride, sort: SortKey) -> float | None:
 
 
 class MemoryCatalog:
+    """Rides in a dict, for tests. Passes the same contract tests as ``SqliteCatalog``."""
+
     def __init__(self) -> None:
         self._rides: dict[str, Ride] = {}
 
     def add_ride(self, ride: Ride) -> None:
+        """Store a new ride, all or nothing.
+
+        Args:
+            ride: The ride to add.
+
+        Raises:
+            DuplicateRide: A ride with the same sha256 is already stored.
+        """
         if self.find_by_hash(ride.sha256) is not None:
             raise DuplicateRide(ride.sha256)
         self._rides[ride.id] = ride
 
     def get_ride(self, ride_id: str) -> Ride:
+        """Load one ride.
+
+        Args:
+            ride_id: The ride's full id.
+
+        Returns:
+            The ride, including laps, location and metadata.
+
+        Raises:
+            RideNotFound: No ride has this id.
+        """
         try:
             return self._rides[ride_id]
         except KeyError:
             raise RideNotFound(ride_id) from None
 
     def resolve_id(self, ref: str) -> str:
+        """Turn a full id or unique prefix into a ride's full id.
+
+        Args:
+            ref: A full id, or a prefix of at least ``MIN_ID_PREFIX`` characters.
+
+        Returns:
+            The full id of the one matching ride.
+
+        Raises:
+            RideNotFound: Nothing matches, or the prefix is too short.
+            AmbiguousRideId: The prefix matches several rides.
+        """
         if ref in self._rides:
             return ref
         if len(ref) < MIN_ID_PREFIX:
@@ -74,9 +136,26 @@ class MemoryCatalog:
         return candidates[0]
 
     def find_by_hash(self, sha256: str) -> str | None:
+        """Find the ride imported from a given file.
+
+        Args:
+            sha256: Hex sha256 of the original .fit file.
+
+        Returns:
+            That ride's id, or ``None``.
+        """
         return next((r.id for r in self._rides.values() if r.sha256 == sha256), None)
 
     def rides_starting_between(self, start: datetime, end: datetime) -> list[Ride]:
+        """Load the rides that start inside a time window.
+
+        Args:
+            start: Beginning of the window (inclusive).
+            end: End of the window (inclusive).
+
+        Returns:
+            The rides, oldest first (ties by id).
+        """
         found = [r for r in self._rides.values() if start <= r.summary.start <= end]
         return sorted(found, key=lambda r: (r.summary.start, r.id))
 
@@ -88,6 +167,18 @@ class MemoryCatalog:
         offset: int = 0,
         limit: int = 50,
     ) -> Page[Ride]:
+        """Find rides, one page at a time.
+
+        Args:
+            filters: What to match.
+            sort: What to sort by; rides with no value for it come last.
+            descending: Largest (or newest) first when true.
+            offset: How many matching rides to skip.
+            limit: The most rides to return.
+
+        Returns:
+            The page of rides and the total number that match.
+        """
         found = [r for r in self._rides.values() if _matches(r, filters)]
         # Tie-break on start then id; rides with no value for the sort key always go last.
         found.sort(key=lambda r: (r.summary.start, r.id), reverse=descending)
@@ -98,7 +189,13 @@ class MemoryCatalog:
         return Page(tuple(ordered[offset : offset + limit]), len(ordered), offset, limit)
 
     def count(self) -> int:
+        """Count the rides in the catalog.
+
+        Returns:
+            The number of rides.
+        """
         return len(self._rides)
 
     def close(self) -> None:
+        """Release the catalog's resources."""
         pass

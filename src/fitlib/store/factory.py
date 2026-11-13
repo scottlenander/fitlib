@@ -16,6 +16,14 @@ BLOBS_DIR = "blobs"
 
 @dataclass(frozen=True)
 class Stores:
+    """The stores one library is made of.
+
+    Attributes:
+        catalog: Ride entries.
+        blobs: Original files and streams.
+        streams: Streams, on top of ``blobs``.
+    """
+
     catalog: CatalogStore
     blobs: BlobStore
     streams: StreamStore
@@ -23,6 +31,17 @@ class Stores:
 
 @contextmanager
 def open_stores(config: Config) -> Generator[Stores]:
+    """Open the library a config describes, creating it if needed, and close it afterwards.
+
+    Args:
+        config: Which library and backend to use.
+
+    Yields:
+        The library's stores.
+
+    Raises:
+        ConfigError: The config names a backend that doesn't exist.
+    """
     if config.backend != "local":
         raise ConfigError(f"Unknown store backend {config.backend!r}")
 

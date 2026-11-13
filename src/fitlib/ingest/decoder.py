@@ -27,17 +27,38 @@ _RECORD_FIELDS: dict[str, tuple[str, ...]] = {
 
 
 class DecodeError(Exception):
-    pass
+    """The bytes aren't a complete, valid FIT file."""
 
 
 @dataclass(frozen=True)
 class DecodedLap:
+    """A lap message from the file.
+
+    Attributes:
+        start: When the lap started, in UTC.
+        elapsed_s: The lap's length in seconds, if the file says.
+    """
+
     start: datetime
     elapsed_s: float | None
 
 
 @dataclass(frozen=True)
 class DecodedActivity:
+    """The parts of a FIT activity file that fitlib uses.
+
+    Attributes:
+        manufacturer: FIT manufacturer, e.g. ``"garmin"`` or ``"zwift"``.
+        product: Product name (e.g. ``"edge_540"``) or number as text, if known.
+        sport: FIT sport, e.g. ``"cycling"``, if the file says.
+        sub_sport: FIT sub-sport, e.g. ``"road"``, if the file says.
+        utc_offset_s: Local time minus UTC in seconds, if the device recorded local time.
+        records: One dict per record, with keys ``timestamp`` (UTC datetime), ``power``,
+            ``heart_rate``, ``cadence``, ``speed`` (m/s), ``distance`` (m), ``altitude`` (m),
+            ``lat`` and ``lon`` (degrees) and ``temperature``. Missing values are ``None``.
+        laps: The file's laps, oldest first.
+    """
+
     manufacturer: str | None
     product: str | None
     sport: str | None
@@ -48,6 +69,15 @@ class DecodedActivity:
 
 
 def _first(fields: dict[str, Any], names: tuple[str, ...]) -> Any:
+    """The first of several fields that has a value.
+
+    Args:
+        fields: A message's fields by name.
+        names: Field names, preferred first.
+
+    Returns:
+        The first non-``None`` value, or ``None``.
+    """
     for name in names:
         value = fields.get(name)
         if value is not None:
@@ -56,22 +86,45 @@ def _first(fields: dict[str, Any], names: tuple[str, ...]) -> Any:
 
 
 def _degrees(value: Any) -> float | None:
+    """Convert a FIT position from semicircles to degrees.
+
+    Args:
+        value: Semicircles (an int), or anything else for a missing position.
+
+    Returns:
+        Degrees, or ``None`` if ``value`` isn't an int.
+    """
     return value * SEMICIRCLE_TO_DEG if isinstance(value, int) else None
 
 
 def _name(value: Any) -> str | None:
-    """Enum-like values decode as strings; unknown ones as numbers."""
+    """Turn a FIT enum value into text.
+
+    fitdecode gives known enum values as names (``"garmin"``) and unknown ones as numbers.
+
+    Args:
+        value: The decoded value, or ``None``.
+
+    Returns:
+        The value as text, or ``None``.
+    """
     if value is None:
         return None
     return str(value)
 
 
 def _utc_offset(activity: dict[str, Any]) -> int | None:
-    """Local time minus UTC, from the activity message's local and UTC timestamps.
+    """Work out the rider's time zone offset from the activity message.
 
     fitdecode returns ``local_timestamp`` as a datetime labelled UTC that actually holds local
     wall-clock time, or as raw seconds since the FIT epoch for some files; both are handled.
-    Offsets are rounded to the nearest 15 minutes (every real time zone is a multiple).
+
+    Args:
+        activity: The activity message's fields.
+
+    Returns:
+        Local time minus UTC in seconds, rounded to the nearest 15 minutes (every real time
+        zone is a multiple), or ``None`` if the file has no local time.
     """
     local, utc = activity.get("local_timestamp"), activity.get("timestamp")
     if not isinstance(utc, datetime):
@@ -86,7 +139,18 @@ def _utc_offset(activity: dict[str, Any]) -> int | None:
 
 
 def decode(data: bytes) -> DecodedActivity:
-    """Raises ``DecodeError`` for anything fitdecode can't read (bad header, CRC, truncation)."""
+    """Decode a .fit file into its device, sport, local time, records and laps.
+
+    Args:
+        data: The file's bytes.
+
+    Returns:
+        The decoded activity. Records without a timestamp are dropped.
+
+    Raises:
+        DecodeError: The data is empty, or fitdecode can't read it (bad header, failed CRC,
+            truncated file).
+    """
     if not data:
         raise DecodeError("the file is empty")
     file_id: dict[str, Any] = {}

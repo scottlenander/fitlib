@@ -14,7 +14,15 @@ METRICS_VERSION = 1
 
 
 def summarize(decoded: DecodedActivity, frame: pl.DataFrame) -> RideSummary:
-    """``frame`` must have at least one row."""
+    """Combine what the file says with figures computed from its samples.
+
+    Args:
+        decoded: The decoded file.
+        frame: The ride's 1 Hz frame from ``to_frame``. Must have at least one row.
+
+    Returns:
+        The ride's summary.
+    """
     has_gps = basic.has_data(frame, "lat")
     return RideSummary(
         start=frame["timestamp"][0],

@@ -24,16 +24,32 @@ BACKENDS = ("local",)
 
 
 class ConfigError(Exception):
-    pass
+    """The config file is missing (when named explicitly), unreadable or invalid."""
 
 
 @dataclass(frozen=True)
 class Config:
+    """Settings read from the config file.
+
+    Attributes:
+        library: Folder holding the catalog and blobs. Absolute, with ``~`` expanded.
+        backend: Which storage backend to use. Only ``"local"`` exists so far.
+    """
+
     library: Path
     backend: str = "local"
 
 
 def config_path(explicit: Path | None = None) -> Path:
+    """Work out which config file to read.
+
+    Args:
+        explicit: A path given on the command line, if any. It takes priority.
+
+    Returns:
+        ``explicit``, else ``$FITLIB_CONFIG``, else ``~/.fitlib/config.toml``, with ``~``
+        expanded. The file may not exist.
+    """
     if explicit is not None:
         return explicit.expanduser()
     env = os.environ.get("FITLIB_CONFIG")
@@ -41,6 +57,19 @@ def config_path(explicit: Path | None = None) -> Path:
 
 
 def load_config(explicit: Path | None = None) -> Config:
+    """Read the config file, falling back to defaults when there isn't one.
+
+    Args:
+        explicit: A config file given on the command line, if any. Unlike the default
+            locations, it must exist.
+
+    Returns:
+        The settings. A relative ``library`` is resolved against the config file's folder.
+
+    Raises:
+        ConfigError: ``explicit`` doesn't exist, the file isn't valid TOML, or it names an
+            unknown store backend.
+    """
     path = config_path(explicit)
     if not path.exists():
         if explicit is not None:

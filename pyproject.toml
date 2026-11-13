@@ -30,7 +30,18 @@ line-length = 100
 target-version = "py314"
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "UP", "B", "SIM"]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "D"]
+# Constructor arguments are documented in the class docstring (Google style).
+ignore = ["D107"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+# Docstring rules apply to src/ only. Tests use their own docstring format (Given / Expect),
+# and the fixture and perf scripts are tooling.
+"tests/**" = ["D"]
+"scripts/**" = ["D"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -46,6 +46,12 @@ _RIDE_COLUMNS = (
 
 
 def _migrations() -> list[tuple[int, str]]:
+    """Read the bundled SQL migrations.
+
+    Returns:
+        ``(version, script)`` pairs, oldest first. The version is the number at the start of
+        each file name, e.g. ``0001_initial.sql``.
+    """
     folder = resources.files("fitlib.store.local") / "migrations"
     found = []
     for entry in folder.iterdir():
@@ -55,14 +61,39 @@ def _migrations() -> list[tuple[int, str]]:
 
 
 def _ts(value: datetime) -> int:
+    """Convert a time to whole Unix seconds for storage.
+
+    Args:
+        value: A timezone-aware time.
+
+    Returns:
+        Seconds since 1970-01-01 UTC.
+    """
     return int(value.timestamp())
 
 
 def _dt(value: int) -> datetime:
+    """Convert stored Unix seconds back to a time.
+
+    Args:
+        value: Seconds since 1970-01-01 UTC.
+
+    Returns:
+        The time in UTC, timezone-aware.
+    """
     return datetime.fromtimestamp(value, UTC)
 
 
 class SqliteCatalog:
+    """The catalog in a SQLite file: WAL mode, numbered migrations, FTS5 text search.
+
+    Safe to share between threads (calls are serialized with a lock). Opening a catalog
+    applies any migrations it hasn't had yet.
+
+    Args:
+        path: The database file (created if missing), or ``":memory:"``.
+    """
+
     def __init__(self, path: Path | str) -> None:
         self._lock = threading.RLock()
         self._db = sqlite3.connect(path, autocommit=True, check_same_thread=False)
@@ -76,6 +107,7 @@ class SqliteCatalog:
     # -- schema -----------------------------------------------------------------------------
 
     def _migrate(self) -> None:
+        """Apply every migration newer than the database's ``user_version``, one per transaction."""
         current = self._db.execute("PRAGMA user_version").fetchone()[0]
         for version, script in _migrations():
             if version > current:
@@ -86,10 +118,21 @@ class SqliteCatalog:
 
     @property
     def schema_version(self) -> int:
+        """The migration the database is at.
+
+        Returns:
+            The number of the last migration applied.
+        """
         return self._db.execute("PRAGMA user_version").fetchone()[0]
 
     @contextmanager
     def _tx(self) -> Generator[sqlite3.Connection]:
+        """Run a block in one write transaction.
+
+        Yields:
+            The connection; everything done with it commits together, or rolls back if the
+            block raises.
+        """
         with self._lock:
             self._db.execute("BEGIN IMMEDIATE")
             try:
@@ -102,6 +145,14 @@ class SqliteCatalog:
     # -- writes -----------------------------------------------------------------------------
 
     def add_ride(self, ride: Ride) -> None:
+        """Store a new ride, all or nothing.
+
+        Args:
+            ride: The ride to add.
+
+        Raises:
+            DuplicateRide: A ride with the same sha256 is already stored.
+        """
         s = ride.summary
         values = {
             "id": ride.id,
@@ -160,6 +211,13 @@ class SqliteCatalog:
             self._index(db, ride)
 
     def _write_meta(self, db: sqlite3.Connection, ride_id: str, meta: RideMeta) -> None:
+        """Write a ride's user metadata and tags, replacing what was there.
+
+        Args:
+            db: The connection, inside a transaction.
+            ride_id: The ride's id.
+            meta: The metadata to store.
+        """
         db.execute(
             "INSERT OR REPLACE INTO ride_meta VALUES (?, ?, ?, ?, ?)",
             (ride_id, meta.name, meta.notes, meta.rpe, meta.bike_id),
@@ -173,6 +231,12 @@ class SqliteCatalog:
             )
 
     def _index(self, db: sqlite3.Connection, ride: Ride) -> None:
+        """Update a ride's entry in the full-text index.
+
+        Args:
+            db: The connection, inside a transaction.
+            ride: The ride, as it should now be found.
+        """
         text = searchable_text(ride)
         db.execute("DELETE FROM rides_fts WHERE ride_id = ?", (ride.id,))
         db.execute(
@@ -184,6 +248,14 @@ class SqliteCatalog:
     # -- reads ------------------------------------------------------------------------------
 
     def _load(self, row: sqlite3.Row) -> Ride:
+        """Build a ride from its ``rides`` row plus its laps, location, metadata and tags.
+
+        Args:
+            row: The ride's row from the ``rides`` table.
+
+        Returns:
+            The full ride.
+        """
         ride_id = row["id"]
         db = self._db
         laps = tuple(
@@ -266,6 +338,17 @@ class SqliteCatalog:
         )
 
     def get_ride(self, ride_id: str) -> Ride:
+        """Load one ride.
+
+        Args:
+            ride_id: The ride's full id.
+
+        Returns:
+            The ride, including laps, location and metadata.
+
+        Raises:
+            RideNotFound: No ride has this id.
+        """
         with self._lock:
             row = self._db.execute("SELECT * FROM rides WHERE id = ?", (ride_id,)).fetchone()
             if row is None:
@@ -273,6 +356,18 @@ class SqliteCatalog:
             return self._load(row)
 
     def resolve_id(self, ref: str) -> str:
+        """Turn a full id or unique prefix into a ride's full id.
+
+        Args:
+            ref: A full id, or a prefix of at least ``MIN_ID_PREFIX`` characters.
+
+        Returns:
+            The full id of the one matching ride.
+
+        Raises:
+            RideNotFound: Nothing matches, or the prefix is too short.
+            AmbiguousRideId: The prefix matches several rides.
+        """
         with self._lock:
             if self._db.execute("SELECT 1 FROM rides WHERE id = ?", (ref,)).fetchone():
                 return ref
@@ -292,11 +387,28 @@ class SqliteCatalog:
         return candidates[0]
 
     def find_by_hash(self, sha256: str) -> str | None:
+        """Find the ride imported from a given file.
+
+        Args:
+            sha256: Hex sha256 of the original .fit file.
+
+        Returns:
+            That ride's id, or ``None``.
+        """
         with self._lock:
             row = self._db.execute("SELECT id FROM rides WHERE sha256 = ?", (sha256,)).fetchone()
         return row["id"] if row else None
 
     def rides_starting_between(self, start: datetime, end: datetime) -> list[Ride]:
+        """Load the rides that start inside a time window.
+
+        Args:
+            start: Beginning of the window (inclusive).
+            end: End of the window (inclusive).
+
+        Returns:
+            The rides, oldest first (ties by id).
+        """
         with self._lock:
             rows = self._db.execute(
                 "SELECT * FROM rides WHERE start_ts BETWEEN ? AND ? ORDER BY start_ts, id",
@@ -312,6 +424,18 @@ class SqliteCatalog:
         offset: int = 0,
         limit: int = 50,
     ) -> Page[Ride]:
+        """Find rides, one page at a time.
+
+        Args:
+            filters: What to match.
+            sort: What to sort by; rides with no value for it come last.
+            descending: Largest (or newest) first when true.
+            offset: How many matching rides to skip.
+            limit: The most rides to return.
+
+        Returns:
+            The page of rides and the total number that match.
+        """
         where, params = self._where(filters)
         direction = "DESC" if descending else "ASC"
         order = (
@@ -330,6 +454,14 @@ class SqliteCatalog:
 
     @staticmethod
     def _where(f: Filters) -> tuple[str, list[object]]:
+        """Turn filters into a SQL condition on the ``rides`` table (aliased ``r``).
+
+        Args:
+            f: The filters.
+
+        Returns:
+            The condition and its parameters, in order.
+        """
         clauses: list[str] = ["1 = 1"]
         params: list[object] = []
         if f.text is not None and (query := words(f.text)):
@@ -360,9 +492,15 @@ class SqliteCatalog:
         return " AND ".join(clauses), params
 
     def count(self) -> int:
+        """Count the rides in the catalog.
+
+        Returns:
+            The number of rides.
+        """
         with self._lock:
             return self._db.execute("SELECT COUNT(*) FROM rides").fetchone()[0]
 
     def close(self) -> None:
+        """Release the catalog's resources."""
         with self._lock:
             self._db.close()

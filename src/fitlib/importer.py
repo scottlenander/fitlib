@@ -37,22 +37,51 @@ OVERLAP_MIN_FRACTION = 0.8
 
 @dataclass(frozen=True)
 class Analysed:
+    """A file that decoded into a ride.
+
+    Attributes:
+        summary: The ride's figures.
+        stream: The ride's 1 Hz samples as zstd Parquet bytes.
+    """
+
     summary: RideSummary
-    stream: bytes  # zstd Parquet
+    stream: bytes
 
 
 @dataclass(frozen=True)
 class NotARide:
+    """A file that decoded but records another sport.
+
+    Attributes:
+        sport: The FIT sport, e.g. ``"running"``.
+    """
+
     sport: str
 
 
 @dataclass(frozen=True)
 class Failed:
+    """A file that couldn't be imported.
+
+    Attributes:
+        reason: Why, for the user.
+    """
+
     reason: str
 
 
 def analyse(data: bytes) -> Analysed | NotARide | Failed:
-    """Decode and summarize one file. Runs in a worker process, so it touches no stores."""
+    """Decode, normalize and summarize one file.
+
+    Runs in a worker process, so it touches no stores and returns plain, picklable values.
+
+    Args:
+        data: The .fit file's bytes.
+
+    Returns:
+        The ride's summary and stream; or that it isn't a ride; or why it failed (unreadable,
+        or no records).
+    """
     try:
         decoded = decode(data)
     except DecodeError as exc:
@@ -67,13 +96,31 @@ def analyse(data: bytes) -> Analysed | NotARide | Failed:
 
 @dataclass
 class ImportReport:
-    imported: list[tuple[str, str]] = field(default_factory=list)  # (file, ride id)
-    duplicates: list[tuple[str, str]] = field(default_factory=list)  # (file, existing ride id)
-    skipped: list[tuple[str, str]] = field(default_factory=list)  # (file, reason)
-    failed: list[tuple[str, str]] = field(default_factory=list)  # (file, reason)
+    """What happened to each file in an import.
+
+    Every entry is ``(file name, detail)``. Zipped files are named ``<zip>:<member>``.
+
+    Attributes:
+        imported: Files added to the library; detail is the new ride's id.
+        duplicates: Files already in the library; detail is the existing ride's id, or which
+            earlier file in the same import had identical bytes.
+        skipped: Files left out on purpose; detail is the reason (not a ride, or overlaps a
+            ride already in the library).
+        failed: Files that couldn't be read; detail is the reason.
+    """
+
+    imported: list[tuple[str, str]] = field(default_factory=list)
+    duplicates: list[tuple[str, str]] = field(default_factory=list)
+    skipped: list[tuple[str, str]] = field(default_factory=list)
+    failed: list[tuple[str, str]] = field(default_factory=list)
 
     @property
     def total(self) -> int:
+        """How many files the import looked at.
+
+        Returns:
+            The number of entries across all four lists.
+        """
         return len(self.imported) + len(self.duplicates) + len(self.skipped) + len(self.failed)
 
 
@@ -81,6 +128,16 @@ class _InlineExecutor(Executor):
     """Runs work immediately in this process: for one worker, and for tests."""
 
     def submit(self, fn, /, *args, **kwargs):  # type: ignore[override]
+        """Run ``fn`` now and wrap its result in a completed future.
+
+        Args:
+            fn: The function to run.
+            *args: Positional arguments for ``fn``.
+            **kwargs: Keyword arguments for ``fn``.
+
+        Returns:
+            A future that already holds ``fn``'s result or exception.
+        """
         future: Future = Future()
         try:
             future.set_result(fn(*args, **kwargs))
@@ -90,17 +147,42 @@ class _InlineExecutor(Executor):
 
 
 def overlap_fraction(a: RideSummary, b: RideSummary) -> float:
-    """Shared time as a fraction of the shorter ride."""
+    """How much two rides overlap in time.
+
+    Args:
+        a: One ride.
+        b: The other ride.
+
+    Returns:
+        The time both were in progress, as a fraction of the shorter ride's elapsed time:
+        0.0 for no overlap, 1.0 when the shorter ride lies entirely within the longer one.
+    """
     shared = (min(a.end, b.end) - max(a.start, b.start)).total_seconds()
     shorter = min(a.elapsed_s, b.elapsed_s)
     return max(0.0, shared) / shorter if shorter else 0.0
 
 
 def default_workers() -> int:
+    """How many decoding processes to use when none is asked for.
+
+    Returns:
+        The number of CPUs, between 1 and 4.
+    """
     return max(1, min(4, os.cpu_count() or 1))
 
 
 class Importer:
+    """Imports .fit files into a library's stores.
+
+    Args:
+        catalog: Where ride entries go.
+        blobs: Where original files go.
+        streams: Where each ride's 1 Hz samples go.
+        workers: Decoding processes; ``None`` for ``default_workers()``. With 1, everything
+            runs in this process.
+        clock: Returns the current time, used for ``imported_at``. Replaceable in tests.
+    """
+
     def __init__(
         self,
         catalog: CatalogStore,
@@ -120,7 +202,21 @@ class Importer:
         paths: Iterable[Path],
         on_progress: Callable[[str], None] | None = None,
     ) -> ImportReport:
-        """Import every .fit file under ``paths``. ``on_progress`` is called once per file."""
+        """Import every .fit file under ``paths``.
+
+        One bad file never stops the others. Files already imported are recognised by their
+        hash, so running the same import again (or resuming one) is safe.
+
+        Args:
+            paths: Folders (searched recursively), .fit files and .zip archives.
+            on_progress: Called with each file's name once it has been handled.
+
+        Returns:
+            What happened to every file.
+
+        Raises:
+            FileNotFoundError: A path doesn't exist. Raised before anything is imported.
+        """
         report = ImportReport()
         seen: dict[str, str] = {}  # sha256 -> file name, within this run
         # Files being analysed, oldest first. Bounded, so memory stays flat however many
@@ -130,6 +226,7 @@ class Importer:
         max_in_flight = self._workers * 4
 
         def store_oldest() -> None:
+            """Wait for the oldest file in flight and store its result."""
             name, data, sha, future = in_flight.popleft()
             self._store(name, data, sha, future.result(), report)
             if on_progress:
@@ -157,6 +254,19 @@ class Importer:
     def _is_duplicate(
         self, name: str, sha: str, seen: dict[str, str], report: ImportReport
     ) -> bool:
+        """Check whether a file was imported before, or already seen in this run.
+
+        Records the duplicate in ``report`` when it is one.
+
+        Args:
+            name: The file's display name.
+            sha: The file's sha256.
+            seen: Hashes of files already queued in this run, mapped to their names.
+            report: The import's report.
+
+        Returns:
+            ``True`` if the file should not be imported again.
+        """
         existing = self._catalog.find_by_hash(sha)
         if existing is not None:
             report.duplicates.append((name, existing))
@@ -169,6 +279,15 @@ class Importer:
         return False
 
     def _overlapping(self, summary: RideSummary) -> Ride | None:
+        """Find a ride already in the library that records the same ride as ``summary``.
+
+        Args:
+            summary: The new ride's summary.
+
+        Returns:
+            The first ride starting within ``OVERLAP_START_WINDOW`` of it and overlapping by
+            more than ``OVERLAP_MIN_FRACTION``, or ``None``.
+        """
         candidates = self._catalog.rides_starting_between(
             summary.start - OVERLAP_START_WINDOW, summary.start + OVERLAP_START_WINDOW
         )
@@ -185,6 +304,19 @@ class Importer:
         result: Analysed | NotARide | Failed,
         report: ImportReport,
     ) -> None:
+        """Record one analysed file: store it as a ride, or note why not.
+
+        Args:
+            name: The file's display name.
+            data: The file's bytes, archived as the raw file.
+            sha: The file's sha256.
+            result: What ``analyse`` made of it.
+            report: The import's report, updated with this file's outcome.
+
+        Raises:
+            Exception: Anything the catalog raises other than ``DuplicateRide``, after the
+                ride's stream has been removed again.
+        """
         match result:
             case Failed(reason):
                 report.failed.append((name, reason))
