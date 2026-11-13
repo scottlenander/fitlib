@@ -1,0 +1,31 @@
+[project]
+name = "fitlib"
+version = "0.1.0"
+description = "Local library for storing and analysing cycling .fit files from Zwift and Garmin."
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "fitdecode>=0.11.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.9,<0.14"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "fit-tool>=0.9.17",
+    "pytest>=9.2.0",
+    "ruff>=0.17.5",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = ["-ra", "--strict-markers"]
