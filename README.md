@@ -4,9 +4,10 @@ A local library for cycling `.fit` files from Zwift and Garmin. It imports rides
 stores them compactly, and summarises each ride in readable numbers. Later phases add ride
 comparison, similar-ride matching, fitness trends and a browser UI.
 
-The project is built in phases. **Phase 1a (this)** adds the core: importing, storage, basic
-ride figures and a command line. Power-based training metrics (NP, TSS, zones, power curves)
-come in phase 1b.
+The project is built in phases. Phase 1a added the core: importing, storage, basic ride
+figures and a command line. **Phase 1b (this)** adds training figures (NP, IF, TSS, zones,
+best efforts, decoupling), the athlete's FTP/weight/max HR history, `recompute`, and
+imperial/metric units. Editing rides, bikes and tags come in phase 1c.
 
 ## Setup
 
@@ -25,6 +26,10 @@ uv run fitlib list                          # newest first
 uv run fitlib list --source zwift --since 2025-01-01 --sort power
 uv run fitlib list --text "arenberg" --outdoor --min-minutes 60
 uv run fitlib show 3f2a9c                   # a ride by id prefix (4+ characters)
+uv run fitlib show 3f2a9c --units metric    # override the configured units once
+uv run fitlib athlete set --from 2025-01-01 --ftp 250 --weight 165 --max-hr 188
+uv run fitlib athlete show                  # history, and today's values
+uv run fitlib recompute                     # only needed after fitlib's calculations change
 uv run fitlib --help                        # every command and option
 ```
 
@@ -35,9 +40,27 @@ uv run fitlib --help                        # every command and option
   within 2 minutes, over 80% of the time shared), the ride already there is kept and the file is
   skipped; its original is still archived. Exit code 1 means some files couldn't be read.
 - **list** filters by text (name, notes, tags, source, device), dates (UTC), source,
-  indoor/outdoor and riding time, and sorts by start, duration, distance or power.
+  indoor/outdoor and riding time, and sorts by start, duration, distance or power. It shows
+  each ride's TSS; a `*` marks TSS from an estimated FTP.
 - **show** prints one ride: local start time, device, times, distance, climbing, speed, power,
-  heart rate, cadence and laps.
+  heart rate and cadence; a **Training** block (NP, IF, TSS, VI, work, W/kg, decoupling);
+  time in **power zones** (7 Coggan zones) and **heart-rate zones** (5 zones by % of max HR);
+  **best efforts** (5 s to 60 min); and laps.
+- **athlete** records FTP, weight and max HR from a date on. Each value carries forward until
+  changed, so `--ftp 260` alone keeps the earlier weight. Weight is entered and shown in your
+  display units and stored in kg. `athlete remove DATE` deletes an entry.
+- **recompute** rebuilds rides from their archived original files. It's only needed when
+  fitlib's calculations change (`import` says so); by default it updates just the rides that
+  need it, or give ride ids or `--all`.
+
+### Training figures
+
+FTP-based figures (IF, TSS, W/kg, zone times) are **worked out when shown**, from figures
+stored per ride (NP, best efforts, seconds at each watt and bpm) and the athlete history in
+effect on the ride's date. Changing your FTP history applies everywhere immediately.
+
+For rides before your first FTP entry, FTP is **estimated** as 0.95 × the best 20 minutes in
+the six weeks up to the ride, and marked as estimated.
 
 ### Configuration
 
@@ -46,13 +69,18 @@ By default the library lives in `~/.fitlib/library`. To change it, create
 
 ```toml
 library = "~/Rides/fitlib"   # relative paths are relative to this file
+units = "imperial"           # or "metric"; imperial is the default
 ```
+
+Units only affect display (mi, mph, ft, lb vs km, km/h, m, kg). Everything is stored in SI
+units, as in the FIT files themselves.
 
 ### What's stored
 
 ```
 library/
-  catalog.sqlite3                     one row per ride: summary, laps, your notes/tags (searchable)
+  catalog.sqlite3                     per ride: summary, laps, best efforts, watt/bpm histograms,
+                                      your notes/tags (searchable); athlete history
   blobs/raw/<sha[:2]>/<sha>.fit       every original file, unchanged
   blobs/streams/<year>/<id>.parquet   each ride's 1-second samples (zstd Parquet)
 ```
@@ -66,13 +94,16 @@ are never written to logs.
 |---|---|
 | `fitlib/models.py` | Domain objects shared by every layer |
 | `fitlib/ingest/` | Find files (incl. zips), decode with `fitdecode`, normalize to 1 Hz, summarize |
-| `fitlib/metrics/` | Ride figures computed from a 1 Hz stream |
+| `fitlib/metrics/` | Ride figures from a 1 Hz stream (basic, power, HR, curves, zones) and FTP-based formulas (`load.py`) |
+| `fitlib/analysis/` | FTP-based figures for a ride, from the athlete history or an estimated FTP |
 | `fitlib/store/` | `CatalogStore` / `BlobStore` interfaces; `local/` (SQLite + files) and `memory/` backends; `factory.py` picks one |
 | `fitlib/importer.py` | Hash, dedupe, analyse in worker processes, store |
+| `fitlib/recompute.py` | Rebuild rides from their raw files when calculations change |
 | `fitlib/cli.py` | The `fitlib` command |
 
 Only `store/factory.py` chooses a backend; everything else depends on the interfaces.
-`import-linter` enforces this and the layering (`models ← metrics ← ingest ← importer ← cli`).
+`import-linter` enforces this and the layering
+(`models ← metrics ← ingest ← importer | recompute | analysis ← cli`).
 
 ## Tests
 
@@ -118,17 +149,25 @@ uv run python -m tests.fixtures.generate
 - **Fixtures are current** (`tests/test_fixtures_current.py`).
 - **Storage contracts** (`tests/store/`): one suite runs against every catalog (SQLite, memory)
   and blob store (filesystem, memory): round trips, duplicate hashes, id prefixes, time
-  windows, every search filter, text search, sorting with missing values last, paging, invalid
-  blob keys, Parquet streams.
+  windows, every search filter, text search, sorting with missing values last, paging,
+  replacing summaries, best efforts in a window, athlete history, invalid blob keys, Parquet
+  streams; plus upgrading a phase 1a database.
 - **Ingest** (`tests/ingest/`): scanning folders, files and zips (skipping hidden files and
   macOS zip junk); decoding device, sport, local time, records and laps; rejecting bad files;
   1 Hz normalization (short gaps filled, pauses kept, duplicate timestamps).
 - **Metrics** (`tests/metrics/`): elapsed and moving time, distance, speed, climbing, power,
-  heart rate, cadence, location box and laps, against values from the specs.
+  heart rate, cadence, location box and laps; NP (against a step-by-step reference), kJ, VI,
+  best efforts (incl. never across a pause), decoupling, histograms, zone boundaries, IF/TSS,
+  estimated FTP and athlete values carrying forward. Expected values are worked out from the
+  specs (e.g. 200 W for an hour at FTP 250 → IF 0.80, TSS 64).
+- **Training** (`tests/analysis/`): FTP, weight and max HR from the history; estimated FTP
+  from the best ride in the window; FTP changes applying without a recompute.
+- **Recompute** (`tests/test_recompute.py`): outdated rides brought up to date with metadata
+  kept; streams rewritten; missing raw files reported.
 - **Importer** (`tests/test_importer.py`): the whole fixture folder (imports, duplicates,
   skips, failures), re-import, stored files and streams, overlapping recordings, the process
   pool, cleanup after a failed write, and no coordinates in logs.
-- **CLI** (`tests/test_cli.py`), **config** and **display formatting**.
+- **CLI** (`tests/test_cli.py`), **config** and **display formatting** (both unit systems).
 
 ### Performance check
 
