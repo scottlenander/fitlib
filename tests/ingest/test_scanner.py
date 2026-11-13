@@ -12,6 +12,14 @@ from tests.fixtures.generate import FIT_DIR
 
 
 def names(paths: list[Path]) -> list[str]:
+    """Scan paths and keep just the display names.
+
+    Args:
+        paths: Folders, files or zips to scan.
+
+    Returns:
+        Each source's name, in scan order.
+    """
     return [source.name for source in scan(paths)]
 
 

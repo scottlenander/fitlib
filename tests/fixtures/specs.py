@@ -16,13 +16,21 @@ from enum import StrEnum
 
 
 class Source(StrEnum):
+    """Which device the synthetic ride pretends to come from."""
+
     ZWIFT = "zwift"
     GARMIN = "garmin"
 
 
 @dataclass(frozen=True)
 class Segment:
-    """A block of constant output, sampled once per second."""
+    """A block of constant output, sampled once per second.
+
+    Attributes:
+        seconds: Length of the block.
+        power: Watts throughout the block.
+        cadence: Revolutions per minute throughout the block.
+    """
 
     seconds: int
     power: int
@@ -31,7 +39,15 @@ class Segment:
 
 @dataclass(frozen=True)
 class Loop:
-    """A circular course, ridden repeatedly. Altitude follows one sine wave per lap."""
+    """A circular course, ridden repeatedly. Altitude follows one sine wave per lap.
+
+    Attributes:
+        center_lat: Latitude of the loop's centre, in degrees.
+        center_lon: Longitude of the loop's centre, in degrees.
+        lap_length_m: Circumference of the loop in metres.
+        base_altitude_m: Altitude at the centre of the sine wave.
+        altitude_amplitude_m: How far altitude rises above and falls below the base.
+    """
 
     center_lat: float
     center_lon: float
@@ -57,6 +73,8 @@ WATOPIA_LOOP = Loop(
 
 
 class Recording(StrEnum):
+    """How often the device writes a record."""
+
     EVERY_SECOND = "every_second"
     # Garmin "smart recording": samples at irregular 1-5 s intervals.
     SMART = "smart"
@@ -68,7 +86,12 @@ SMART_RECORDING_STEPS = (1, 3, 5, 2, 4)
 
 @dataclass(frozen=True)
 class Pause:
-    """The timer stops after ``after_s`` seconds of riding, for ``seconds`` seconds."""
+    """A stop of the timer during a ride.
+
+    Attributes:
+        after_s: Seconds of riding before the pause.
+        seconds: How long the timer stays stopped.
+    """
 
     after_s: int
     seconds: int
@@ -76,6 +99,28 @@ class Pause:
 
 @dataclass(frozen=True)
 class RideSpec:
+    """Everything needed to generate one synthetic ride and to work out its expected figures.
+
+    Attributes:
+        name: The spec's name; also the fixture file's name without ``.fit``.
+        source: Which device the ride pretends to come from.
+        start: When the ride starts, in UTC.
+        segments: Blocks of constant power and cadence, in order.
+        loop: The course ridden.
+        sport: FIT sport, ``"cycling"`` or ``"running"``.
+        indoor: A Garmin indoor-trainer ride (no GPS, sub-sport indoor_cycling).
+        has_power: Whether power is recorded.
+        has_hr: Whether heart rate is recorded.
+        pauses: Timer stops during the ride.
+        recording: Every second, or Garmin-style smart recording.
+        lap_per_segment: Press lap at every segment change instead of one lap for the ride.
+        zip_name: Put the file inside this zip instead of writing it on its own.
+        hr_base: Heart rate at 0 W (heart rate rises linearly with power).
+        hr_per_watt: Heart-rate rise per watt.
+        serial_number: The device serial number written to the file.
+        utc_offset_s: Local time minus UTC written to the file, or ``None`` for none.
+    """
+
     name: str
     source: Source
     start: datetime
@@ -102,20 +147,39 @@ class RideSpec:
 
     @property
     def duration_s(self) -> int:
-        """Seconds of riding (timer running)."""
+        """Seconds of riding (timer running).
+
+        Returns:
+            The sum of the segments' lengths.
+        """
         return sum(s.seconds for s in self.segments)
 
     @property
     def elapsed_s(self) -> int:
-        """Seconds from start to finish, including pauses."""
+        """Seconds from start to finish, including pauses.
+
+        Returns:
+            The riding time plus every pause.
+        """
         return self.duration_s + sum(p.seconds for p in self.pauses)
 
     @property
     def has_gps(self) -> bool:
+        """Whether the ride records positions.
+
+        Returns:
+            ``True`` unless it is a Garmin indoor ride.
+        """
         return not self.indoor
 
     @property
     def sub_sport(self) -> str:
+        """The FIT sub-sport written to the file.
+
+        Returns:
+            ``"generic"`` for runs, ``"virtual_activity"`` for Zwift, ``"indoor_cycling"`` for
+            Garmin indoor rides, otherwise ``"road"``.
+        """
         if self.sport != "cycling":
             return "generic"
         if self.source is Source.ZWIFT:
@@ -123,11 +187,22 @@ class RideSpec:
         return "indoor_cycling" if self.indoor else "road"
 
     def offset_s(self, second: int) -> int:
-        """Seconds from the start at which riding second ``second`` happens, after pauses."""
+        """Find when a riding second happens on the wall clock.
+
+        Args:
+            second: Riding seconds since the start.
+
+        Returns:
+            Seconds since the start, including every pause before it.
+        """
         return second + sum(p.seconds for p in self.pauses if p.after_s <= second)
 
     def recorded_seconds(self) -> list[int]:
-        """The riding seconds that get a record in the file."""
+        """List the riding seconds that get a record in the file.
+
+        Returns:
+            Every second, or for smart recording every 1-5 s (always including the last second).
+        """
         if self.recording is Recording.EVERY_SECOND:
             return list(range(self.duration_s))
         seconds, second, step = [], 0, 0
@@ -140,19 +215,45 @@ class RideSpec:
         return seconds
 
     def powers(self) -> list[int]:
-        """Power for every riding second, in order."""
+        """Power for every riding second.
+
+        Returns:
+            Watts per second, in order.
+        """
         return [s.power for s in self.segments for _ in range(s.seconds)]
 
     def cadences(self) -> list[int]:
+        """Cadence for every riding second.
+
+        Returns:
+            Revolutions per minute per second, in order.
+        """
         return [s.cadence for s in self.segments for _ in range(s.seconds)]
 
     def heart_rates(self) -> list[int]:
+        """Heart rate for every riding second, rising linearly with power.
+
+        Returns:
+            Beats per minute per second, in order.
+        """
         return [round(self.hr_base + self.hr_per_watt * p) for p in self.powers()]
 
 
 def _intervals(
     warmup: Segment, work: Segment, rest: Segment, reps: int, cooldown: Segment
 ) -> tuple[Segment, ...]:
+    """Build an interval session's segments.
+
+    Args:
+        warmup: The first segment.
+        work: Each effort.
+        rest: The recovery after each effort.
+        reps: How many work-rest pairs.
+        cooldown: The last segment.
+
+    Returns:
+        Warm-up, then ``reps`` pairs of work and rest, then cool-down.
+    """
     return (warmup, *[seg for _ in range(reps) for seg in (work, rest)], cooldown)
 
 
@@ -283,6 +384,17 @@ CORRUPT: dict[str, tuple[str, int]] = {
 
 
 def ride(name: str) -> RideSpec:
+    """Look up a ride spec by name.
+
+    Args:
+        name: The spec's name.
+
+    Returns:
+        The spec.
+
+    Raises:
+        KeyError: No spec has that name.
+    """
     for spec in RIDES:
         if spec.name == name:
             return spec

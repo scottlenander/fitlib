@@ -12,6 +12,16 @@ START = datetime(2025, 8, 2, 6, 30, tzinfo=UTC)
 
 
 def record(second: float, power: int | None = 200, **fields) -> dict:
+    """Build a decoded record at a number of seconds after 06:30 UTC.
+
+    Args:
+        second: Seconds after the start; fractions are allowed.
+        power: Watts, or ``None``.
+        **fields: Any other record fields, e.g. ``heart_rate=140``.
+
+    Returns:
+        The record as ``decode`` would produce it.
+    """
     return {"timestamp": START + timedelta(seconds=second), "power": power, **fields}
 
 

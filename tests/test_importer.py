@@ -30,20 +30,50 @@ NOW = datetime(2025, 9, 1, 12, 0, tzinfo=UTC)
 
 @dataclass
 class Library:
+    """A set of stores to import into.
+
+    Attributes:
+        catalog: The rides.
+        blobs: Original files and streams.
+        streams: Streams, on top of ``blobs``.
+    """
+
     catalog: CatalogStore
     blobs: BlobStore
     streams: StreamStore
 
     def importer(self, workers: int = 1) -> Importer:
+        """Build an importer for these stores, with a fixed clock.
+
+        Args:
+            workers: Decoding processes; 1 runs everything in this process.
+
+        Returns:
+            The importer.
+        """
         return Importer(self.catalog, self.blobs, self.streams, workers=workers, clock=lambda: NOW)
 
     def ride_from(self, file_name: str, report: ImportReport) -> Ride:
+        """Look up the ride an import created from a file.
+
+        Args:
+            file_name: The file's display name in the report.
+            report: The import's report.
+
+        Returns:
+            The ride, loaded from the catalog.
+        """
         ride_id = dict(report.imported)[file_name]
         return self.catalog.get_ride(ride_id)
 
 
 @pytest.fixture
 def library() -> Library:
+    """Provide empty in-memory stores.
+
+    Returns:
+        The stores.
+    """
     blobs = MemoryBlobStore()
     return Library(MemoryCatalog(), blobs, StreamStore(blobs))
 
@@ -210,7 +240,17 @@ def test_failed_catalog_write_leaves_no_stream(library: Library):
     """
 
     class BrokenCatalog(MemoryCatalog):
+        """A catalog whose writes always fail, to test clean-up after a failed write."""
+
         def add_ride(self, ride):
+            """Fail as a full disk would.
+
+            Args:
+                ride: The ride that would have been stored.
+
+            Raises:
+                RuntimeError: Always.
+            """
             raise RuntimeError("disk full")
 
     broken = Library(BrokenCatalog(), library.blobs, library.streams)

@@ -6,11 +6,12 @@ import sqlite3
 import threading
 from collections.abc import Generator
 from contextlib import contextmanager
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from importlib import resources
 from pathlib import Path
 
 from fitlib.models import (
+    AthleteEntry,
     Filters,
     GeoSummary,
     Lap,
@@ -37,12 +38,14 @@ _SORT_COLUMNS = {
     SortKey.POWER: "r.avg_power",
 }
 
-_RIDE_COLUMNS = (
-    "id", "sha256", "source_name", "imported_at", "metrics_version", "start_ts", "utc_offset_s",
-    "source", "device", "sport", "sub_sport", "indoor", "elapsed_s", "moving_s", "distance_m",
-    "ascent_m", "avg_speed_mps", "max_speed_mps", "avg_power", "max_power", "avg_hr", "max_hr",
-    "avg_cadence", "has_power", "has_hr", "has_gps",
+# Columns of ``rides`` that hold the summary (replaced together by ``replace_summary``).
+_SUMMARY_COLUMNS = (
+    "start_ts", "utc_offset_s", "source", "device", "sport", "sub_sport", "indoor", "elapsed_s",
+    "moving_s", "distance_m", "ascent_m", "avg_speed_mps", "max_speed_mps", "avg_power",
+    "max_power", "avg_hr", "max_hr", "avg_cadence", "has_power", "has_hr", "has_gps", "np", "kj",
+    "vi", "decoupling_pct",
 )  # fmt: skip
+_RIDE_COLUMNS = ("id", "sha256", "source_name", "imported_at", "metrics_version", *_SUMMARY_COLUMNS)
 
 
 def _migrations() -> list[tuple[int, str]]:
@@ -70,6 +73,44 @@ def _ts(value: datetime) -> int:
         Seconds since 1970-01-01 UTC.
     """
     return int(value.timestamp())
+
+
+def _summary_values(s: RideSummary) -> dict[str, object]:
+    """The ``rides`` columns that hold a summary.
+
+    Args:
+        s: The summary.
+
+    Returns:
+        Values keyed by column name, ready for SQLite.
+    """
+    return {
+        "start_ts": _ts(s.start),
+        "utc_offset_s": s.utc_offset_s,
+        "source": s.source.value,
+        "device": s.device,
+        "sport": s.sport,
+        "sub_sport": s.sub_sport,
+        "indoor": int(s.indoor),
+        "elapsed_s": s.elapsed_s,
+        "moving_s": s.moving_s,
+        "distance_m": s.distance_m,
+        "ascent_m": s.ascent_m,
+        "avg_speed_mps": s.avg_speed_mps,
+        "max_speed_mps": s.max_speed_mps,
+        "avg_power": s.avg_power,
+        "max_power": s.max_power,
+        "avg_hr": s.avg_hr,
+        "max_hr": s.max_hr,
+        "avg_cadence": s.avg_cadence,
+        "has_power": int(s.has_power),
+        "has_hr": int(s.has_hr),
+        "has_gps": int(s.has_gps),
+        "np": s.np,
+        "kj": s.kj,
+        "vi": s.vi,
+        "decoupling_pct": s.decoupling_pct,
+    }
 
 
 def _dt(value: int) -> datetime:
@@ -153,34 +194,13 @@ class SqliteCatalog:
         Raises:
             DuplicateRide: A ride with the same sha256 is already stored.
         """
-        s = ride.summary
         values = {
             "id": ride.id,
             "sha256": ride.sha256,
             "source_name": ride.source_name,
             "imported_at": _ts(ride.imported_at),
             "metrics_version": ride.metrics_version,
-            "start_ts": _ts(s.start),
-            "utc_offset_s": s.utc_offset_s,
-            "source": s.source.value,
-            "device": s.device,
-            "sport": s.sport,
-            "sub_sport": s.sub_sport,
-            "indoor": int(s.indoor),
-            "elapsed_s": s.elapsed_s,
-            "moving_s": s.moving_s,
-            "distance_m": s.distance_m,
-            "ascent_m": s.ascent_m,
-            "avg_speed_mps": s.avg_speed_mps,
-            "max_speed_mps": s.max_speed_mps,
-            "avg_power": s.avg_power,
-            "max_power": s.max_power,
-            "avg_hr": s.avg_hr,
-            "max_hr": s.max_hr,
-            "avg_cadence": s.avg_cadence,
-            "has_power": int(s.has_power),
-            "has_hr": int(s.has_hr),
-            "has_gps": int(s.has_gps),
+            **_summary_values(ride.summary),
         }
         placeholders = ", ".join(f":{c}" for c in _RIDE_COLUMNS)
         with self._tx() as db:
@@ -193,22 +213,96 @@ class SqliteCatalog:
                 if "rides.sha256" in str(exc):
                     raise DuplicateRide(ride.sha256) from exc
                 raise
-            db.executemany(
-                "INSERT INTO laps VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                [
-                    (ride.id, lap.index, lap.start_offset_s, lap.elapsed_s, lap.distance_m,
-                     lap.avg_power, lap.max_power, lap.avg_hr, lap.max_hr)
-                    for lap in s.laps
-                ],
-            )  # fmt: skip
-            if s.geo is not None:
-                g = s.geo
-                db.execute(
-                    "INSERT INTO ride_geo VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    (ride.id, g.start_lat, g.start_lon, g.min_lat, g.min_lon, g.max_lat, g.max_lon),
-                )
+            self._write_details(db, ride.id, ride.summary)
             self._write_meta(db, ride.id, ride.meta)
             self._index(db, ride)
+
+    def replace_summary(self, ride_id: str, summary: RideSummary, metrics_version: int) -> None:
+        """Replace a ride's computed figures, keeping its id, import details and metadata.
+
+        Args:
+            ride_id: The ride's id.
+            summary: The newly computed summary.
+            metrics_version: The calculations version that produced it.
+
+        Raises:
+            RideNotFound: No ride has this id.
+        """
+        assignments = ", ".join(f"{c} = :{c}" for c in _SUMMARY_COLUMNS)
+        with self._tx() as db:
+            updated = db.execute(
+                f"UPDATE rides SET {assignments}, metrics_version = :metrics_version "
+                "WHERE id = :id",
+                {**_summary_values(summary), "metrics_version": metrics_version, "id": ride_id},
+            ).rowcount
+            if not updated:
+                raise RideNotFound(ride_id)
+            for table in ("laps", "ride_geo", "ride_curves", "ride_bins"):
+                db.execute(f"DELETE FROM {table} WHERE ride_id = ?", (ride_id,))
+            self._write_details(db, ride_id, summary)
+            row = db.execute("SELECT * FROM rides WHERE id = ?", (ride_id,)).fetchone()
+            self._index(db, self._load(row))
+
+    def _write_details(self, db: sqlite3.Connection, ride_id: str, s: RideSummary) -> None:
+        """Write a summary's laps, location, best efforts and histograms.
+
+        Args:
+            db: The connection, inside a transaction.
+            ride_id: The ride's id.
+            s: The summary.
+        """
+        db.executemany(
+            "INSERT INTO laps VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                (ride_id, lap.index, lap.start_offset_s, lap.elapsed_s, lap.distance_m,
+                 lap.avg_power, lap.max_power, lap.avg_hr, lap.max_hr)
+                for lap in s.laps
+            ],
+        )  # fmt: skip
+        if s.geo is not None:
+            g = s.geo
+            db.execute(
+                "INSERT INTO ride_geo VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (ride_id, g.start_lat, g.start_lon, g.min_lat, g.min_lon, g.max_lat, g.max_lon),
+            )
+        for kind, curve in (("power", s.power_curve), ("hr", s.hr_curve)):
+            db.executemany(
+                "INSERT INTO ride_curves VALUES (?, ?, ?, ?)",
+                [(ride_id, kind, duration, value) for duration, value in curve],
+            )
+        for kind, hist in (("power", s.power_histogram), ("hr", s.hr_histogram)):
+            db.executemany(
+                "INSERT INTO ride_bins VALUES (?, ?, ?, ?)",
+                [(ride_id, kind, value, seconds) for value, seconds in hist],
+            )
+
+    def set_athlete_entry(self, entry: AthleteEntry) -> None:
+        """Add an athlete history entry, replacing any entry on the same date.
+
+        Args:
+            entry: The entry.
+        """
+        with self._tx() as db:
+            db.execute(
+                "INSERT OR REPLACE INTO athlete_history VALUES (?, ?, ?, ?)",
+                (entry.effective_from.isoformat(), entry.ftp, entry.weight_kg, entry.max_hr),
+            )
+
+    def delete_athlete_entry(self, effective_from: date) -> bool:
+        """Remove the athlete history entry on a date.
+
+        Args:
+            effective_from: The entry's date.
+
+        Returns:
+            ``True`` if there was an entry to remove.
+        """
+        with self._tx() as db:
+            deleted = db.execute(
+                "DELETE FROM athlete_history WHERE effective_from = ?",
+                (effective_from.isoformat(),),
+            ).rowcount
+        return deleted > 0
 
     def _write_meta(self, db: sqlite3.Connection, ride_id: str, meta: RideMeta) -> None:
         """Write a ride's user metadata and tags, replacing what was there.
@@ -295,6 +389,19 @@ class SqliteCatalog:
                 (ride_id,),
             )
         )
+        curves: dict[str, list[tuple[int, float]]] = {"power": [], "hr": []}
+        for r in db.execute(
+            "SELECT kind, duration_s, value FROM ride_curves WHERE ride_id = ? "
+            "ORDER BY kind, duration_s",
+            (ride_id,),
+        ):
+            curves[r["kind"]].append((r["duration_s"], r["value"]))
+        bins: dict[str, list[tuple[int, int]]] = {"power": [], "hr": []}
+        for r in db.execute(
+            "SELECT kind, value, seconds FROM ride_bins WHERE ride_id = ? ORDER BY kind, value",
+            (ride_id,),
+        ):
+            bins[r["kind"]].append((r["value"], r["seconds"]))
         meta = RideMeta(
             name=m["name"] if m else None,
             notes=m["notes"] if m else None,
@@ -326,6 +433,14 @@ class SqliteCatalog:
             has_gps=bool(row["has_gps"]),
             laps=laps,
             geo=geo,
+            np=row["np"],
+            kj=row["kj"],
+            vi=row["vi"],
+            decoupling_pct=row["decoupling_pct"],
+            power_curve=tuple(curves["power"]),
+            hr_curve=tuple(curves["hr"]),
+            power_histogram=tuple(bins["power"]),
+            hr_histogram=tuple(bins["hr"]),
         )
         return Ride(
             id=ride_id,
@@ -490,6 +605,64 @@ class SqliteCatalog:
             clauses.append("r.has_power = ?")
             params.append(int(f.has_power))
         return " AND ".join(clauses), params
+
+    def ride_ids(self, below_version: int | None = None) -> list[str]:
+        """List ride ids, oldest ride first.
+
+        Args:
+            below_version: Only rides computed with an older ``metrics_version`` than this.
+
+        Returns:
+            The ids.
+        """
+        query, params = "SELECT id FROM rides", []
+        if below_version is not None:
+            query, params = query + " WHERE metrics_version < ?", [below_version]
+        with self._lock:
+            rows = self._db.execute(query + " ORDER BY start_ts, id", params).fetchall()
+        return [r["id"] for r in rows]
+
+    def best_effort_between(
+        self, kind: str, duration_s: int, start: datetime, end: datetime
+    ) -> float | None:
+        """Find the best effort over one duration among rides in a time window.
+
+        Args:
+            kind: ``"power"`` or ``"hr"``.
+            duration_s: One of ``CURVE_DURATIONS_S``.
+            start: Earliest ride start (inclusive).
+            end: Latest ride start (inclusive).
+
+        Returns:
+            The highest best average, or ``None`` if no ride in the window has one.
+        """
+        with self._lock:
+            row = self._db.execute(
+                "SELECT MAX(c.value) FROM ride_curves c JOIN rides r ON r.id = c.ride_id "
+                "WHERE c.kind = ? AND c.duration_s = ? AND r.start_ts BETWEEN ? AND ?",
+                (kind, duration_s, _ts(start), _ts(end)),
+            ).fetchone()
+        return row[0]
+
+    def athlete_history(self) -> list[AthleteEntry]:
+        """List the athlete history.
+
+        Returns:
+            Every entry, oldest first.
+        """
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT * FROM athlete_history ORDER BY effective_from"
+            ).fetchall()
+        return [
+            AthleteEntry(
+                effective_from=date.fromisoformat(r["effective_from"]),
+                ftp=r["ftp"],
+                weight_kg=r["weight_kg"],
+                max_hr=r["max_hr"],
+            )
+            for r in rows
+        ]
 
     def count(self) -> int:
         """Count the rides in the catalog.

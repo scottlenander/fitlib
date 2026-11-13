@@ -50,7 +50,20 @@ ZIP_DATE_TIME = (2025, 1, 1, 0, 0, 0)
 
 @dataclass(frozen=True)
 class Sample:
-    """One riding second of the synthetic ride. ``None`` means the channel isn't recorded."""
+    """One riding second of a synthetic ride.
+
+    Attributes:
+        second: Riding seconds since the start (pauses excluded).
+        timestamp_ms: Wall-clock time in Unix milliseconds (pauses included).
+        power: Watts, or ``None`` when the ride has no power meter.
+        heart_rate: Beats per minute, or ``None`` when the ride has no heart-rate strap.
+        cadence: Revolutions per minute (0 when coasting).
+        speed: Metres per second, from the speed model.
+        distance: Metres ridden before this second.
+        lat: Latitude in degrees, or ``None`` for indoor rides.
+        lon: Longitude in degrees, or ``None`` for indoor rides.
+        altitude: Metres, a sine wave per lap of the loop.
+    """
 
     second: int  # riding seconds since the start (pauses excluded)
     timestamp_ms: int  # wall-clock time (pauses included)
@@ -65,11 +78,27 @@ class Sample:
 
 
 def speed_for_power(power: int) -> float:
+    """Speed for a power, from the fixtures' simple speed model ``v = (P / 0.25) ** (1/3)``.
+
+    Args:
+        power: Watts.
+
+    Returns:
+        Metres per second; 0 at 0 W.
+    """
     return (power / SPEED_K) ** (1 / 3) if power > 0 else 0.0
 
 
 def position_on_loop(loop: Loop, distance_m: float) -> tuple[float, float, float]:
-    """Latitude, longitude and altitude after riding ``distance_m`` around ``loop``."""
+    """Find where a rider is after riding a distance around a loop.
+
+    Args:
+        loop: The circular course.
+        distance_m: Metres ridden since the start.
+
+    Returns:
+        Latitude and longitude in degrees, and altitude in metres.
+    """
     angle = 2 * math.pi * (distance_m % loop.lap_length_m) / loop.lap_length_m
     radius = loop.lap_length_m / (2 * math.pi)
     # A circle centred on the loop's point, ridden anticlockwise from its east side.
@@ -82,7 +111,14 @@ def position_on_loop(loop: Loop, distance_m: float) -> tuple[float, float, float
 
 
 def samples(spec: RideSpec) -> list[Sample]:
-    """Every riding second of the ride, whether or not it is written to the file."""
+    """List every riding second of a ride, whether or not it is written to the file.
+
+    Args:
+        spec: The ride.
+
+    Returns:
+        One sample per riding second, in order.
+    """
     start_ms = int(spec.start.timestamp()) * 1000
     out: list[Sample] = []
     distance = 0.0
@@ -109,12 +145,27 @@ def samples(spec: RideSpec) -> list[Sample]:
 
 
 def written_samples(spec: RideSpec) -> list[Sample]:
-    """The samples that appear as records in the file (all of them unless smart recording)."""
+    """List the samples that appear as records in the file.
+
+    Args:
+        spec: The ride.
+
+    Returns:
+        Every sample, or only the smart-recording ones for rides recorded that way.
+    """
     every = samples(spec)
     return [every[second] for second in spec.recorded_seconds()]
 
 
 def _file_id(spec: RideSpec) -> FileIdMessage:
+    """Build the file_id message that names the recording device.
+
+    Args:
+        spec: The ride.
+
+    Returns:
+        The message: Zwift, or a Garmin Edge 540, with the spec's serial number.
+    """
     msg = FileIdMessage()
     msg.type = FileType.ACTIVITY
     if spec.source is Source.ZWIFT:
@@ -129,6 +180,15 @@ def _file_id(spec: RideSpec) -> FileIdMessage:
 
 
 def _timer_event(timestamp_ms: int, event_type: EventType) -> EventMessage:
+    """Build a timer start or stop event.
+
+    Args:
+        timestamp_ms: When, in Unix milliseconds.
+        event_type: ``START`` or ``STOP_ALL``.
+
+    Returns:
+        The event message.
+    """
     msg = EventMessage()
     msg.timestamp = timestamp_ms
     msg.event = Event.TIMER
@@ -137,6 +197,14 @@ def _timer_event(timestamp_ms: int, event_type: EventType) -> EventMessage:
 
 
 def _record(s: Sample) -> RecordMessage:
+    """Build the record message for one sample.
+
+    Args:
+        s: The sample. Channels that are ``None`` are left out of the message.
+
+    Returns:
+        The record message.
+    """
     msg = RecordMessage()
     msg.timestamp = s.timestamp_ms
     if s.lat is not None and s.lon is not None:
@@ -154,17 +222,39 @@ def _record(s: Sample) -> RecordMessage:
 
 
 def _ascent(rows: Sequence[Sample]) -> int:
+    """Add up every rise in altitude, with no noise threshold.
+
+    Args:
+        rows: Consecutive samples.
+
+    Returns:
+        Metres climbed, rounded.
+    """
     return round(sum(max(0.0, b.altitude - a.altitude) for a, b in pairwise(rows)))
 
 
 def _sport(spec: RideSpec) -> tuple[Sport, SubSport]:
+    """Pick the FIT sport and sub-sport for a ride.
+
+    Args:
+        spec: The ride.
+
+    Returns:
+        Running with generic sub-sport for runs; otherwise cycling with the spec's sub-sport.
+    """
     if spec.sport == "running":
         return Sport.RUNNING, SubSport.GENERIC
     return Sport.CYCLING, SubSport[spec.sub_sport.upper()]
 
 
 def _summary(msg: LapMessage | SessionMessage, spec: RideSpec, rows: Sequence[Sample]) -> None:
-    """Fill the totals that lap and session messages share, over ``rows`` (riding seconds)."""
+    """Fill the totals that lap and session messages share.
+
+    Args:
+        msg: The lap or session message to fill in.
+        spec: The ride.
+        rows: The riding seconds the message covers.
+    """
     timer = len(rows)
     end_ms = rows[-1].timestamp_ms + 1000
     # Distance covered within these rows (laps start part-way through the ride).
@@ -196,7 +286,15 @@ def _summary(msg: LapMessage | SessionMessage, spec: RideSpec, rows: Sequence[Sa
 
 
 def _lap_ranges(spec: RideSpec) -> list[range]:
-    """Riding seconds covered by each lap."""
+    """Work out which riding seconds each lap covers.
+
+    Args:
+        spec: The ride.
+
+    Returns:
+        One range per segment when the spec presses lap at each segment, else one range for
+        the whole ride.
+    """
     if not spec.lap_per_segment:
         return [range(spec.duration_s)]
     ranges, start = [], 0
@@ -207,7 +305,14 @@ def _lap_ranges(spec: RideSpec) -> list[range]:
 
 
 def build(spec: RideSpec) -> bytes:
-    """Encode one ride as a FIT activity file."""
+    """Encode one ride as a FIT activity file.
+
+    Args:
+        spec: The ride.
+
+    Returns:
+        The file's bytes: file id, timer events, records, laps, session and activity messages.
+    """
     every = samples(spec)
     written = {s.second: s for s in written_samples(spec)}
     end_ms = every[-1].timestamp_ms + 1000
@@ -256,6 +361,14 @@ def build(spec: RideSpec) -> bytes:
 
 
 def _zip(members: dict[str, bytes]) -> bytes:
+    """Pack files into a zip archive with fixed timestamps, so the bytes never change.
+
+    Args:
+        members: File contents keyed by name inside the archive.
+
+    Returns:
+        The zip file's bytes.
+    """
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         for name, data in sorted(members.items()):
@@ -264,12 +377,20 @@ def _zip(members: dict[str, bytes]) -> bytes:
 
 
 def build_rides() -> dict[str, bytes]:
-    """Every ride's FIT bytes keyed by spec name, before any zipping."""
+    """Encode every ride spec.
+
+    Returns:
+        Each ride's FIT bytes keyed by spec name, before any zipping.
+    """
     return {spec.name: build(spec) for spec in RIDES}
 
 
 def build_all() -> dict[str, bytes]:
-    """Every fixture file as committed in ``tests/fixtures/fit/``, keyed by file name."""
+    """Build every fixture file as committed in ``tests/fixtures/fit/``.
+
+    Returns:
+        File contents keyed by file name: standalone rides, zips, duplicates and corrupt files.
+    """
     rides = build_rides()
     files: dict[str, bytes] = {}
     zips: dict[str, dict[str, bytes]] = {}
@@ -288,9 +409,15 @@ def build_all() -> dict[str, bytes]:
 
 
 def committed_bytes(spec_name: str) -> bytes:
-    """A ride's bytes as committed in ``tests/fixtures/fit/`` (faster than ``build``).
+    """Read a ride's committed FIT bytes (much faster than ``build``).
 
     ``tests/test_fixtures_current.py`` guarantees these equal ``build(spec)``.
+
+    Args:
+        spec_name: The ride spec's name.
+
+    Returns:
+        The file's bytes, read from inside its zip if the spec is zipped.
     """
     spec = next(s for s in RIDES if s.name == spec_name)
     if spec.zip_name:
@@ -300,6 +427,14 @@ def committed_bytes(spec_name: str) -> bytes:
 
 
 def write_all(out_dir: Path = FIT_DIR) -> list[Path]:
+    """Write every fixture file, removing files in the folder that are no longer generated.
+
+    Args:
+        out_dir: Where to write; ``tests/fixtures/fit/`` by default.
+
+    Returns:
+        The paths written, sorted.
+    """
     out_dir.mkdir(parents=True, exist_ok=True)
     expected = build_all()
     for stale in out_dir.iterdir():
@@ -314,6 +449,7 @@ def write_all(out_dir: Path = FIT_DIR) -> list[Path]:
 
 
 def main() -> None:
+    """Regenerate the committed fixtures and list the files written."""
     for path in write_all():
         print(f"wrote {path.relative_to(Path.cwd()) if path.is_relative_to(Path.cwd()) else path}")
 

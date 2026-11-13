@@ -16,6 +16,15 @@ from fitlib.store.streams import StreamStore, raw_key, stream_key
 
 @pytest.fixture(params=["fs", "memory"])
 def blobs(request: pytest.FixtureRequest, tmp_path: Path) -> BlobStore:
+    """Provide each blob store implementation in turn, empty.
+
+    Args:
+        request: Pytest request; its param picks the implementation.
+        tmp_path: Folder for the filesystem store.
+
+    Returns:
+        A filesystem or in-memory blob store.
+    """
     if request.param == "fs":
         return FsBlobStore(tmp_path / "blobs")
     return MemoryBlobStore()

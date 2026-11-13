@@ -9,10 +9,10 @@ Methods are added as phases need them.
 from __future__ import annotations
 
 import re
-from datetime import datetime
+from datetime import date, datetime
 from typing import Protocol
 
-from fitlib.models import Filters, Page, Ride, SortKey
+from fitlib.models import AthleteEntry, Filters, Page, Ride, RideSummary, SortKey
 
 MIN_ID_PREFIX = 4
 
@@ -64,6 +64,73 @@ class CatalogStore(Protocol):
 
         Raises:
             DuplicateRide: A ride with the same sha256 is already stored.
+        """
+        ...
+
+    def replace_summary(self, ride_id: str, summary: RideSummary, metrics_version: int) -> None:
+        """Replace a ride's computed figures, keeping its id, import details and metadata.
+
+        Args:
+            ride_id: The ride's id.
+            summary: The newly computed summary.
+            metrics_version: The calculations version that produced it.
+
+        Raises:
+            RideNotFound: No ride has this id.
+        """
+        ...
+
+    def ride_ids(self, below_version: int | None = None) -> list[str]:
+        """List ride ids, oldest ride first.
+
+        Args:
+            below_version: Only rides computed with an older ``metrics_version`` than this.
+
+        Returns:
+            The ids.
+        """
+        ...
+
+    def best_effort_between(
+        self, kind: str, duration_s: int, start: datetime, end: datetime
+    ) -> float | None:
+        """Find the best effort over one duration among rides in a time window.
+
+        Args:
+            kind: ``"power"`` or ``"hr"``.
+            duration_s: One of ``CURVE_DURATIONS_S``.
+            start: Earliest ride start (inclusive).
+            end: Latest ride start (inclusive).
+
+        Returns:
+            The highest best average, or ``None`` if no ride in the window has one.
+        """
+        ...
+
+    def athlete_history(self) -> list[AthleteEntry]:
+        """List the athlete history.
+
+        Returns:
+            Every entry, oldest first.
+        """
+        ...
+
+    def set_athlete_entry(self, entry: AthleteEntry) -> None:
+        """Add an athlete history entry, replacing any entry on the same date.
+
+        Args:
+            entry: The entry.
+        """
+        ...
+
+    def delete_athlete_entry(self, effective_from: date) -> bool:
+        """Remove the athlete history entry on a date.
+
+        Args:
+            effective_from: The entry's date.
+
+        Returns:
+            ``True`` if there was an entry to remove.
         """
         ...
 

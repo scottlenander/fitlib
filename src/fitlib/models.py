@@ -8,8 +8,26 @@ minute. Conversion to other units happens only when displaying them.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from enum import StrEnum
+
+# Best efforts are kept for these durations, in seconds (1 s to 2 h).
+CURVE_DURATIONS_S: tuple[int, ...] = (
+    1, 5, 10, 30, 60, 120, 300, 600, 1200, 1800, 3600, 5400, 7200,
+)  # fmt: skip
+
+type Curve = tuple[tuple[int, float], ...]
+"""Best efforts as ``(duration in seconds, best average over that duration)``, shortest first."""
+
+type Histogram = tuple[tuple[int, int], ...]
+"""Time at each value as ``(value, seconds)``, lowest value first, e.g. seconds at each watt."""
+
+
+class Units(StrEnum):
+    """Which units figures are shown in. Stored data is always SI."""
+
+    IMPERIAL = "imperial"
+    METRIC = "metric"
 
 
 class Source(StrEnum):
@@ -105,6 +123,15 @@ class RideSummary:
         has_gps: Whether any position was recorded.
         laps: Per-lap figures, in order.
         geo: Start point and area for rides with GPS, else ``None``.
+        np: Normalized Power in watts (needs at least 30 s of power), else ``None``.
+        kj: Work done in kilojoules, else ``None``.
+        vi: Variability index, NP divided by average power, else ``None``.
+        decoupling_pct: Aerobic decoupling (Pw:HR drift from the first half to the second) in
+            percent, for rides of 20 min or more with power and heart rate, else ``None``.
+        power_curve: Best average power for each of ``CURVE_DURATIONS_S`` the ride lasted.
+        hr_curve: Best average heart rate for the same durations.
+        power_histogram: Riding seconds at each whole watt.
+        hr_histogram: Riding seconds at each whole beat per minute.
     """
 
     start: datetime
@@ -130,6 +157,14 @@ class RideSummary:
     has_gps: bool
     laps: tuple[Lap, ...] = ()
     geo: GeoSummary | None = None
+    np: float | None = None
+    kj: float | None = None
+    vi: float | None = None
+    decoupling_pct: float | None = None
+    power_curve: Curve = ()
+    hr_curve: Curve = ()
+    power_histogram: Histogram = ()
+    hr_histogram: Histogram = ()
 
     @property
     def end(self) -> datetime:
@@ -151,6 +186,26 @@ class RideSummary:
         if self.utc_offset_s is None:
             return None
         return self.start + timedelta(seconds=self.utc_offset_s)
+
+
+@dataclass(frozen=True)
+class AthleteEntry:
+    """One dated change to the athlete's FTP, weight or max heart rate.
+
+    Each value carries forward on its own until a later entry sets it again, so an entry can
+    change just one of them.
+
+    Attributes:
+        effective_from: The first day (in the rider's local time) the values apply.
+        ftp: Functional threshold power in watts, or ``None`` to leave it unchanged.
+        weight_kg: Body weight in kilograms, or ``None`` to leave it unchanged.
+        max_hr: Maximum heart rate in bpm, or ``None`` to leave it unchanged.
+    """
+
+    effective_from: date
+    ftp: int | None = None
+    weight_kg: float | None = None
+    max_hr: int | None = None
 
 
 @dataclass(frozen=True)

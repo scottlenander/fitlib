@@ -22,11 +22,26 @@ CYCLING = [spec for spec in RIDES if spec.sport == "cycling"]
 
 @cache
 def frame_for(name: str) -> pl.DataFrame:
+    """Decode and normalize a committed fixture ride (cached, as frames are read-only here).
+
+    Args:
+        name: The ride spec's name.
+
+    Returns:
+        The ride's 1 Hz frame.
+    """
     return to_frame(decode(committed_bytes(name)).records)
 
 
 def synthetic(rows: list[dict]) -> pl.DataFrame:
-    """A frame from hand-written per-second records starting at 06:30 UTC."""
+    """Build a frame from hand-written per-second records starting at 06:30 UTC.
+
+    Args:
+        rows: One dict of record fields per second, e.g. ``{"power": 200, "cadence": 90}``.
+
+    Returns:
+        The 1 Hz frame.
+    """
     start = datetime(2025, 8, 2, 6, 30, tzinfo=UTC)
     return to_frame(
         [{"timestamp": start + timedelta(seconds=i), **row} for i, row in enumerate(rows)]

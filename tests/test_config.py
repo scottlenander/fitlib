@@ -7,13 +7,15 @@ from pathlib import Path
 import pytest
 
 from fitlib.config import DEFAULT_LIBRARY, ConfigError, load_config
+from fitlib.models import Units
 
 
 def test_missing_default_config_means_defaults(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     """With no config file anywhere, fitlib uses its default library location.
 
     Given: ``$FITLIB_CONFIG`` pointing at a file that doesn't exist, and no ``--config``.
-    Expect: the default library (``~/.fitlib/library``, expanded) and the local backend.
+    Expect: the default library (``~/.fitlib/library``, expanded), the local backend and
+    imperial units.
     """
     monkeypatch.setenv("FITLIB_CONFIG", str(tmp_path / "absent.toml"))
 
@@ -21,6 +23,7 @@ def test_missing_default_config_means_defaults(monkeypatch: pytest.MonkeyPatch, 
 
     assert config.library == DEFAULT_LIBRARY.expanduser()
     assert config.backend == "local"
+    assert config.units is Units.IMPERIAL, "imperial is the default"
 
 
 def test_explicit_config_must_exist(tmp_path: Path):
@@ -69,13 +72,17 @@ def test_env_var_picks_the_config_file(tmp_path: Path, monkeypatch: pytest.Monke
 
 @pytest.mark.parametrize(
     ("content", "message"),
-    [('[store]\nbackend = "cloud"\n', "Unknown store backend"), ("library = [", "Invalid config")],
-    ids=["unknown-backend", "invalid-toml"],
+    [
+        ('[store]\nbackend = "cloud"\n', "Unknown store backend"),
+        ("library = [", "Invalid config"),
+        ('units = "furlongs"\n', "Unknown units"),
+    ],
+    ids=["unknown-backend", "invalid-toml", "unknown-units"],
 )
 def test_bad_config_is_reported(tmp_path: Path, content: str, message: str):
     """Mistakes in the config file are reported clearly.
 
-    Given: a config with an unknown store backend, or broken TOML.
+    Given: a config with an unknown store backend, broken TOML, or unknown units.
     Expect: ``ConfigError`` naming the problem.
     """
     path = tmp_path / "fitlib.toml"
@@ -83,3 +90,17 @@ def test_bad_config_is_reported(tmp_path: Path, content: str, message: str):
 
     with pytest.raises(ConfigError, match=message):
         load_config(path)
+
+
+def test_metric_units_can_be_chosen(tmp_path: Path):
+    """Units can be set to metric in the config file.
+
+    Given: a config with ``units = "metric"``.
+    Expect: metric units.
+    """
+    path = tmp_path / "fitlib.toml"
+    path.write_text('units = "metric"\n')
+
+    config = load_config(path)
+
+    assert config.units is Units.METRIC

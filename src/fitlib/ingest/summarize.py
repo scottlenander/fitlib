@@ -6,11 +6,11 @@ import polars as pl
 
 from fitlib.ingest.decoder import DecodedActivity
 from fitlib.ingest.source import detect_source, device_name, is_indoor
-from fitlib.metrics import basic
+from fitlib.metrics import basic, curves, hr, power, zones
 from fitlib.models import RideSummary
 
 # Bump when any computed figure changes, so `recompute` knows which rides are out of date.
-METRICS_VERSION = 1
+METRICS_VERSION = 2
 
 
 def summarize(decoded: DecodedActivity, frame: pl.DataFrame) -> RideSummary:
@@ -24,6 +24,8 @@ def summarize(decoded: DecodedActivity, frame: pl.DataFrame) -> RideSummary:
         The ride's summary.
     """
     has_gps = basic.has_data(frame, "lat")
+    avg_power = basic.avg_power(frame)
+    np = power.normalized_power(frame)
     return RideSummary(
         start=frame["timestamp"][0],
         utc_offset_s=decoded.utc_offset_s,
@@ -38,7 +40,7 @@ def summarize(decoded: DecodedActivity, frame: pl.DataFrame) -> RideSummary:
         ascent_m=basic.ascent_m(frame),
         avg_speed_mps=basic.avg_speed_mps(frame),
         max_speed_mps=basic.max_speed_mps(frame),
-        avg_power=basic.avg_power(frame),
+        avg_power=avg_power,
         max_power=basic.max_power(frame),
         avg_hr=basic.avg_hr(frame),
         max_hr=basic.max_hr(frame),
@@ -48,4 +50,12 @@ def summarize(decoded: DecodedActivity, frame: pl.DataFrame) -> RideSummary:
         has_gps=has_gps,
         laps=basic.laps(frame, [lap.start for lap in decoded.laps]),
         geo=basic.geo(frame),
+        np=np,
+        kj=power.kilojoules(frame),
+        vi=power.variability_index(np, avg_power),
+        decoupling_pct=hr.decoupling_pct(frame),
+        power_curve=curves.best_averages(frame, "power"),
+        hr_curve=curves.best_averages(frame, "heart_rate"),
+        power_histogram=zones.histogram(frame, "power"),
+        hr_histogram=zones.histogram(frame, "heart_rate"),
     )

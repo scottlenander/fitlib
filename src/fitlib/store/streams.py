@@ -5,11 +5,11 @@ Also defines where original .fit files live, so blob keys are decided in one pla
 
 from __future__ import annotations
 
-import io
 from datetime import datetime
 
 import polars as pl
 
+from fitlib.parquet import from_parquet, to_parquet
 from fitlib.store.interfaces import BlobStore
 
 
@@ -36,32 +36,6 @@ def stream_key(ride_id: str, start: datetime) -> str:
         ``streams/<year>/<ride id>.parquet``.
     """
     return f"streams/{start.year:04d}/{ride_id}.parquet"
-
-
-def to_parquet(frame: pl.DataFrame) -> bytes:
-    """Serialize a frame as zstd-compressed Parquet.
-
-    Args:
-        frame: Any frame.
-
-    Returns:
-        The Parquet file's bytes.
-    """
-    buffer = io.BytesIO()
-    frame.write_parquet(buffer, compression="zstd")
-    return buffer.getvalue()
-
-
-def from_parquet(data: bytes) -> pl.DataFrame:
-    """Read a frame from Parquet bytes.
-
-    Args:
-        data: A Parquet file's bytes.
-
-    Returns:
-        The frame, with its original column types.
-    """
-    return pl.read_parquet(io.BytesIO(data))
 
 
 class StreamStore:
