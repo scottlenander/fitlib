@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 import threading
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from importlib import resources
@@ -89,7 +89,7 @@ class SqliteCatalog:
         return self._db.execute("PRAGMA user_version").fetchone()[0]
 
     @contextmanager
-    def _tx(self) -> Iterator[sqlite3.Connection]:
+    def _tx(self) -> Generator[sqlite3.Connection]:
         with self._lock:
             self._db.execute("BEGIN IMMEDIATE")
             try:

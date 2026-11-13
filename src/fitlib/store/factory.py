@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
 
@@ -22,7 +22,7 @@ class Stores:
 
 
 @contextmanager
-def open_stores(config: Config) -> Iterator[Stores]:
+def open_stores(config: Config) -> Generator[Stores]:
     if config.backend != "local":
         raise ConfigError(f"Unknown store backend {config.backend!r}")
 

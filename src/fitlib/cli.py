@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
@@ -56,7 +56,7 @@ def main(
 
 
 @contextmanager
-def stores(ctx: typer.Context) -> Iterator[Stores]:
+def stores(ctx: typer.Context) -> Generator[Stores]:
     try:
         config = load_config(ctx.obj)
     except ConfigError as exc:
