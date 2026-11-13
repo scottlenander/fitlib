@@ -6,7 +6,12 @@ readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
     "fitdecode>=0.11.0",
+    "polars>=2.1.0",
+    "typer>=0.29.1",
 ]
+
+[project.scripts]
+fitlib = "fitlib.cli:app"
 
 [build-system]
 requires = ["uv_build>=0.9,<0.14"]
@@ -15,6 +20,7 @@ build-backend = "uv_build"
 [dependency-groups]
 dev = [
     "fit-tool>=0.9.17",
+    "import-linter>=2.16",
     "pytest>=9.2.0",
     "ruff>=0.17.5",
 ]
@@ -24,8 +30,56 @@ line-length = 100
 target-version = "py314"
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "UP", "B", "SIM"]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "D"]
+# Constructor arguments are documented in the class docstring (Google style).
+ignore = ["D107"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+# Docstring rules apply to src/ only. Tests use their own docstring format (Given / Expect),
+# and the fixture and perf scripts are tooling.
+"tests/**" = ["D"]
+"scripts/**" = ["D"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = ["-ra", "--strict-markers"]
+
+[tool.importlinter]
+root_package = "fitlib"
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "Only the store factory and the store's own modules use a concrete backend"
+type = "forbidden"
+source_modules = [
+    "fitlib.models",
+    "fitlib.ingest",
+    "fitlib.metrics",
+    "fitlib.importer",
+    "fitlib.cli",
+    "fitlib.display",
+    "fitlib.config",
+]
+forbidden_modules = ["fitlib.store.local", "fitlib.store.memory", "sqlite3"]
+# Going through fitlib.store.factory is the intended route to a backend.
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "Layers: models <- metrics <- ingest <- importer <- cli"
+type = "layers"
+layers = [
+    "fitlib.cli",
+    "fitlib.importer",
+    "fitlib.ingest",
+    "fitlib.metrics",
+    "fitlib.models",
+]
+
+[[tool.importlinter.contracts]]
+name = "Metrics and ingest never touch storage"
+type = "forbidden"
+source_modules = ["fitlib.metrics", "fitlib.ingest", "fitlib.models"]
+forbidden_modules = ["fitlib.store"]
