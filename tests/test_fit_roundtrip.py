@@ -7,13 +7,13 @@ fitdecode directly on purpose: it tests the library, not fitlib's own decoder.
 from __future__ import annotations
 
 import math
-from datetime import timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 
 import fitdecode
 import pytest
 
-from tests.fixtures.generate import build, samples
+from tests.fixtures.generate import build, written_samples
 from tests.fixtures.specs import CORRUPT, RIDES, RideSpec, Source
 
 SEMICIRCLE_TO_DEG = 180 / 2**31
@@ -63,51 +63,64 @@ def test_file_id_identifies_the_source(ride):
     assert file_id["time_created"] == spec.start, "creation time should be the ride's start"
 
 
-def test_one_record_per_second(ride):
-    """Records are sampled once per second for the whole ride.
+def test_record_timestamps_match_what_was_written(ride):
+    """Each record keeps its timestamp, including across pauses and smart-recording gaps.
 
-    Given: each synthetic ride, whose spec sets a start time and a duration in seconds.
-    Expect: one record per second, timestamped from the start time with no gaps or repeats.
+    Given: each synthetic ride, recorded every second or at irregular 1-5 s intervals, some
+    with a timer pause.
+    Expect: one record per written sample, with the same wall-clock timestamps in order.
     """
     spec, messages = ride
+    written = written_samples(spec)
 
-    records = messages["record"]
-    timestamps = [r["timestamp"] for r in records]
-    expected = [spec.start + timedelta(seconds=i) for i in range(spec.duration_s)]
+    timestamps = [r["timestamp"] for r in messages["record"]]
+    expected = [datetime.fromtimestamp(s.timestamp_ms / 1000, UTC) for s in written]
 
-    assert len(records) == spec.duration_s, "there should be one record per second of the ride"
-    assert timestamps == expected, "timestamps should run 1 s apart from the ride's start"
+    assert len(timestamps) == len(written), "there should be one record per written sample"
+    assert timestamps == expected, "record timestamps should match the written samples"
 
 
 def test_power_heart_rate_and_cadence_round_trip(ride):
-    """Every second's power, heart rate and cadence decode to exactly what was written.
+    """Each record's power, heart rate and cadence decode to exactly what was written.
 
-    Given: each synthetic ride, built from constant-power segments (HR derived from power).
-    Expect: the decoded per-second values equal the spec's, in order.
+    Given: each synthetic ride, built from constant-power segments (HR derived from power);
+    rides without a power meter or HR strap leave those fields out.
+    Expect: the decoded values equal the written ones in order, and absent channels decode as
+    missing rather than zero.
     """
     spec, messages = ride
+    written = written_samples(spec)
 
     records = messages["record"]
-    powers = [r["power"] for r in records]
-    heart_rates = [r["heart_rate"] for r in records]
+    powers = [r.get("power") for r in records]
+    heart_rates = [r.get("heart_rate") for r in records]
     cadences = [r["cadence"] for r in records]
 
-    assert powers == spec.powers(), "per-second power should match the spec"
-    assert heart_rates == spec.heart_rates(), "per-second heart rate should match the spec"
-    assert cadences == spec.cadences(), "per-second cadence should match the spec"
+    assert powers == [s.power for s in written], "power should match (None without a meter)"
+    assert heart_rates == [s.heart_rate for s in written], (
+        "heart rate should match (None without a strap)"
+    )
+    assert cadences == [s.cadence for s in written], "cadence should match the spec"
 
 
 def test_positions_follow_the_loop(ride):
     """GPS positions decode to the generated track, which circles the loop's centre point.
 
-    Given: each synthetic ride on its loop (near Roubaix for Garmin, Watopia for Zwift).
-    Expect: every position within ~10 cm of the generated one, and on a circle whose radius
-    matches the loop length.
+    Given: each synthetic ride; outdoor and Zwift rides follow their loop (near Roubaix, or
+    Watopia), indoor Garmin rides have no GPS.
+    Expect: every position within ~10 cm of the generated one and on a circle whose radius
+    matches the loop length; indoor rides have no positions at all.
     """
     spec, messages = ride
+    records = messages["record"]
     radius_m = spec.loop.lap_length_m / (2 * math.pi)
 
-    for second, (record, sample) in enumerate(zip(messages["record"], samples(spec), strict=True)):
+    if not spec.has_gps:
+        assert all("position_lat" not in r for r in records), "indoor rides should have no GPS"
+        return
+
+    for record, sample in zip(records, written_samples(spec), strict=True):
+        second = sample.second
         lat = record["position_lat"] * SEMICIRCLE_TO_DEG
         lon = record["position_long"] * SEMICIRCLE_TO_DEG
         north = (lat - spec.loop.center_lat) * METRES_PER_DEG_LAT
@@ -126,11 +139,12 @@ def test_distance_speed_and_altitude_round_trip(ride):
 
     Given: each synthetic ride (speed derived from power, altitude a sine wave per lap).
     Expect: distance within 1 cm, speed within 1 mm/s, altitude within 0.2 m (FIT's 1/5 m
-    resolution) for every second.
+    resolution) for every record.
     """
     spec, messages = ride
 
-    for second, (record, sample) in enumerate(zip(messages["record"], samples(spec), strict=True)):
+    for record, sample in zip(messages["record"], written_samples(spec), strict=True):
+        second = sample.second
         assert record["distance"] == pytest.approx(sample.distance, abs=0.01), (
             f"distance at {second} s"
         )
@@ -143,22 +157,38 @@ def test_distance_speed_and_altitude_round_trip(ride):
 def test_session_describes_the_ride(ride):
     """The session message summarises the ride the way Zwift or a Garmin would.
 
-    Given: each synthetic ride.
-    Expect: a cycling session, virtual for Zwift and road for Garmin, with the spec's start,
-    duration, and average and max power.
+    Given: each synthetic ride, including a run, an indoor ride and a ride with a pause.
+    Expect: the spec's sport and sub-sport, start, elapsed time (pauses included), timer time
+    (pauses excluded), and average and max power when there is a power meter.
     """
     spec, messages = ride
-    expected_sub_sport = "virtual_activity" if spec.source is Source.ZWIFT else "road"
-    expected_avg_power = round(sum(spec.powers()) / spec.duration_s)
 
     (session,) = messages["session"]
 
-    assert session["sport"] == "cycling"
-    assert session["sub_sport"] == expected_sub_sport, "Zwift rides should be virtual"
+    assert session["sport"] == spec.sport
+    assert session["sub_sport"] == spec.sub_sport, "Zwift virtual, Garmin road or indoor"
     assert session["start_time"] == spec.start
-    assert session["total_elapsed_time"] == spec.duration_s
-    assert session["avg_power"] == expected_avg_power
-    assert session["max_power"] == max(spec.powers())
+    assert session["total_elapsed_time"] == spec.elapsed_s, "elapsed time includes pauses"
+    assert session["total_timer_time"] == spec.duration_s, "timer time excludes pauses"
+    if spec.has_power:
+        assert session["avg_power"] == round(sum(spec.powers()) / spec.duration_s)
+        assert session["max_power"] == max(spec.powers())
+    else:
+        assert "avg_power" not in session, "rides without a power meter have no average power"
+
+
+def test_laps_match_the_spec(ride):
+    """Rides recorded with the lap button have one lap per segment; others have one lap.
+
+    Given: each synthetic ride; the interval ride presses lap at every segment change.
+    Expect: as many lap messages as the spec's segments (lap button) or exactly one.
+    """
+    spec, messages = ride
+    expected = len(spec.segments) if spec.lap_per_segment else 1
+
+    laps = messages["lap"]
+
+    assert len(laps) == expected, "lap count should follow the spec's lap setting"
 
 
 @pytest.mark.parametrize("name", CORRUPT)
