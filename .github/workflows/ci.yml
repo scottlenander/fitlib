@@ -29,5 +29,8 @@ jobs:
       - name: Check formatting
         run: uv run ruff format --check .
 
+      - name: Check module boundaries
+        run: uv run lint-imports
+
       - name: Test
         run: uv run pytest
