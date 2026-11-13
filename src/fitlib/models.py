@@ -218,6 +218,8 @@ class RideMeta:
         rpe: Perceived effort from 1 (very easy) to 10 (maximal).
         bike_id: Id of the bike ridden, from the ``bikes`` table.
         tags: Tag names, e.g. ``("cobbles", "z2")``.
+        bike_from_default: Whether ``bike_id`` was filled in from the default bikes (so a
+            backfill may change it) rather than chosen by the user (never changed).
     """
 
     name: str | None = None
@@ -225,6 +227,7 @@ class RideMeta:
     rpe: int | None = None
     bike_id: str | None = None
     tags: tuple[str, ...] = ()
+    bike_from_default: bool = False
 
 
 @dataclass(frozen=True)
@@ -275,6 +278,74 @@ class Ride:
         return f"{prefix}, {day.day} {day:%b %Y}"
 
 
+class BikeKind(StrEnum):
+    """What sort of bike it is."""
+
+    ROAD = "road"
+    GRAVEL = "gravel"
+    TT = "tt"
+    MTB = "mtb"
+    TRAINER = "trainer"
+    OTHER = "other"
+
+
+class BikeSlot(StrEnum):
+    """Which kind of ride a default bike is for."""
+
+    ZWIFT = "zwift"
+    INDOOR = "indoor"  # indoor rides not on Zwift, e.g. a Garmin on a trainer
+    OUTDOOR = "outdoor"
+
+
+@dataclass(frozen=True)
+class Bike:
+    """A bike rides can be assigned to.
+
+    Attributes:
+        id: Random UUID.
+        name: Unique (ignoring case), e.g. ``"Giant Contend 1"``.
+        kind: What sort of bike it is, if given.
+        retired: Retired bikes keep their rides but are hidden from ``bikes list`` by default.
+    """
+
+    id: str
+    name: str
+    kind: BikeKind | None = None
+    retired: bool = False
+
+
+@dataclass(frozen=True)
+class BikeDefault:
+    """From a date on, rides of one kind get this bike unless one is set by hand.
+
+    Attributes:
+        slot: Which kind of ride.
+        effective_from: The first day (local time) the default applies.
+        bike_id: The bike, or ``None`` to stop defaulting from this date.
+    """
+
+    slot: BikeSlot
+    effective_from: date
+    bike_id: str | None
+
+
+@dataclass(frozen=True)
+class BikeTotals:
+    """How much a bike has been ridden.
+
+    Attributes:
+        bike: The bike.
+        rides: Number of rides.
+        distance_m: Total distance in metres.
+        moving_s: Total riding time in seconds.
+    """
+
+    bike: Bike
+    rides: int
+    distance_m: float
+    moving_s: int
+
+
 class SortKey(StrEnum):
     """What the ride library can be sorted by."""
 
@@ -298,6 +369,11 @@ class Filters:
         min_duration_s: Only rides with at least this much moving time, in seconds.
         max_duration_s: Only rides with at most this much moving time, in seconds.
         has_power: Only rides with (``True``) or without (``False``) power data.
+        tags: Only rides that have every one of these tags.
+        bike_id: Only rides on this bike.
+        has_bike: Only rides with (``True``) or without (``False``) a bike set.
+        min_rpe: Only rides with a perceived effort of at least this.
+        max_rpe: Only rides with a perceived effort of at most this.
     """
 
     text: str | None = None
@@ -308,6 +384,11 @@ class Filters:
     min_duration_s: int | None = None
     max_duration_s: int | None = None
     has_power: bool | None = None
+    tags: tuple[str, ...] = ()
+    bike_id: str | None = None
+    has_bike: bool | None = None
+    min_rpe: int | None = None
+    max_rpe: int | None = None
 
 
 @dataclass(frozen=True)

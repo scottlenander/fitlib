@@ -12,6 +12,11 @@ from pathlib import Path
 
 from fitlib.models import (
     AthleteEntry,
+    Bike,
+    BikeDefault,
+    BikeKind,
+    BikeSlot,
+    BikeTotals,
     Filters,
     GeoSummary,
     Lap,
@@ -25,8 +30,11 @@ from fitlib.models import (
 from fitlib.store.interfaces import (
     MIN_ID_PREFIX,
     AmbiguousRideId,
+    BikeNotFound,
+    DuplicateBike,
     DuplicateRide,
     RideNotFound,
+    match_bike,
     searchable_text,
     words,
 )
@@ -193,6 +201,7 @@ class SqliteCatalog:
 
         Raises:
             DuplicateRide: A ride with the same sha256 is already stored.
+            BikeNotFound: The ride's ``meta.bike_id`` isn't a bike.
         """
         values = {
             "id": ride.id,
@@ -214,6 +223,8 @@ class SqliteCatalog:
                     raise DuplicateRide(ride.sha256) from exc
                 raise
             self._write_details(db, ride.id, ride.summary)
+            if ride.meta.bike_id is not None:
+                self._require_bike(db, ride.meta.bike_id)
             self._write_meta(db, ride.id, ride.meta)
             self._index(db, ride)
 
@@ -304,6 +315,130 @@ class SqliteCatalog:
             ).rowcount
         return deleted > 0
 
+    def update_meta(self, ride_id: str, meta: RideMeta) -> None:
+        """Replace what the user added to a ride, and refresh its search entry.
+
+        Args:
+            ride_id: The ride's id.
+            meta: The new name, notes, RPE, bike and tags (tags already normalized).
+
+        Raises:
+            RideNotFound: No ride has this id.
+            BikeNotFound: ``meta.bike_id`` isn't a bike.
+        """
+        with self._tx() as db:
+            row = db.execute("SELECT * FROM rides WHERE id = ?", (ride_id,)).fetchone()
+            if row is None:
+                raise RideNotFound(ride_id)
+            if meta.bike_id is not None:
+                self._require_bike(db, meta.bike_id)
+            self._write_meta(db, ride_id, meta)
+            self._index(db, self._load(row))
+
+    def _require_bike(self, db: sqlite3.Connection, bike_id: str) -> None:
+        """Make sure a bike exists.
+
+        Args:
+            db: The connection.
+            bike_id: The bike's id.
+
+        Raises:
+            BikeNotFound: No bike has this id.
+        """
+        if db.execute("SELECT 1 FROM bikes WHERE id = ?", (bike_id,)).fetchone() is None:
+            raise BikeNotFound(bike_id)
+
+    def _check_name_free(self, db: sqlite3.Connection, bike: Bike) -> None:
+        """Make sure no other bike has this bike's name, ignoring case.
+
+        Compared in Python with ``casefold`` (not SQLite's ASCII-only NOCASE), so every
+        catalog treats names the same way.
+
+        Args:
+            db: The connection.
+            bike: The bike being added or changed.
+
+        Raises:
+            DuplicateBike: Another bike has the same name.
+        """
+        for row in db.execute("SELECT id, name FROM bikes WHERE id != ?", (bike.id,)):
+            if row["name"].casefold() == bike.name.casefold():
+                raise DuplicateBike(bike.name)
+
+    def add_bike(self, bike: Bike) -> None:
+        """Add a bike.
+
+        Args:
+            bike: The bike. Its id must be new.
+
+        Raises:
+            DuplicateBike: Another bike has the same name (ignoring case).
+        """
+        with self._tx() as db:
+            self._check_name_free(db, bike)
+            db.execute(
+                "INSERT INTO bikes VALUES (?, ?, ?, ?)",
+                (bike.id, bike.name, bike.kind.value if bike.kind else None, int(bike.retired)),
+            )
+
+    def update_bike(self, bike: Bike) -> None:
+        """Change a bike's name, kind or retired flag; renaming refreshes its rides' search.
+
+        Args:
+            bike: The bike with its new values, matched by id.
+
+        Raises:
+            BikeNotFound: No bike has this id.
+            DuplicateBike: Another bike has the new name (ignoring case).
+        """
+        with self._tx() as db:
+            self._require_bike(db, bike.id)
+            self._check_name_free(db, bike)
+            db.execute(
+                "UPDATE bikes SET name = ?, kind = ?, retired = ? WHERE id = ?",
+                (bike.name, bike.kind.value if bike.kind else None, int(bike.retired), bike.id),
+            )
+            rows = db.execute(
+                "SELECT r.* FROM rides r JOIN ride_meta m ON m.ride_id = r.id WHERE m.bike_id = ?",
+                (bike.id,),
+            ).fetchall()
+            for row in rows:
+                self._index(db, self._load(row))
+
+    def set_bike_default(self, entry: BikeDefault) -> None:
+        """Add a default-bike entry, replacing any for the same slot and date.
+
+        Args:
+            entry: The entry.
+
+        Raises:
+            BikeNotFound: ``entry.bike_id`` isn't a bike.
+        """
+        with self._tx() as db:
+            if entry.bike_id is not None:
+                self._require_bike(db, entry.bike_id)
+            db.execute(
+                "INSERT OR REPLACE INTO bike_defaults VALUES (?, ?, ?)",
+                (entry.slot.value, entry.effective_from.isoformat(), entry.bike_id),
+            )
+
+    def delete_bike_default(self, slot: BikeSlot, effective_from: date) -> bool:
+        """Remove the default-bike entry for a slot and date.
+
+        Args:
+            slot: The entry's slot.
+            effective_from: The entry's date.
+
+        Returns:
+            ``True`` if there was an entry to remove.
+        """
+        with self._tx() as db:
+            deleted = db.execute(
+                "DELETE FROM bike_defaults WHERE slot = ? AND effective_from = ?",
+                (slot.value, effective_from.isoformat()),
+            ).rowcount
+        return deleted > 0
+
     def _write_meta(self, db: sqlite3.Connection, ride_id: str, meta: RideMeta) -> None:
         """Write a ride's user metadata and tags, replacing what was there.
 
@@ -313,8 +448,16 @@ class SqliteCatalog:
             meta: The metadata to store.
         """
         db.execute(
-            "INSERT OR REPLACE INTO ride_meta VALUES (?, ?, ?, ?, ?)",
-            (ride_id, meta.name, meta.notes, meta.rpe, meta.bike_id),
+            "INSERT OR REPLACE INTO ride_meta "
+            "(ride_id, name, notes, rpe, bike_id, bike_from_default) VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                ride_id,
+                meta.name,
+                meta.notes,
+                meta.rpe,
+                meta.bike_id,
+                int(meta.bike_from_default and meta.bike_id is not None),
+            ),  # fmt: skip
         )
         db.execute("DELETE FROM ride_tags WHERE ride_id = ?", (ride_id,))
         for tag in meta.tags:
@@ -331,12 +474,16 @@ class SqliteCatalog:
             db: The connection, inside a transaction.
             ride: The ride, as it should now be found.
         """
-        text = searchable_text(ride)
+        bike = None
+        if ride.meta.bike_id is not None:
+            row = db.execute("SELECT name FROM bikes WHERE id = ?", (ride.meta.bike_id,)).fetchone()
+            bike = row["name"] if row else None
+        text = searchable_text(ride, bike)
         db.execute("DELETE FROM rides_fts WHERE ride_id = ?", (ride.id,))
         db.execute(
             "INSERT INTO rides_fts (ride_id, name, notes, tags, source, device, bike) "
-            "VALUES (?, ?, ?, ?, ?, ?, '')",
-            (ride.id, text["name"], text["notes"], text["tags"], text["source"], text["device"]),
+            "VALUES (:id, :name, :notes, :tags, :source, :device, :bike)",
+            {"id": ride.id, **text},
         )
 
     # -- reads ------------------------------------------------------------------------------
@@ -408,6 +555,7 @@ class SqliteCatalog:
             rpe=m["rpe"] if m else None,
             bike_id=m["bike_id"] if m else None,
             tags=tags,
+            bike_from_default=bool(m["bike_from_default"]) if m else False,
         )
         summary = RideSummary(
             start=_dt(row["start_ts"]),
@@ -604,6 +752,24 @@ class SqliteCatalog:
         if f.has_power is not None:
             clauses.append("r.has_power = ?")
             params.append(int(f.has_power))
+        for tag in f.tags:
+            clauses.append(
+                "r.id IN (SELECT rt.ride_id FROM ride_tags rt JOIN tags t ON t.id = rt.tag_id "
+                "WHERE t.name = ?)"
+            )
+            params.append(tag)
+        meta = "(SELECT {} FROM ride_meta m WHERE m.ride_id = r.id)"
+        if f.bike_id is not None:
+            clauses.append(f"{meta.format('bike_id')} = ?")
+            params.append(f.bike_id)
+        if f.has_bike is not None:
+            clauses.append(f"{meta.format('bike_id')} IS {'NOT ' if f.has_bike else ''}NULL")
+        if f.min_rpe is not None:
+            clauses.append(f"{meta.format('rpe')} >= ?")
+            params.append(f.min_rpe)
+        if f.max_rpe is not None:
+            clauses.append(f"{meta.format('rpe')} <= ?")
+            params.append(f.max_rpe)
         return " AND ".join(clauses), params
 
     def ride_ids(self, below_version: int | None = None) -> list[str]:
@@ -660,6 +826,131 @@ class SqliteCatalog:
                 ftp=r["ftp"],
                 weight_kg=r["weight_kg"],
                 max_hr=r["max_hr"],
+            )
+            for r in rows
+        ]
+
+    @staticmethod
+    def _bike(row: sqlite3.Row) -> Bike:
+        """Build a bike from its row.
+
+        Args:
+            row: A row of the ``bikes`` table.
+
+        Returns:
+            The bike.
+        """
+        return Bike(
+            id=row["id"],
+            name=row["name"],
+            kind=BikeKind(row["kind"]) if row["kind"] else None,
+            retired=bool(row["retired"]),
+        )
+
+    def get_bike(self, bike_id: str) -> Bike:
+        """Load one bike.
+
+        Args:
+            bike_id: The bike's id.
+
+        Returns:
+            The bike.
+
+        Raises:
+            BikeNotFound: No bike has this id.
+        """
+        with self._lock:
+            row = self._db.execute("SELECT * FROM bikes WHERE id = ?", (bike_id,)).fetchone()
+        if row is None:
+            raise BikeNotFound(bike_id)
+        return self._bike(row)
+
+    def list_bikes(self, include_retired: bool = True) -> list[Bike]:
+        """List bikes, sorted by name (ignoring case).
+
+        Args:
+            include_retired: Include retired bikes.
+
+        Returns:
+            The bikes.
+        """
+        with self._lock:
+            rows = self._db.execute("SELECT * FROM bikes").fetchall()
+        bikes = [self._bike(r) for r in rows if include_retired or not r["retired"]]
+        return sorted(bikes, key=lambda b: b.name.casefold())
+
+    def resolve_bike(self, ref: str) -> Bike:
+        """Find a bike by name: an exact match ignoring case, else a unique prefix.
+
+        Args:
+            ref: A bike name or the start of one.
+
+        Returns:
+            The one matching bike.
+
+        Raises:
+            BikeNotFound: No bike matches.
+            AmbiguousBike: The prefix matches several bikes.
+        """
+        return match_bike(self.list_bikes(), ref)
+
+    def bike_totals(self) -> list[BikeTotals]:
+        """Add up rides, distance and riding time for every bike, retired included.
+
+        Returns:
+            One entry per bike, sorted by name (ignoring case); bikes without rides count 0.
+        """
+        with self._lock:
+            rows = {
+                r["bike_id"]: r
+                for r in self._db.execute(
+                    "SELECT m.bike_id, COUNT(*) AS rides, COALESCE(SUM(r.distance_m), 0) AS dist, "
+                    "COALESCE(SUM(r.moving_s), 0) AS moving FROM ride_meta m "
+                    "JOIN rides r ON r.id = m.ride_id WHERE m.bike_id IS NOT NULL "
+                    "GROUP BY m.bike_id"
+                )
+            }
+        totals = []
+        for bike in self.list_bikes():
+            row = rows.get(bike.id)
+            totals.append(
+                BikeTotals(
+                    bike=bike,
+                    rides=row["rides"] if row else 0,
+                    distance_m=float(row["dist"]) if row else 0.0,
+                    moving_s=int(row["moving"]) if row else 0,
+                )
+            )
+        return totals
+
+    def tag_counts(self) -> list[tuple[str, int]]:
+        """Count how many rides use each tag.
+
+        Returns:
+            ``(tag, rides)`` for every tag in use, sorted by tag.
+        """
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT t.name, COUNT(*) AS n FROM ride_tags rt JOIN tags t ON t.id = rt.tag_id "
+                "GROUP BY t.id ORDER BY t.name"
+            ).fetchall()
+        return [(r["name"], r["n"]) for r in rows]
+
+    def bike_defaults(self) -> list[BikeDefault]:
+        """List the dated default-bike entries.
+
+        Returns:
+            Every entry, by slot then date.
+        """
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT * FROM bike_defaults ORDER BY slot, effective_from"
+            ).fetchall()
+        return [
+            BikeDefault(
+                slot=BikeSlot(r["slot"]),
+                effective_from=date.fromisoformat(r["effective_from"]),
+                bike_id=r["bike_id"],
             )
             for r in rows
         ]

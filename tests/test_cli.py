@@ -354,3 +354,205 @@ def test_recompute_when_up_to_date_and_for_one_ride(imported: Path):
     assert "Every ride is up to date." in nothing.output
     assert "Recomputed 1, failed 0." in one.output
     assert unknown.exit_code == EXIT_ERROR
+
+
+# -- phase 1c: editing, bikes, tags ------------------------------------------------------------
+
+
+def test_edit_one_ride_then_show_it(imported: Path):
+    """``fitlib edit`` sets a ride's name, notes, effort, bike and tags; ``show`` prints them.
+
+    Given: the bike "Giant Contend 1"; the 12 Aug ride edited with a name, notes, RPE 7, the
+    bike by a lower-case prefix, and tags "Z2" and "Long Ride".
+    Expect: the update confirmed; ``show`` prints the name, bike, effort, notes and the tags
+    in stored (lower-case) form.
+    """
+    run(imported, "bikes", "add", "Giant Contend 1", "--kind", "road")
+    prefix = ride_prefix(imported, "2025-08-12", "2025-08-13")
+
+    edited = run(imported, "edit", prefix, "--name", "Arenberg evening", "--note",
+                 "Windy on the cobbles", "--rpe", "7", "--bike", "giant c", "--tag", "Z2",
+                 "--tag", "Long Ride")  # fmt: skip
+    shown = run(imported, "show", prefix)
+
+    assert "Updated 1 ride(s)." in edited.output
+    assert "Arenberg evening" in shown.output
+    assert "Bike: Giant Contend 1 · Effort: 7/10" in shown.output
+    assert "Notes: Windy on the cobbles" in shown.output
+    assert "Tags: long ride, z2" in shown.output, "tags are stored lower-case, sorted"
+
+
+def test_edit_several_rides_and_clear_values(imported: Path):
+    """Effort, bike and tags can be set on several rides at once, and cleared again.
+
+    Given: two rides given RPE 6 and tag "z2" together; then the first has its RPE cleared and
+    tag "z2" removed.
+    Expect: both rides updated at first; afterwards ``list --tag z2`` finds only the second.
+    """
+    first = ride_prefix(imported, "2025-08-12", "2025-08-13")
+    second = ride_prefix(imported, "2025-08-09", "2025-08-10")
+
+    both = run(imported, "edit", first, second, "--rpe", "6", "--tag", "z2")
+    run(imported, "edit", first, "--clear-rpe", "--untag", "z2")
+    tagged = run(imported, "list", "--tag", "z2")
+
+    assert "Updated 2 ride(s)." in both.output
+    assert [i[:6] for i in ride_ids(tagged.output)] == [second], "only the second keeps z2"
+
+
+@pytest.mark.parametrize(
+    ("args", "message"),
+    [
+        (["--name", "x"], "--name and --note can only be used with one ride."),
+        (["--rpe", "5", "--clear-rpe"], "Give --rpe or --clear-rpe, not both."),
+        ([], "Nothing to change."),
+        (["--bike", "trek"], "No bike matches 'trek'. Bikes: none yet."),
+        (["--tag", "a,b"], "Tags can't contain commas"),
+    ],
+    ids=["name-several", "set-and-clear", "nothing", "unknown-bike", "comma-tag"],
+)
+def test_edit_errors(imported: Path, args: list[str], message: str):
+    """Mistakes in ``fitlib edit`` are reported without changing anything.
+
+    Given: two rides (one ride for the last three cases) and the options shown.
+    Expect: the message and exit code 2.
+    """
+    first = ride_prefix(imported, "2025-08-12", "2025-08-13")
+    second = ride_prefix(imported, "2025-08-09", "2025-08-10")
+    rides = [first, second] if args[:1] == ["--name"] else [first]
+
+    result = run(imported, "edit", *rides, *args)
+
+    assert message in result.output
+    assert result.exit_code == EXIT_ERROR
+
+
+def test_bikes_add_list_rename_retire(config: Path):
+    """Bikes can be added (names with spaces quoted), listed, renamed and retired.
+
+    Given: "Giant Contend 1" and "Kickr" added; a second "giant contend 1" attempted; the
+    Giant renamed "Contend AR"; the Kickr retired.
+    Expect: the duplicate refused; ``bikes list`` shows Contend AR only; ``--all`` also shows
+    "Kickr (retired)".
+    """
+    run(config, "bikes", "add", "Giant Contend 1", "--kind", "road")
+    run(config, "bikes", "add", "Kickr", "--kind", "trainer")
+    duplicate = run(config, "bikes", "add", "giant contend 1")
+    run(config, "bikes", "rename", "giant", "Contend AR")
+    run(config, "bikes", "retire", "kickr")
+
+    active = run(config, "bikes", "list")
+    everything = run(config, "bikes", "list", "--all")
+
+    assert duplicate.exit_code == EXIT_ERROR
+    assert "There is already a bike called 'giant contend 1'." in duplicate.output
+    assert "Contend AR" in active.output and "Kickr" not in active.output
+    assert "Kickr (retired)" in everything.output
+
+
+def test_default_bikes_on_import_and_backfill(config: Path):
+    """Dated default bikes apply to new imports, and backfill fills in earlier imports.
+
+    Given: the fixtures imported before any bikes exist; then Giant as outdoor default from
+    1 Jan, Tarmac from 10 Aug, Kickr for Zwift; ``backfill --dry-run`` then ``backfill``.
+    Expect: the dry run reports Giant 2, Kickr 1, Tarmac 4 without changing anything;
+    ``bikes list`` then shows those counts; ``bikes defaults`` lists the timeline.
+    """
+    run(config, "import", str(FIT_DIR), "--workers", "1")
+    run(config, "bikes", "add", "Giant Contend 1", "--default-for", "outdoor", "--from",
+        "2025-01-01")  # fmt: skip
+    run(config, "bikes", "add", "Tarmac SL7")
+    run(config, "bikes", "default", "tarmac", "--for", "outdoor", "--from", "2025-08-10")
+    run(config, "bikes", "add", "Kickr", "--default-for", "zwift", "--from", "2025-01-01")
+
+    dry = run(config, "bikes", "backfill", "--dry-run")
+    before = run(config, "bikes", "list")
+    done = run(config, "bikes", "backfill")
+    after = run(config, "bikes", "list")
+    timeline = run(config, "bikes", "defaults")
+
+    assert "Would set Giant Contend 1 on 2 ride(s)." in dry.output
+    assert re.search(r"Tarmac SL7\s+–\s+0\s", before.output), "a dry run changes nothing"
+    assert "Set Tarmac SL7 on 4 ride(s)." in done.output
+    assert re.search(r"Giant Contend 1\s+–\s+2\s", after.output)
+    assert re.search(r"Kickr\s+–\s+1\s", after.output)
+    assert re.search(r"outdoor\s+2025-08-10\s+Tarmac SL7", timeline.output)
+
+
+def test_bikes_default_errors_and_clear(config: Path):
+    """``bikes default`` needs exactly one of a bike, ``--clear`` or ``--remove``.
+
+    Given: the Kickr; a default with neither bike nor flag; a ``--clear`` entry; removing an
+    entry that doesn't exist; then removing the ``--clear`` entry.
+    Expect: an error for the first and third; the clear entry listed as "(none)"; removal
+    confirmed.
+    """
+    run(config, "bikes", "add", "Kickr")
+
+    neither = run(config, "bikes", "default", "--for", "indoor", "--from", "2025-01-01")
+    cleared = run(config, "bikes", "default", "--clear", "--for", "indoor", "--from", "2025-01-01")
+    listed = run(config, "bikes", "defaults")
+    missing = run(config, "bikes", "default", "--remove", "--for", "zwift", "--from", "2025-01-01")
+    removed = run(config, "bikes", "default", "--remove", "--for", "indoor", "--from", "2025-01-01")
+
+    assert neither.exit_code == EXIT_ERROR
+    assert "No default bike for indoor rides from 2025-01-01." in cleared.output
+    assert re.search(r"indoor\s+2025-01-01\s+\(none\)", listed.output)
+    assert missing.exit_code == EXIT_ERROR
+    assert "Removed the indoor default from 2025-01-01." in removed.output
+
+
+def test_tags_and_list_filters(imported: Path):
+    """``fitlib tags`` counts tags; ``list`` filters by tag, bike, effort and bike name text.
+
+    Given: the Giant on the 12 Aug ride with RPE 8 and tags race and z2; the 9 Aug ride with
+    RPE 4 and tag z2.
+    Expect: tags race 1, z2 2; ``--tag z2 --tag race`` and ``--min-rpe 6`` find 12 Aug;
+    ``--max-rpe 5`` finds 9 Aug; ``--bike giant`` and the text "contend" find 12 Aug.
+    """
+    run(imported, "bikes", "add", "Giant Contend 1")
+    aug12 = ride_prefix(imported, "2025-08-12", "2025-08-13")
+    aug9 = ride_prefix(imported, "2025-08-09", "2025-08-10")
+    run(imported, "edit", aug12, "--bike", "giant", "--rpe", "8", "--tag", "race", "--tag", "z2")
+    run(imported, "edit", aug9, "--rpe", "4", "--tag", "z2")
+
+    counts = run(imported, "tags")
+
+    def found(*args: str) -> list[str]:
+        """Id prefixes of the rides ``list`` shows with these options."""
+        return [i[:6] for i in ride_ids(run(imported, "list", *args).output)]
+
+    assert re.search(r"race\s+1", counts.output) and re.search(r"z2\s+2", counts.output)
+    assert found("--tag", "z2", "--tag", "race") == [aug12]
+    assert found("--min-rpe", "6") == [aug12]
+    assert found("--max-rpe", "5") == [aug9]
+    assert found("--bike", "giant") == [aug12]
+    assert found("--text", "contend") == [aug12], "rides are found by their bike's name"
+
+
+def test_editing_the_bike_protects_it_from_backfill(config: Path):
+    """A bike set with ``fitlib edit`` is the user's and is kept when defaults change.
+
+    Given: Scott Addict as the outdoor default from 2000 when the fixtures are imported (6
+    outdoor rides); the 12 Aug ride then set by hand to the Giant; then the Giant made the
+    outdoor default and a backfill run.
+    Expect: ``show`` marks Scott on the 9 Aug ride as "(default)"; the backfill moves the 5
+    other outdoor rides to the Giant; the hand-set ride shows its bike without "(default)".
+    """
+    run(config, "bikes", "add", "Scott Addict", "--default-for", "outdoor", "--from",
+        "2000-01-01")  # fmt: skip
+    run(config, "bikes", "add", "Giant Contend 1")
+    run(config, "import", str(FIT_DIR), "--workers", "1")
+    aug12 = ride_prefix(config, "2025-08-12", "2025-08-13")
+    aug9 = ride_prefix(config, "2025-08-09", "2025-08-10")
+    run(config, "edit", aug12, "--bike", "giant")
+    before = run(config, "show", aug9)
+
+    run(config, "bikes", "default", "giant", "--for", "outdoor", "--from", "2000-01-01")
+    moved = run(config, "bikes", "backfill")
+    hand_set = run(config, "show", aug12)
+    bike_line = next(line for line in hand_set.output.splitlines() if line.startswith("Bike:"))
+
+    assert "Bike: Scott Addict (default)" in before.output
+    assert "Set Giant Contend 1 on 5 ride(s)." in moved.output, "6 outdoor rides, 1 by hand"
+    assert bike_line == "Bike: Giant Contend 1", "a hand-set bike has no (default) marker"

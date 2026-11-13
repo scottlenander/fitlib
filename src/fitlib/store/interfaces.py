@@ -12,7 +12,19 @@ import re
 from datetime import date, datetime
 from typing import Protocol
 
-from fitlib.models import AthleteEntry, Filters, Page, Ride, RideSummary, SortKey
+from fitlib.models import (
+    AthleteEntry,
+    Bike,
+    BikeDefault,
+    BikeSlot,
+    BikeTotals,
+    Filters,
+    Page,
+    Ride,
+    RideMeta,
+    RideSummary,
+    SortKey,
+)
 
 MIN_ID_PREFIX = 4
 
@@ -43,6 +55,30 @@ class AmbiguousRideId(StoreError):
 
 class DuplicateRide(StoreError):
     """A ride with the same file hash is already in the catalog."""
+
+
+class BikeNotFound(StoreError):
+    """No bike has the given id, or no bike name matches the given name or prefix."""
+
+
+class AmbiguousBike(StoreError):
+    """A bike name prefix matches more than one bike.
+
+    Args:
+        ref: The prefix that was given.
+        candidates: Names of every matching bike.
+
+    Attributes:
+        candidates: Names of every matching bike, sorted.
+    """
+
+    def __init__(self, ref: str, candidates: list[str]):
+        super().__init__(f"{ref!r} matches {len(candidates)} bikes: {', '.join(candidates)}")
+        self.candidates = candidates
+
+
+class DuplicateBike(StoreError):
+    """Another bike already has this name (ignoring case)."""
 
 
 class BlobNotFound(StoreError):
@@ -127,6 +163,129 @@ class CatalogStore(Protocol):
         """Remove the athlete history entry on a date.
 
         Args:
+            effective_from: The entry's date.
+
+        Returns:
+            ``True`` if there was an entry to remove.
+        """
+        ...
+
+    def update_meta(self, ride_id: str, meta: RideMeta) -> None:
+        """Replace what the user added to a ride, and refresh its search entry.
+
+        Args:
+            ride_id: The ride's id.
+            meta: The new name, notes, RPE, bike and tags (tags already normalized).
+
+        Raises:
+            RideNotFound: No ride has this id.
+            BikeNotFound: ``meta.bike_id`` isn't a bike.
+        """
+        ...
+
+    def add_bike(self, bike: Bike) -> None:
+        """Add a bike.
+
+        Args:
+            bike: The bike. Its id must be new.
+
+        Raises:
+            DuplicateBike: Another bike has the same name (ignoring case).
+        """
+        ...
+
+    def update_bike(self, bike: Bike) -> None:
+        """Change a bike's name, kind or retired flag; renaming refreshes its rides' search.
+
+        Args:
+            bike: The bike with its new values, matched by id.
+
+        Raises:
+            BikeNotFound: No bike has this id.
+            DuplicateBike: Another bike has the new name (ignoring case).
+        """
+        ...
+
+    def get_bike(self, bike_id: str) -> Bike:
+        """Load one bike.
+
+        Args:
+            bike_id: The bike's id.
+
+        Returns:
+            The bike.
+
+        Raises:
+            BikeNotFound: No bike has this id.
+        """
+        ...
+
+    def list_bikes(self, include_retired: bool = True) -> list[Bike]:
+        """List bikes, sorted by name (ignoring case).
+
+        Args:
+            include_retired: Include retired bikes.
+
+        Returns:
+            The bikes.
+        """
+        ...
+
+    def resolve_bike(self, ref: str) -> Bike:
+        """Find a bike by name: an exact match ignoring case, else a unique prefix.
+
+        Args:
+            ref: A bike name or the start of one, e.g. ``"giant"``.
+
+        Returns:
+            The one matching bike.
+
+        Raises:
+            BikeNotFound: No bike matches.
+            AmbiguousBike: The prefix matches several bikes.
+        """
+        ...
+
+    def bike_totals(self) -> list[BikeTotals]:
+        """Add up rides, distance and riding time for every bike, retired included.
+
+        Returns:
+            One entry per bike, sorted by name (ignoring case); bikes without rides count 0.
+        """
+        ...
+
+    def tag_counts(self) -> list[tuple[str, int]]:
+        """Count how many rides use each tag.
+
+        Returns:
+            ``(tag, rides)`` for every tag in use, sorted by tag.
+        """
+        ...
+
+    def bike_defaults(self) -> list[BikeDefault]:
+        """List the dated default-bike entries.
+
+        Returns:
+            Every entry, by slot then date.
+        """
+        ...
+
+    def set_bike_default(self, entry: BikeDefault) -> None:
+        """Add a default-bike entry, replacing any for the same slot and date.
+
+        Args:
+            entry: The entry.
+
+        Raises:
+            BikeNotFound: ``entry.bike_id`` isn't a bike.
+        """
+        ...
+
+    def delete_bike_default(self, slot: BikeSlot, effective_from: date) -> bool:
+        """Remove the default-bike entry for a slot and date.
+
+        Args:
+            slot: The entry's slot.
             effective_from: The entry's date.
 
         Returns:
@@ -331,15 +490,16 @@ def words(text: str) -> list[str]:
     return [w.lower() for w in _WORD.findall(text)]
 
 
-def searchable_text(ride: Ride) -> dict[str, str]:
+def searchable_text(ride: Ride, bike_name: str | None = None) -> dict[str, str]:
     """Collect the text a ride can be found by.
 
     Args:
         ride: The ride.
+        bike_name: The name of the ride's bike, if it has one.
 
     Returns:
-        Its display name, notes, tags, source label and device, by field name. Missing values
-        are empty strings.
+        Its display name, notes, tags, source label, device and bike, by field name. Missing
+        values are empty strings.
     """
     s = ride.summary
     return {
@@ -348,4 +508,35 @@ def searchable_text(ride: Ride) -> dict[str, str]:
         "tags": " ".join(ride.meta.tags),
         "source": s.source.label,
         "device": s.device or "",
+        "bike": bike_name or "",
     }
+
+
+def match_bike(bikes: list[Bike], ref: str) -> Bike:
+    """Pick a bike by name: an exact match ignoring case, else a unique prefix.
+
+    Shared by every catalog so they resolve names the same way.
+
+    Args:
+        bikes: Every bike.
+        ref: A bike name or the start of one.
+
+    Returns:
+        The one matching bike.
+
+    Raises:
+        BikeNotFound: No bike matches.
+        AmbiguousBike: The prefix matches several bikes.
+    """
+    wanted = ref.strip().casefold()
+    exact = [b for b in bikes if b.name.casefold() == wanted]
+    if exact:
+        return exact[0]
+    prefixed = sorted(
+        (b for b in bikes if b.name.casefold().startswith(wanted)), key=lambda b: b.name
+    )
+    if not wanted or not prefixed:
+        raise BikeNotFound(ref)
+    if len(prefixed) > 1:
+        raise AmbiguousBike(ref, [b.name for b in prefixed])
+    return prefixed[0]

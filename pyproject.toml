@@ -65,6 +65,7 @@ source_modules = [
     "fitlib.config",
     "fitlib.recompute",
     "fitlib.analysis",
+    "fitlib.metadata",
 ]
 forbidden_modules = ["fitlib.store.local", "fitlib.store.memory", "sqlite3"]
 # Going through fitlib.store.factory is the intended route to a backend.
@@ -84,5 +85,5 @@ layers = [
 [[tool.importlinter.contracts]]
 name = "Metrics and ingest never touch storage"
 type = "forbidden"
-source_modules = ["fitlib.metrics", "fitlib.ingest", "fitlib.models"]
+source_modules = ["fitlib.metrics", "fitlib.ingest", "fitlib.models", "fitlib.metadata"]
 forbidden_modules = ["fitlib.store"]

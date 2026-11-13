@@ -5,9 +5,10 @@ stores them compactly, and summarises each ride in readable numbers. Later phase
 comparison, similar-ride matching, fitness trends and a browser UI.
 
 The project is built in phases. Phase 1a added the core: importing, storage, basic ride
-figures and a command line. **Phase 1b (this)** adds training figures (NP, IF, TSS, zones,
-best efforts, decoupling), the athlete's FTP/weight/max HR history, `recompute`, and
-imperial/metric units. Editing rides, bikes and tags come in phase 1c.
+figures and a command line. Phase 1b added training figures (NP, IF, TSS, zones, best
+efforts, decoupling), the athlete's FTP/weight/max HR history, `recompute`, and imperial/metric
+units. **Phase 1c (this)** adds editing rides (name, notes, effort, bike, tags), bikes with
+dated default bikes, and tag/bike/effort filters.
 
 ## Setup
 
@@ -30,6 +31,12 @@ uv run fitlib show 3f2a9c --units metric    # override the configured units once
 uv run fitlib athlete set --from 2025-01-01 --ftp 250 --weight 165 --max-hr 188
 uv run fitlib athlete show                  # history, and today's values
 uv run fitlib recompute                     # only needed after fitlib's calculations change
+uv run fitlib edit 3f2a9c --name "Arenberg" --note "Windy" --rpe 7 --tag z2 --tag cobbles
+uv run fitlib edit 3f2a9c 77b0e1 --bike "Giant Contend 1"    # several rides at once
+uv run fitlib bikes add "Giant Contend 1" --kind road --default-for outdoor --from 2020-01-01
+uv run fitlib bikes default "Tarmac SL7" --for outdoor --from 2023-04-15
+uv run fitlib bikes backfill --dry-run      # then without --dry-run
+uv run fitlib list --tag z2 --bike giant --min-rpe 6
 uv run fitlib --help                        # every command and option
 ```
 
@@ -49,6 +56,23 @@ uv run fitlib --help                        # every command and option
 - **athlete** records FTP, weight and max HR from a date on. Each value carries forward until
   changed, so `--ftp 260` alone keeps the earlier weight. Weight is entered and shown in your
   display units and stored in kg. `athlete remove DATE` deletes an entry.
+- **edit** sets a ride's name, notes, effort (RPE 1-10), bike and tags; `--clear-…` removes a
+  value, `--untag` removes a tag. Effort, bike and tags can be set on several rides at once;
+  name and notes only on one. Tags are stored lower-case ("Z2" and "z2" are the same tag).
+- **bikes** `add`, `list` (rides, distance and time per bike; `--all` includes retired),
+  `rename`, `retire`/`unretire` (a retired bike keeps its rides; bikes are never deleted).
+  Quote names with spaces: `"Giant Contend 1"`. Wherever a bike is asked for, its name in any
+  case or a unique start of it works (`giant c`).
+- **Default bikes** are set per kind of ride (`zwift`, `indoor` for other indoor rides,
+  `outdoor`) from a date on, so older rides can have a different bike from newer ones:
+  `bikes default NAME --for outdoor --from 2023-04-15`; `--clear` stops defaulting from a
+  date; `--remove` deletes an entry; `bikes defaults` shows the timeline. New imports get the
+  default for their kind and local date, marked as a default bike (`show` says "(default)").
+  `bikes backfill` re-applies the defaults to rides without a bike and to rides whose bike
+  came from a default, so adding an older dated default later moves those rides. A bike you
+  set with `edit --bike` is never changed.
+- **tags** lists tags with their ride counts. `list` filters with `--tag` (repeat to require
+  several), `--bike`, `--min-rpe` and `--max-rpe`; text search also matches bike names.
 - **recompute** rebuilds rides from their archived original files. It's only needed when
   fitlib's calculations change (`import` says so); by default it updates just the rides that
   need it, or give ride ids or `--all`.
@@ -95,7 +119,8 @@ are never written to logs.
 | `fitlib/models.py` | Domain objects shared by every layer |
 | `fitlib/ingest/` | Find files (incl. zips), decode with `fitdecode`, normalize to 1 Hz, summarize |
 | `fitlib/metrics/` | Ride figures from a 1 Hz stream (basic, power, HR, curves, zones) and FTP-based formulas (`load.py`) |
-| `fitlib/analysis/` | FTP-based figures for a ride, from the athlete history or an estimated FTP |
+| `fitlib/analysis/` | FTP-based figures for a ride (athlete history or estimated FTP); default-bike backfill |
+| `fitlib/metadata.py` | Tag rules, ride kinds for default bikes, and which dated default applies |
 | `fitlib/store/` | `CatalogStore` / `BlobStore` interfaces; `local/` (SQLite + files) and `memory/` backends; `factory.py` picks one |
 | `fitlib/importer.py` | Hash, dedupe, analyse in worker processes, store |
 | `fitlib/recompute.py` | Rebuild rides from their raw files when calculations change |
@@ -150,7 +175,9 @@ uv run python -m tests.fixtures.generate
 - **Storage contracts** (`tests/store/`): one suite runs against every catalog (SQLite, memory)
   and blob store (filesystem, memory): round trips, duplicate hashes, id prefixes, time
   windows, every search filter, text search, sorting with missing values last, paging,
-  replacing summaries, best efforts in a window, athlete history, invalid blob keys, Parquet
+  replacing summaries, best efforts in a window, athlete history, editing metadata, bikes
+  (unique names ignoring case, name/prefix lookup, renames refreshing search, totals), tag
+  counts, default-bike entries and the tag/bike/effort filters, invalid blob keys, Parquet
   streams; plus upgrading a phase 1a database.
 - **Ingest** (`tests/ingest/`): scanning folders, files and zips (skipping hidden files and
   macOS zip junk); decoding device, sport, local time, records and laps; rejecting bad files;
@@ -162,6 +189,9 @@ uv run python -m tests.fixtures.generate
   specs (e.g. 200 W for an hour at FTP 250 → IF 0.80, TSS 64).
 - **Training** (`tests/analysis/`): FTP, weight and max HR from the history; estimated FTP
   from the best ride in the window; FTP changes applying without a recompute.
+- **Metadata** (`tests/test_metadata.py`, `tests/analysis/test_bikes.py`): tag
+  normalization; ride kinds; dated default bikes by local date; backfill never overwriting a
+  bike set by hand, dry runs, and repeat runs.
 - **Recompute** (`tests/test_recompute.py`): outdated rides brought up to date with metadata
   kept; streams rewritten; missing raw files reported.
 - **Importer** (`tests/test_importer.py`): the whole fixture folder (imports, duplicates,

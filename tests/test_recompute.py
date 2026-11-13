@@ -26,10 +26,7 @@ def downgrade(lib: ImportedLibrary, file_name: str) -> str:
     ride = lib.ride(file_name)
     old = replace(ride.summary, np=None, kj=None, power_curve=(), power_histogram=())
     lib.catalog.replace_summary(ride.id, old, metrics_version=1)
-    # Set metadata directly: the catalog's update_meta arrives in phase 1c.
-    lib.catalog._rides[ride.id] = replace(
-        lib.catalog.get_ride(ride.id), meta=RideMeta(notes="keep me", tags=("z2",))
-    )
+    lib.catalog.update_meta(ride.id, RideMeta(notes="keep me", tags=("z2",)))
     return ride.id
 
 
