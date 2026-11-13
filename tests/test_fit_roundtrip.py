@@ -156,7 +156,7 @@ def test_session_describes_the_ride(ride):
     assert session["sport"] == "cycling"
     assert session["sub_sport"] == expected_sub_sport, "Zwift rides should be virtual"
     assert session["start_time"] == spec.start
-    assert session["total_elapsed_time"] == spec.duration_s, "duration in seconds"
+    assert session["total_elapsed_time"] == spec.duration_s
     assert session["avg_power"] == expected_avg_power
     assert session["max_power"] == max(spec.powers())
 
