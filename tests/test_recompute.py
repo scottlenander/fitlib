@@ -14,7 +14,15 @@ ZWIFT = "zwift_watopia_steady_60min.fit"
 
 
 def downgrade(lib: ImportedLibrary, file_name: str) -> str:
-    """Make a ride look like phase 1a left it: version 1, no training figures, with notes."""
+    """Make a ride look like phase 1a left it: version 1, no training figures, with notes.
+
+    Args:
+        lib: The imported library.
+        file_name: The fixture file the ride came from.
+
+    Returns:
+        The ride's id.
+    """
     ride = lib.ride(file_name)
     old = replace(ride.summary, np=None, kj=None, power_curve=(), power_histogram=())
     lib.catalog.replace_summary(ride.id, old, metrics_version=1)
@@ -26,6 +34,14 @@ def downgrade(lib: ImportedLibrary, file_name: str) -> str:
 
 
 def recomputer(lib: ImportedLibrary) -> Recomputer:
+    """Build a recomputer for a library that runs in this process.
+
+    Args:
+        lib: The imported library.
+
+    Returns:
+        The recomputer.
+    """
     return Recomputer(lib.catalog, lib.blobs, lib.streams, workers=1)
 
 

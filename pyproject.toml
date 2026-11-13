@@ -38,9 +38,10 @@ ignore = ["D107"]
 convention = "google"
 
 [tool.ruff.lint.per-file-ignores]
-# Docstring rules apply to src/ only. Tests use their own docstring format (Given / Expect),
-# and the fixture and perf scripts are tooling.
-"tests/**" = ["D"]
+# Test helpers use Google-style docstrings too; test functions keep their own format
+# (description, Given, Expect), which the Google rules accept. Test packages need no
+# docstring, and the perf script is tooling.
+"tests/**" = ["D104"]
 "scripts/**" = ["D"]
 
 [tool.pytest.ini_options]

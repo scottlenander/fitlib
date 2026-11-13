@@ -24,6 +24,15 @@ from tests.factories import DEFAULT_START, make_ride, make_summary
 
 @pytest.fixture(params=["sqlite", "memory"])
 def catalog(request: pytest.FixtureRequest, tmp_path: Path) -> Iterator[CatalogStore]:
+    """Provide each catalog implementation in turn, empty, and close it afterwards.
+
+    Args:
+        request: Pytest request; its param picks the implementation.
+        tmp_path: Folder for the SQLite file.
+
+    Yields:
+        A SQLite or in-memory catalog.
+    """
     store: CatalogStore
     if request.param == "sqlite":
         store = SqliteCatalog(tmp_path / "catalog.sqlite3")
@@ -34,10 +43,26 @@ def catalog(request: pytest.FixtureRequest, tmp_path: Path) -> Iterator[CatalogS
 
 
 def ids(page) -> list[str]:
+    """Get the ride ids on a page of search results.
+
+    Args:
+        page: The page.
+
+    Returns:
+        The ids, in result order.
+    """
     return [ride.id for ride in page.items]
 
 
 def at(days: int) -> datetime:
+    """A time a number of days after the default ride start (2 Aug 2025, 06:30 UTC).
+
+    Args:
+        days: Days to add.
+
+    Returns:
+        The time, in UTC.
+    """
     return DEFAULT_START + timedelta(days=days)
 
 

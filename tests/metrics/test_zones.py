@@ -14,6 +14,14 @@ from tests.fixtures.generate import committed_bytes
 
 @cache
 def frame_for(name: str) -> pl.DataFrame:
+    """Decode and normalize a committed fixture ride (cached, as frames are read-only here).
+
+    Args:
+        name: The ride spec's name.
+
+    Returns:
+        The ride's 1 Hz frame.
+    """
     return to_frame(decode(committed_bytes(name)).records)
 
 

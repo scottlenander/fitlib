@@ -16,6 +16,11 @@ REGENERATE = "run `uv run python -m tests.fixtures.generate` and commit the resu
 # Module scope: building every fixture takes a few seconds, so both tests share one build.
 @pytest.fixture(scope="module")
 def generated() -> dict[str, bytes]:
+    """Build every fixture once for this module.
+
+    Returns:
+        File contents keyed by file name.
+    """
     return build_all()
 
 

@@ -13,7 +13,17 @@ from tests.fixtures.generate import committed_bytes
 
 
 def ride_with(power: int, hr_first: int, hr_second: int, minutes: int = 40):
-    """Steady power with heart rate stepping up halfway through."""
+    """Build a ride at steady power whose heart rate steps up halfway through.
+
+    Args:
+        power: Watts throughout.
+        hr_first: Heart rate in the first half.
+        hr_second: Heart rate in the second half.
+        minutes: Length of the ride.
+
+    Returns:
+        The ride's 1 Hz frame.
+    """
     start = datetime(2025, 8, 2, 6, 30, tzinfo=UTC)
     seconds = minutes * 60
     return to_frame(

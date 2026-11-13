@@ -20,11 +20,26 @@ from tests.fixtures.specs import ride
 
 @cache
 def frame_for(name: str) -> pl.DataFrame:
+    """Decode and normalize a committed fixture ride (cached, as frames are read-only here).
+
+    Args:
+        name: The ride spec's name.
+
+    Returns:
+        The ride's 1 Hz frame.
+    """
     return to_frame(decode(committed_bytes(name)).records)
 
 
 def synthetic(powers: list[int | None]) -> pl.DataFrame:
-    """A frame with one record per second at the given powers, from 06:30 UTC."""
+    """Build a frame with one record per second at the given powers, from 06:30 UTC.
+
+    Args:
+        powers: Watts per second; ``None`` for no reading.
+
+    Returns:
+        The 1 Hz frame.
+    """
     start = datetime(2025, 8, 2, 6, 30, tzinfo=UTC)
     return to_frame(
         [{"timestamp": start + timedelta(seconds=i), "power": p} for i, p in enumerate(powers)]
@@ -32,7 +47,14 @@ def synthetic(powers: list[int | None]) -> pl.DataFrame:
 
 
 def reference_np(powers: list[int]) -> float:
-    """NP the slow, obvious way, to check the polars version against."""
+    """Work out Normalized Power the slow, obvious way, to check the polars version against.
+
+    Args:
+        powers: Watts per second, with no pauses.
+
+    Returns:
+        The 4th root of the mean 4th power of the 30-second rolling averages.
+    """
     rolling = [mean(powers[i - 29 : i + 1]) for i in range(29, len(powers))]
     return mean(p**4 for p in rolling) ** 0.25
 

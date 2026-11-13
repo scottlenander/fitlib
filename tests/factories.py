@@ -13,6 +13,15 @@ IMPORTED_AT = datetime(2025, 9, 1, 12, 0, tzinfo=UTC)
 
 
 def make_summary(**overrides) -> RideSummary:
+    """Build a plausible outdoor Garmin ride summary, with any fields replaced.
+
+    Args:
+        **overrides: ``RideSummary`` fields to set instead of the defaults.
+
+    Returns:
+        The summary: 1 h on 2 Aug 2025, 30 km, 200 W average, two laps, a location box, best
+        efforts and histograms.
+    """
     summary = RideSummary(
         start=DEFAULT_START,
         utc_offset_s=7200,
@@ -53,7 +62,16 @@ def make_summary(**overrides) -> RideSummary:
 
 
 def make_ride(*, meta: RideMeta | None = None, **overrides) -> Ride:
-    """A ride with a fresh id and hash. Summary fields can be overridden directly."""
+    """Build a ride with a fresh random id and hash.
+
+    Args:
+        meta: The user's metadata; empty by default.
+        **overrides: ``RideSummary`` fields (passed to ``make_summary``) or ``Ride`` fields
+            (``id``, ``sha256``, ``metrics_version``, ...) to set instead of the defaults.
+
+    Returns:
+        The ride.
+    """
     summary_fields = {
         k: overrides.pop(k) for k in list(overrides) if k in RideSummary.__dataclass_fields__
     }

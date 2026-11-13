@@ -21,7 +21,14 @@ METRES_PER_DEG_LAT = 111_320
 
 
 def decode(path: Path) -> dict[str, list[dict]]:
-    """All data messages in the file, grouped by message name."""
+    """Read a FIT file directly with fitdecode.
+
+    Args:
+        path: The file.
+
+    Returns:
+        The fields of every data message, grouped by message name.
+    """
     messages: dict[str, list[dict]] = {}
     with fitdecode.FitReader(path) as reader:
         for frame in reader:
@@ -36,6 +43,15 @@ def decode(path: Path) -> dict[str, list[dict]]:
 def ride(
     request: pytest.FixtureRequest, tmp_path_factory: pytest.TempPathFactory
 ) -> tuple[RideSpec, dict[str, list[dict]]]:
+    """Encode each ride spec and decode it again, once per module.
+
+    Args:
+        request: Pytest request; its param is the ride spec.
+        tmp_path_factory: Makes the folder the file is written to.
+
+    Returns:
+        The spec and its decoded messages.
+    """
     spec: RideSpec = request.param
     path = tmp_path_factory.mktemp("roundtrip") / f"{spec.name}.fit"
     path.write_bytes(build(spec))
@@ -193,7 +209,7 @@ def test_laps_match_the_spec(ride):
 
 @pytest.mark.parametrize("name", CORRUPT)
 def test_truncated_file_is_rejected(name: str, tmp_path: Path):
-    """fitdecode refuses a file that was cut off part-way through.
+    """A file cut off part-way through is refused by fitdecode.
 
     Given: a valid ride's bytes truncated to the length listed in ``CORRUPT``.
     Expect: decoding raises a ``fitdecode.FitError`` rather than returning partial data.

@@ -18,23 +18,55 @@ runner = CliRunner(env={"COLUMNS": "200", "NO_COLOR": "1"})
 
 @pytest.fixture
 def config(tmp_path: Path) -> Path:
+    """Write a config file pointing at an empty library in a temp folder.
+
+    Args:
+        tmp_path: The test's temp folder.
+
+    Returns:
+        The config file's path.
+    """
     path = tmp_path / "fitlib.toml"
     path.write_text(f'library = "{tmp_path / "library"}"\n')
     return path
 
 
 def run(config: Path, *args: str):
+    """Run ``fitlib`` with a config file.
+
+    Args:
+        config: The config file to pass as ``--config``.
+        *args: The command and its arguments, e.g. ``"list", "--source", "zwift"``.
+
+    Returns:
+        The run's result: output and exit code.
+    """
     return runner.invoke(app, ["--config", str(config), *args])
 
 
 @pytest.fixture
 def imported(config: Path) -> Path:
-    """A library with the fixture folder already imported."""
+    """Import the fixture folder into the temp library.
+
+    Args:
+        config: The temp library's config file.
+
+    Returns:
+        The same config file, now pointing at a library with the fixtures imported.
+    """
     run(config, "import", str(FIT_DIR), "--workers", "1")
     return config
 
 
 def ride_ids(output: str) -> list[str]:
+    """Pick out the ride ids printed at the start of ``fitlib list`` rows.
+
+    Args:
+        output: The command's output.
+
+    Returns:
+        The 8-character ids, in order.
+    """
     return re.findall(r"^\s*([0-9a-f]{8})\s", output, flags=re.MULTILINE)
 
 
@@ -188,6 +220,16 @@ def test_bad_config_is_an_error(tmp_path: Path):
 
 
 def ride_prefix(config: Path, day: str, next_day: str) -> str:
+    """Find the id prefix of the ride that starts on a given day.
+
+    Args:
+        config: The library's config file.
+        day: The day, ``YYYY-MM-DD``.
+        next_day: The following day, ``YYYY-MM-DD``.
+
+    Returns:
+        The first 6 characters of that ride's id.
+    """
     listing = run(config, "list", "--since", day, "--until", next_day)
     return ride_ids(listing.output)[0][:6]
 
