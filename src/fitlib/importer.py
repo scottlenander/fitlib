@@ -251,7 +251,7 @@ class Importer:
             imported_at=self._clock(),
             metrics_version=METRICS_VERSION,
             source_name=Path(name.split(":")[-1]).name,
-            meta=RideMeta(bike_id=default_bike(defaults, result.summary)),
+            meta=RideMeta(bike_id=default_bike(defaults, result.summary), bike_from_default=True),
         )
         self._blobs.put(raw_key(sha), data)
         self._streams.put_bytes(ride.id, ride.summary.start, result.stream)

@@ -528,3 +528,31 @@ def test_tags_and_list_filters(imported: Path):
     assert found("--max-rpe", "5") == [aug9]
     assert found("--bike", "giant") == [aug12]
     assert found("--text", "contend") == [aug12], "rides are found by their bike's name"
+
+
+def test_editing_the_bike_protects_it_from_backfill(config: Path):
+    """A bike set with ``fitlib edit`` is the user's and is kept when defaults change.
+
+    Given: Scott Addict as the outdoor default from 2000 when the fixtures are imported (6
+    outdoor rides); the 12 Aug ride then set by hand to the Giant; then the Giant made the
+    outdoor default and a backfill run.
+    Expect: ``show`` marks Scott on the 9 Aug ride as "(default)"; the backfill moves the 5
+    other outdoor rides to the Giant; the hand-set ride shows its bike without "(default)".
+    """
+    run(config, "bikes", "add", "Scott Addict", "--default-for", "outdoor", "--from",
+        "2000-01-01")  # fmt: skip
+    run(config, "bikes", "add", "Giant Contend 1")
+    run(config, "import", str(FIT_DIR), "--workers", "1")
+    aug12 = ride_prefix(config, "2025-08-12", "2025-08-13")
+    aug9 = ride_prefix(config, "2025-08-09", "2025-08-10")
+    run(config, "edit", aug12, "--bike", "giant")
+    before = run(config, "show", aug9)
+
+    run(config, "bikes", "default", "giant", "--for", "outdoor", "--from", "2000-01-01")
+    moved = run(config, "bikes", "backfill")
+    hand_set = run(config, "show", aug12)
+    bike_line = next(line for line in hand_set.output.splitlines() if line.startswith("Bike:"))
+
+    assert "Bike: Scott Addict (default)" in before.output
+    assert "Set Giant Contend 1 on 5 ride(s)." in moved.output, "6 outdoor rides, 1 by hand"
+    assert bike_line == "Bike: Giant Contend 1", "a hand-set bike has no (default) marker"

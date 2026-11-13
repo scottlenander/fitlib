@@ -748,3 +748,22 @@ def test_phase_1a_database_is_upgraded(tmp_path: Path):
     assert version == 3
     assert ride.metrics_version == 1, "the old ride should be marked for recompute"
     assert ride.summary.np is None and ride.summary.power_curve == ()
+
+
+def test_bike_from_default_round_trips(catalog: CatalogStore):
+    """Whether a bike came from a default is stored; without a bike it is always false.
+
+    Given: a ride whose Giant came from a default; then its metadata replaced with no bike but
+    the flag still set.
+    Expect: the flag reads back true with the bike, and false once there is no bike.
+    """
+    add_bikes(catalog)
+    ride = make_ride(meta=RideMeta(bike_id=GIANT.id, bike_from_default=True))
+    catalog.add_ride(ride)
+
+    with_bike = catalog.get_ride(ride.id).meta
+    catalog.update_meta(ride.id, RideMeta(bike_from_default=True))
+    without_bike = catalog.get_ride(ride.id).meta
+
+    assert with_bike.bike_from_default
+    assert not without_bike.bike_from_default, "no bike means nothing came from a default"

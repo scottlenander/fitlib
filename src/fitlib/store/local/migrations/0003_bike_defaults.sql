@@ -7,3 +7,7 @@ CREATE TABLE bike_defaults (
 );
 
 CREATE INDEX ride_meta_bike ON ride_meta (bike_id);
+
+-- 1 when the ride's bike came from the default bikes (a backfill may change it); 0 when the
+-- user chose it (never changed automatically).
+ALTER TABLE ride_meta ADD COLUMN bike_from_default INTEGER NOT NULL DEFAULT 0;

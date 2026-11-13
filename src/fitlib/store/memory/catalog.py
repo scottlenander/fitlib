@@ -77,6 +77,22 @@ def _matches(ride: Ride, bike_name: str | None, f: Filters) -> bool:
     return all(checks)
 
 
+def _stored(meta: RideMeta) -> RideMeta:
+    """Put metadata in the form the SQLite catalog stores it, so both read back the same.
+
+    Args:
+        meta: The metadata as given.
+
+    Returns:
+        The metadata with tags sorted, and ``bike_from_default`` false when there's no bike.
+    """
+    return replace(
+        meta,
+        tags=tuple(sorted(meta.tags)),
+        bike_from_default=meta.bike_from_default and meta.bike_id is not None,
+    )
+
+
 def _sort_value(ride: Ride, sort: SortKey) -> float | None:
     """The value a ride is sorted by.
 
@@ -134,7 +150,7 @@ class MemoryCatalog:
         ride = self.get_ride(ride_id)
         if meta.bike_id is not None:
             self.get_bike(meta.bike_id)
-        self._rides[ride_id] = replace(ride, meta=replace(meta, tags=tuple(sorted(meta.tags))))
+        self._rides[ride_id] = replace(ride, meta=_stored(meta))
 
     def _check_name_free(self, bike: Bike) -> None:
         """Make sure no other bike has this bike's name.
@@ -372,9 +388,7 @@ class MemoryCatalog:
             raise DuplicateRide(ride.sha256)
         if ride.meta.bike_id is not None:
             self.get_bike(ride.meta.bike_id)
-        self._rides[ride.id] = replace(
-            ride, meta=replace(ride.meta, tags=tuple(sorted(ride.meta.tags)))
-        )
+        self._rides[ride.id] = replace(ride, meta=_stored(ride.meta))
 
     def get_ride(self, ride_id: str) -> Ride:
         """Load one ride.

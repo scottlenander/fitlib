@@ -448,8 +448,16 @@ class SqliteCatalog:
             meta: The metadata to store.
         """
         db.execute(
-            "INSERT OR REPLACE INTO ride_meta VALUES (?, ?, ?, ?, ?)",
-            (ride_id, meta.name, meta.notes, meta.rpe, meta.bike_id),
+            "INSERT OR REPLACE INTO ride_meta "
+            "(ride_id, name, notes, rpe, bike_id, bike_from_default) VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                ride_id,
+                meta.name,
+                meta.notes,
+                meta.rpe,
+                meta.bike_id,
+                int(meta.bike_from_default and meta.bike_id is not None),
+            ),  # fmt: skip
         )
         db.execute("DELETE FROM ride_tags WHERE ride_id = ?", (ride_id,))
         for tag in meta.tags:
@@ -547,6 +555,7 @@ class SqliteCatalog:
             rpe=m["rpe"] if m else None,
             bike_id=m["bike_id"] if m else None,
             tags=tags,
+            bike_from_default=bool(m["bike_from_default"]) if m else False,
         )
         summary = RideSummary(
             start=_dt(row["start_ts"]),

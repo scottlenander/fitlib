@@ -21,7 +21,7 @@ from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn
 from rich.table import Table
 
 from fitlib import display
-from fitlib.analysis.bikes import backfill_bikes
+from fitlib.analysis.bikes import NO_BIKE, backfill_bikes
 from fitlib.analysis.training import Training, training
 from fitlib.config import Config, ConfigError, load_config
 from fitlib.importer import Importer, ImportReport
@@ -463,7 +463,7 @@ def print_ride(ride: Ride, figures: Training, units: Units, bike: Bike | None = 
     out.print(f"{display.start_time(r)} · {r.device or r.source.label} · {where}")
     extras = []
     if bike is not None:
-        extras.append(f"Bike: {bike.name}")
+        extras.append(f"Bike: {bike.name}" + (" (default)" if ride.meta.bike_from_default else ""))
     if ride.meta.rpe is not None:
         extras.append(f"Effort: {ride.meta.rpe}/10")
     if extras:
@@ -667,6 +667,8 @@ def edit(
                 rpe=None if clear_rpe else (rpe if rpe is not None else m.rpe),
                 bike_id=None if clear_bike else (bike_id if bike_id is not None else m.bike_id),
                 tags=tuple(tags),
+                # A bike chosen here is the user's; otherwise keep where the bike came from.
+                bike_from_default=m.bike_from_default and bike_id is None and not clear_bike,
             )
             catalog.update_meta(ride.id, meta)
         updated = [catalog.get_ride(r.id) for r in found]
@@ -959,8 +961,8 @@ def bikes_defaults(ctx: typer.Context) -> None:
 
 @bikes_app.command(
     "backfill",
-    help="Give rides without a bike their default bike for their kind and date. "
-    "Bikes already set are never changed.",
+    help="Apply the default bikes to rides without a bike, and update rides whose bike came "
+    "from a default. Bikes you set with `fitlib edit` are never changed.",
 )
 def bikes_backfill(
     ctx: typer.Context,
@@ -968,7 +970,7 @@ def bikes_backfill(
         bool, typer.Option("--dry-run", help="Only show what would change.")
     ] = False,
 ) -> None:
-    """Apply the dated default bikes to rides that have no bike.
+    """Re-apply the dated default bikes to rides whose bike wasn't chosen by hand.
 
     Args:
         ctx: Typer context holding the config path.
@@ -981,8 +983,13 @@ def bikes_backfill(
         out.print("No rides to update.")
         return
     verb = "Would set" if dry_run else "Set"
-    for bike_id, count in sorted(assigned.items(), key=lambda kv: names.get(kv[0], "")):
-        out.print(f"{verb} {names.get(bike_id, bike_id)} on {count} ride(s).")
+    for bike_id, count in sorted(assigned.items(), key=lambda kv: names.get(kv[0], kv[0])):
+        if bike_id == NO_BIKE:
+            out.print(
+                f"{'Would clear' if dry_run else 'Cleared'} the default bike on {count} ride(s)."
+            )
+        else:
+            out.print(f"{verb} {names.get(bike_id, bike_id)} on {count} ride(s).")
 
 
 # -- recompute --------------------------------------------------------------------------------

@@ -67,8 +67,10 @@ uv run fitlib --help                        # every command and option
   `outdoor`) from a date on, so older rides can have a different bike from newer ones:
   `bikes default NAME --for outdoor --from 2023-04-15`; `--clear` stops defaulting from a
   date; `--remove` deletes an entry; `bikes defaults` shows the timeline. New imports get the
-  default for their kind and local date. `bikes backfill` applies the defaults to rides
-  already imported that have no bike; it never changes a bike you set.
+  default for their kind and local date, marked as a default bike (`show` says "(default)").
+  `bikes backfill` re-applies the defaults to rides without a bike and to rides whose bike
+  came from a default, so adding an older dated default later moves those rides. A bike you
+  set with `edit --bike` is never changed.
 - **tags** lists tags with their ride counts. `list` filters with `--tag` (repeat to require
   several), `--bike`, `--min-rpe` and `--max-rpe`; text search also matches bike names.
 - **recompute** rebuilds rides from their archived original files. It's only needed when

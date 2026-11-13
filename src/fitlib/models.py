@@ -218,6 +218,8 @@ class RideMeta:
         rpe: Perceived effort from 1 (very easy) to 10 (maximal).
         bike_id: Id of the bike ridden, from the ``bikes`` table.
         tags: Tag names, e.g. ``("cobbles", "z2")``.
+        bike_from_default: Whether ``bike_id`` was filled in from the default bikes (so a
+            backfill may change it) rather than chosen by the user (never changed).
     """
 
     name: str | None = None
@@ -225,6 +227,7 @@ class RideMeta:
     rpe: int | None = None
     bike_id: str | None = None
     tags: tuple[str, ...] = ()
+    bike_from_default: bool = False
 
 
 @dataclass(frozen=True)

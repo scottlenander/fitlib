@@ -339,8 +339,9 @@ def test_new_rides_get_the_dated_default_bike(library: Library):
 
     def bike_of(file_name: str) -> str | None:
         """Name of the bike the ride from ``file_name`` got, if any."""
-        bike_id = library.ride_from(file_name, report).meta.bike_id
-        return library.catalog.get_bike(bike_id).name if bike_id else None
+        meta = library.ride_from(file_name, report).meta
+        assert meta.bike_from_default or meta.bike_id is None, "import bikes come from defaults"
+        return library.catalog.get_bike(meta.bike_id).name if meta.bike_id else None
 
     assert bike_of("garmin_nord_intervals_5x4.fit") == "Giant"
     assert bike_of("garmin_nord_smart_recording.fit") == "Tarmac"

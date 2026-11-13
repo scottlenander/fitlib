@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from fitlib.analysis.bikes import backfill_bikes
+from fitlib.analysis.bikes import NO_BIKE, backfill_bikes
 from fitlib.models import Bike, BikeDefault, BikeSlot, Filters, RideMeta
 from tests.conftest import ImportedLibrary
 
@@ -47,7 +47,8 @@ def test_backfill_follows_the_dated_defaults(imported: ImportedLibrary):
 def test_backfill_never_overwrites_a_bike_set_by_hand(imported: ImportedLibrary):
     """A bike chosen by the user stays, even if the default would differ.
 
-    Given: the 5 Aug outdoor ride set by hand to the Tarmac (the default then is the Giant).
+    Given: the 5 Aug outdoor ride set by hand to the Tarmac (not from a default; the default
+    then is the Giant).
     Expect: the Giant is backfilled on 1 ride, not 2; the 5 Aug ride keeps the Tarmac.
     """
     set_up_bikes(imported)
@@ -86,3 +87,45 @@ def test_backfill_without_defaults_does_nothing(imported: ImportedLibrary):
     Expect: an empty result.
     """
     assert not backfill_bikes(imported.catalog)
+
+
+def test_backfill_moves_default_bikes_when_older_defaults_are_added(imported: ImportedLibrary):
+    """Bikes that came from a default follow the defaults when they change.
+
+    Given: the fixtures imported while Scott Addict was the outdoor default from 2000 (so
+    every outdoor ride got it as a default); then the Giant added as outdoor default from 2000
+    and Scott moved to start on 10 Aug 2025; then a backfill.
+    Expect: the 5 and 9 Aug outdoor rides move to the Giant (2 rides); rides from 10 Aug keep
+    Scott Addict; all still marked as default bikes.
+    """
+    scott = Bike(id="b1000000-0000-4000-8000-000000000004", name="Scott Addict")
+    imported.catalog.add_bike(scott)
+    imported.catalog.add_bike(GIANT)
+    imported.catalog.set_bike_default(BikeDefault(BikeSlot.OUTDOOR, date(2000, 1, 1), scott.id))
+    backfill_bikes(imported.catalog)
+    imported.catalog.set_bike_default(BikeDefault(BikeSlot.OUTDOOR, date(2000, 1, 1), GIANT.id))
+    imported.catalog.set_bike_default(BikeDefault(BikeSlot.OUTDOOR, date(2025, 8, 10), scott.id))
+
+    changed = backfill_bikes(imported.catalog)
+    early = imported.ride("garmin_nord_intervals_5x4.fit").meta
+    late = imported.ride("garmin_nord_smart_recording.fit").meta
+
+    assert dict(changed) == {GIANT.id: 2}, "only the two rides before 10 Aug should move"
+    assert (early.bike_id, early.bike_from_default) == (GIANT.id, True)
+    assert (late.bike_id, late.bike_from_default) == (scott.id, True)
+
+
+def test_backfill_clears_default_bikes_no_default_covers(imported: ImportedLibrary):
+    """A default bike is removed again when no default applies to the ride any more.
+
+    Given: the defaults backfilled; then the Zwift default deleted.
+    Expect: the Zwift ride's Kickr is cleared (counted under "none").
+    """
+    set_up_bikes(imported)
+    backfill_bikes(imported.catalog)
+    imported.catalog.delete_bike_default(BikeSlot.ZWIFT, date(2025, 1, 1))
+
+    changed = backfill_bikes(imported.catalog)
+
+    assert dict(changed) == {NO_BIKE: 1}
+    assert imported.ride("zwift_watopia_steady_60min.fit").meta.bike_id is None
