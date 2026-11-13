@@ -10,88 +10,27 @@ from __future__ import annotations
 
 import hashlib
 import logging
-import os
 import uuid
 from collections import deque
 from collections.abc import Callable, Iterable
-from concurrent.futures import Executor, Future, ProcessPoolExecutor
+from concurrent.futures import Future
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from fitlib.ingest.decoder import DecodeError, decode
-from fitlib.ingest.normalize import to_frame
+from fitlib.ingest.analyse import Analysed, Failed, NotARide, analyse
 from fitlib.ingest.scanner import scan
-from fitlib.ingest.source import is_cycling
-from fitlib.ingest.summarize import METRICS_VERSION, summarize
+from fitlib.ingest.summarize import METRICS_VERSION
 from fitlib.models import Ride, RideSummary
+from fitlib.parallel import default_workers, make_executor
 from fitlib.store.interfaces import BlobStore, CatalogStore, DuplicateRide
-from fitlib.store.streams import StreamStore, raw_key, to_parquet
+from fitlib.store.streams import StreamStore, raw_key
 
 log = logging.getLogger(__name__)
 
 # Two recordings of the same ride: starts within this window and overlapping by this much.
 OVERLAP_START_WINDOW = timedelta(minutes=2)
 OVERLAP_MIN_FRACTION = 0.8
-
-
-@dataclass(frozen=True)
-class Analysed:
-    """A file that decoded into a ride.
-
-    Attributes:
-        summary: The ride's figures.
-        stream: The ride's 1 Hz samples as zstd Parquet bytes.
-    """
-
-    summary: RideSummary
-    stream: bytes
-
-
-@dataclass(frozen=True)
-class NotARide:
-    """A file that decoded but records another sport.
-
-    Attributes:
-        sport: The FIT sport, e.g. ``"running"``.
-    """
-
-    sport: str
-
-
-@dataclass(frozen=True)
-class Failed:
-    """A file that couldn't be imported.
-
-    Attributes:
-        reason: Why, for the user.
-    """
-
-    reason: str
-
-
-def analyse(data: bytes) -> Analysed | NotARide | Failed:
-    """Decode, normalize and summarize one file.
-
-    Runs in a worker process, so it touches no stores and returns plain, picklable values.
-
-    Args:
-        data: The .fit file's bytes.
-
-    Returns:
-        The ride's summary and stream; or that it isn't a ride; or why it failed (unreadable,
-        or no records).
-    """
-    try:
-        decoded = decode(data)
-    except DecodeError as exc:
-        return Failed(f"not a readable FIT file ({exc})")
-    if not is_cycling(decoded):
-        return NotARide(decoded.sport or "unknown")
-    frame = to_frame(decoded.records)
-    if frame.is_empty():
-        return Failed("the file has no recorded data")
-    return Analysed(summarize(decoded, frame), to_parquet(frame))
 
 
 @dataclass
@@ -124,28 +63,6 @@ class ImportReport:
         return len(self.imported) + len(self.duplicates) + len(self.skipped) + len(self.failed)
 
 
-class _InlineExecutor(Executor):
-    """Runs work immediately in this process: for one worker, and for tests."""
-
-    def submit(self, fn, /, *args, **kwargs):  # type: ignore[override]
-        """Run ``fn`` now and wrap its result in a completed future.
-
-        Args:
-            fn: The function to run.
-            *args: Positional arguments for ``fn``.
-            **kwargs: Keyword arguments for ``fn``.
-
-        Returns:
-            A future that already holds ``fn``'s result or exception.
-        """
-        future: Future = Future()
-        try:
-            future.set_result(fn(*args, **kwargs))
-        except BaseException as exc:  # pragma: no cover - analyse() returns Failed instead
-            future.set_exception(exc)
-        return future
-
-
 def overlap_fraction(a: RideSummary, b: RideSummary) -> float:
     """How much two rides overlap in time.
 
@@ -160,15 +77,6 @@ def overlap_fraction(a: RideSummary, b: RideSummary) -> float:
     shared = (min(a.end, b.end) - max(a.start, b.start)).total_seconds()
     shorter = min(a.elapsed_s, b.elapsed_s)
     return max(0.0, shared) / shorter if shorter else 0.0
-
-
-def default_workers() -> int:
-    """How many decoding processes to use when none is asked for.
-
-    Returns:
-        The number of CPUs, between 1 and 4.
-    """
-    return max(1, min(4, os.cpu_count() or 1))
 
 
 class Importer:
@@ -232,10 +140,7 @@ class Importer:
             if on_progress:
                 on_progress(name)
 
-        executor: Executor = (
-            ProcessPoolExecutor(self._workers) if self._workers > 1 else _InlineExecutor()
-        )
-        with executor:
+        with make_executor(self._workers) as executor:
             for source in scan(paths):
                 data = source.read()
                 sha = hashlib.sha256(data).hexdigest()

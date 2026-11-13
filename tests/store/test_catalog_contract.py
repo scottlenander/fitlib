@@ -6,17 +6,20 @@ pass this whole file unchanged.
 
 from __future__ import annotations
 
+import sqlite3
 from collections.abc import Iterator
-from datetime import UTC, datetime, timedelta
+from dataclasses import replace
+from datetime import UTC, date, datetime, timedelta
+from importlib import resources
 from pathlib import Path
 
 import pytest
 
-from fitlib.models import Filters, RideMeta, SortKey, Source
+from fitlib.models import AthleteEntry, Filters, RideMeta, SortKey, Source
 from fitlib.store.interfaces import AmbiguousRideId, CatalogStore, DuplicateRide, RideNotFound
 from fitlib.store.local import SqliteCatalog
 from fitlib.store.memory import MemoryCatalog
-from tests.factories import DEFAULT_START, make_ride
+from tests.factories import DEFAULT_START, make_ride, make_summary
 
 
 @pytest.fixture(params=["sqlite", "memory"])
@@ -310,6 +313,106 @@ def test_search_pages_through_results(catalog: CatalogStore):
     assert (page.total, page.offset, page.limit) == (5, 2, 2)
 
 
+# -- recompute support ----------------------------------------------------------------------
+
+
+def test_replace_summary_keeps_identity_and_metadata(catalog: CatalogStore):
+    """Recomputing a ride replaces its figures but nothing the user or the import set.
+
+    Given: a ride at metrics version 1 with a name, notes and tags; a new summary with
+    different power, curves and a single lap.
+    Expect: the new summary and version 2; the same id, hash, import time and metadata; text
+    search still finds it by its notes.
+    """
+    ride = make_ride(meta=RideMeta(name="Arenberg loop", notes="windy", tags=("cobbles",)))
+    catalog.add_ride(replace(ride, metrics_version=1))
+    new_summary = make_summary(
+        avg_power=230.0, np=240.0, power_curve=((60, 400.0),), laps=(ride.summary.laps[0],)
+    )
+
+    catalog.replace_summary(ride.id, new_summary, metrics_version=2)
+    loaded = catalog.get_ride(ride.id)
+
+    assert loaded.summary == new_summary
+    assert loaded.metrics_version == 2
+    assert (loaded.id, loaded.sha256, loaded.imported_at) == (
+        ride.id,
+        ride.sha256,
+        ride.imported_at,
+    )
+    assert loaded.meta == ride.meta, "the user's metadata should be untouched"
+    assert ids(catalog.search(Filters(text="windy"))) == [ride.id], "still found by its notes"
+
+
+def test_replace_summary_of_unknown_ride(catalog: CatalogStore):
+    """Recomputing a ride that doesn't exist is an error.
+
+    Given: an empty catalog.
+    Expect: ``RideNotFound``.
+    """
+    with pytest.raises(RideNotFound):
+        catalog.replace_summary("00000000-0000-0000-0000-000000000000", make_summary(), 2)
+
+
+def test_ride_ids_by_metrics_version(catalog: CatalogStore):
+    """Rides computed with older calculations can be found for recompute.
+
+    Given: rides at metrics versions 1, 2 and 1, on consecutive days.
+    Expect: all three oldest first; only the version-1 rides below version 2.
+    """
+    rides = [make_ride(start=at(day), metrics_version=v) for day, v in ((0, 1), (1, 2), (2, 1))]
+    for ride in rides:
+        catalog.add_ride(ride)
+
+    everything = catalog.ride_ids()
+    outdated = catalog.ride_ids(below_version=2)
+
+    assert everything == [r.id for r in rides]
+    assert outdated == [rides[0].id, rides[2].id], "only version-1 rides need recomputing"
+
+
+def test_best_effort_between(catalog: CatalogStore):
+    """The best effort over a duration is found among rides in a time window.
+
+    Given: rides on days 0, 10 and 50 with best 20-minute power of 250, 270 and 300 W.
+    Expect: 270 W for days 0-42; ``None`` for a window with no rides or no such duration.
+    """
+    for day, best in ((0, 250.0), (10, 270.0), (50, 300.0)):
+        catalog.add_ride(make_ride(start=at(day), power_curve=((1200, best),)))
+
+    found = catalog.best_effort_between("power", 1200, at(0), at(42))
+    no_rides = catalog.best_effort_between("power", 1200, at(100), at(142))
+    no_duration = catalog.best_effort_between("power", 3600, at(0), at(42))
+
+    assert found == 270.0
+    assert no_rides is None, "no rides in the window means no best effort"
+    assert no_duration is None, "no ride had a 60-minute effort"
+
+
+def test_athlete_history_entries(catalog: CatalogStore):
+    """Athlete history entries are kept by date, oldest first; a date can be replaced or removed.
+
+    Given: entries for 1 Mar (FTP 250) and 1 Jan (FTP 240, 72 kg, max HR 188), then a new
+    1 Mar entry (FTP 255), then 1 Jan removed.
+    Expect: after each step, the entries in date order with the latest values.
+    """
+    january = AthleteEntry(date(2025, 1, 1), ftp=240, weight_kg=72.0, max_hr=188)
+    march = AthleteEntry(date(2025, 3, 1), ftp=250)
+    catalog.set_athlete_entry(march)
+    catalog.set_athlete_entry(january)
+
+    both = catalog.athlete_history()
+    catalog.set_athlete_entry(AthleteEntry(date(2025, 3, 1), ftp=255))
+    replaced = catalog.athlete_history()
+    removed = catalog.delete_athlete_entry(date(2025, 1, 1))
+    removed_again = catalog.delete_athlete_entry(date(2025, 1, 1))
+
+    assert both == [january, march], "entries should come back oldest first"
+    assert replaced == [january, AthleteEntry(date(2025, 3, 1), ftp=255)]
+    assert (removed, removed_again) == (True, False), "removing twice finds nothing the 2nd time"
+    assert catalog.athlete_history() == [AthleteEntry(date(2025, 3, 1), ftp=255)]
+
+
 # -- SQLite only ------------------------------------------------------------------------------
 
 
@@ -317,7 +420,7 @@ def test_sqlite_catalog_persists_and_is_migrated(tmp_path: Path):
     """A SQLite catalog keeps its rides after being closed and reopened, at the latest schema.
 
     Given: a catalog file with one ride, closed and opened again.
-    Expect: the ride is still there and the schema version is 1 (the initial migration).
+    Expect: the ride is still there and the schema version is 2 (the training migration).
     """
     path = tmp_path / "catalog.sqlite3"
     ride = make_ride(start=datetime(2025, 8, 2, tzinfo=UTC))
@@ -331,4 +434,37 @@ def test_sqlite_catalog_persists_and_is_migrated(tmp_path: Path):
     reopened.close()
 
     assert loaded == ride, "the ride should survive closing and reopening the catalog"
-    assert version == 1
+    assert version == 2
+
+
+def test_phase_1a_database_is_upgraded(tmp_path: Path):
+    """A library created before training metrics is upgraded in place when opened.
+
+    Given: a catalog file built with only the initial migration (as phase 1a left it) holding
+    one ride.
+    Expect: opening it applies migration 2; the ride is still there with no training figures,
+    so ``recompute`` can fill them in.
+    """
+    path = tmp_path / "catalog.sqlite3"
+    initial = (
+        resources.files("fitlib.store.local") / "migrations" / "0001_initial.sql"
+    ).read_text()
+    db = sqlite3.connect(path)
+    db.executescript(f"{initial}\nPRAGMA user_version = 1;")
+    db.execute(
+        "INSERT INTO rides (id, sha256, source_name, imported_at, metrics_version, start_ts, "
+        "source, sport, indoor, elapsed_s, moving_s, has_power, has_hr, has_gps) "
+        "VALUES ('abcd1111-0000-4000-8000-000000000001', 'x', 'a.fit', 0, 1, 0, 'zwift', "
+        "'cycling', 1, 60, 60, 1, 1, 0)"
+    )
+    db.commit()
+    db.close()
+
+    catalog = SqliteCatalog(path)
+    ride = catalog.get_ride("abcd1111-0000-4000-8000-000000000001")
+    version = catalog.schema_version
+    catalog.close()
+
+    assert version == 2
+    assert ride.metrics_version == 1, "the old ride should be marked for recompute"
+    assert ride.summary.np is None and ride.summary.power_curve == ()
