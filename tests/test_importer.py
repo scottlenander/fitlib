@@ -5,13 +5,13 @@ from __future__ import annotations
 import logging
 import shutil
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 import pytest
 
 from fitlib.importer import Importer, ImportReport, overlap_fraction
-from fitlib.models import Ride, Source
+from fitlib.models import Bike, BikeDefault, BikeSlot, Ride, Source
 from fitlib.store.interfaces import BlobStore, CatalogStore
 from fitlib.store.local import FsBlobStore, SqliteCatalog
 from fitlib.store.memory import MemoryBlobStore, MemoryCatalog
@@ -316,3 +316,33 @@ def test_unreadable_files_do_not_stop_the_import(tmp_path: Path, library: Librar
 
     assert [n for n, _ in report.imported] == ["c_good.fit"]
     assert [n for n, _ in report.failed] == ["a_empty.fit", "b_text.fit"]
+
+
+def test_new_rides_get_the_dated_default_bike(library: Library):
+    """Imported rides get the default bike for their kind and local date.
+
+    Given: outdoor defaults Giant from 1 Jan and Tarmac from 10 Aug 2025, a Zwift default
+    Kickr, and no indoor default; then the fixture folder imported.
+    Expect: the 5 Aug outdoor ride on the Giant, the 12 Aug one on the Tarmac, the Zwift ride
+    on the Kickr, and the Garmin indoor ride with no bike.
+    """
+    bikes = {name: Bike(id=f"b100000{i}-0000-4000-8000-000000000000", name=name)
+             for i, name in enumerate(("Giant", "Tarmac", "Kickr"))}  # fmt: skip
+    for bike in bikes.values():
+        library.catalog.add_bike(bike)
+    for slot, day, name in ((BikeSlot.OUTDOOR, date(2025, 1, 1), "Giant"),
+                            (BikeSlot.OUTDOOR, date(2025, 8, 10), "Tarmac"),
+                            (BikeSlot.ZWIFT, date(2025, 1, 1), "Kickr")):  # fmt: skip
+        library.catalog.set_bike_default(BikeDefault(slot, day, bikes[name].id))
+
+    report = library.importer().run([FIT_DIR])
+
+    def bike_of(file_name: str) -> str | None:
+        """Name of the bike the ride from ``file_name`` got, if any."""
+        bike_id = library.ride_from(file_name, report).meta.bike_id
+        return library.catalog.get_bike(bike_id).name if bike_id else None
+
+    assert bike_of("garmin_nord_intervals_5x4.fit") == "Giant"
+    assert bike_of("garmin_nord_smart_recording.fit") == "Tarmac"
+    assert bike_of("zwift_watopia_steady_60min.fit") == "Kickr"
+    assert bike_of("garmin_indoor_no_hr.fit") is None, "there is no indoor default"

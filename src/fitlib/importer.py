@@ -21,7 +21,8 @@ from pathlib import Path
 from fitlib.ingest.analyse import Analysed, Failed, NotARide, analyse
 from fitlib.ingest.scanner import scan
 from fitlib.ingest.summarize import METRICS_VERSION
-from fitlib.models import Ride, RideSummary
+from fitlib.metadata import default_bike
+from fitlib.models import BikeDefault, Ride, RideMeta, RideSummary
 from fitlib.parallel import default_workers, make_executor
 from fitlib.store.interfaces import BlobStore, CatalogStore, DuplicateRide
 from fitlib.store.streams import StreamStore, raw_key
@@ -126,6 +127,7 @@ class Importer:
             FileNotFoundError: A path doesn't exist. Raised before anything is imported.
         """
         report = ImportReport()
+        defaults = self._catalog.bike_defaults()
         seen: dict[str, str] = {}  # sha256 -> file name, within this run
         # Files being analysed, oldest first. Bounded, so memory stays flat however many
         # files there are; results are stored in file order, so overlaps resolve the same
@@ -136,7 +138,7 @@ class Importer:
         def store_oldest() -> None:
             """Wait for the oldest file in flight and store its result."""
             name, data, sha, future = in_flight.popleft()
-            self._store(name, data, sha, future.result(), report)
+            self._store(name, data, sha, future.result(), report, defaults)
             if on_progress:
                 on_progress(name)
 
@@ -208,6 +210,7 @@ class Importer:
         sha: str,
         result: Analysed | NotARide | Failed,
         report: ImportReport,
+        defaults: list[BikeDefault],
     ) -> None:
         """Record one analysed file: store it as a ride, or note why not.
 
@@ -217,6 +220,7 @@ class Importer:
             sha: The file's sha256.
             result: What ``analyse`` made of it.
             report: The import's report, updated with this file's outcome.
+            defaults: The dated default bikes, used to set the new ride's bike.
 
         Raises:
             Exception: Anything the catalog raises other than ``DuplicateRide``, after the
@@ -247,6 +251,7 @@ class Importer:
             imported_at=self._clock(),
             metrics_version=METRICS_VERSION,
             source_name=Path(name.split(":")[-1]).name,
+            meta=RideMeta(bike_id=default_bike(defaults, result.summary)),
         )
         self._blobs.put(raw_key(sha), data)
         self._streams.put_bytes(ride.id, ride.summary.start, result.stream)
