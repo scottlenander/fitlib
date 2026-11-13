@@ -6,6 +6,7 @@ Location: ``--config`` on the command line, else ``$FITLIB_CONFIG``, else
 Example::
 
     library = "~/Rides/fitlib"
+    units = "imperial"   # or "metric"
 
     [store]
     backend = "local"
@@ -17,6 +18,8 @@ import os
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
+
+from fitlib.models import Units
 
 DEFAULT_CONFIG_PATH = Path("~/.fitlib/config.toml")
 DEFAULT_LIBRARY = Path("~/.fitlib/library")
@@ -34,10 +37,12 @@ class Config:
     Attributes:
         library: Folder holding the catalog and blobs. Absolute, with ``~`` expanded.
         backend: Which storage backend to use. Only ``"local"`` exists so far.
+        units: Units for showing figures; imperial unless the file says otherwise.
     """
 
     library: Path
     backend: str = "local"
+    units: Units = Units.IMPERIAL
 
 
 def config_path(explicit: Path | None = None) -> Path:
@@ -68,7 +73,7 @@ def load_config(explicit: Path | None = None) -> Config:
 
     Raises:
         ConfigError: ``explicit`` doesn't exist, the file isn't valid TOML, or it names an
-            unknown store backend.
+            unknown store backend or units.
     """
     path = config_path(explicit)
     if not path.exists():
@@ -88,4 +93,9 @@ def load_config(explicit: Path | None = None) -> Config:
         raise ConfigError(
             f"Unknown store backend {backend!r} in {path}; expected one of {BACKENDS}"
         )
-    return Config(library=library, backend=backend)
+    units = data.get("units", Units.IMPERIAL.value)
+    if units not in {u.value for u in Units}:
+        raise ConfigError(
+            f"Unknown units {units!r} in {path}; expected one of {[u.value for u in Units]}"
+        )
+    return Config(library=library, backend=backend, units=Units(units))
