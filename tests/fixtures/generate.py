@@ -43,6 +43,7 @@ FIT_DIR = Path(__file__).parent / "fit"
 METRES_PER_DEG_LAT = 111_320.0
 # Speed model: v = (P / k) ** (1/3) m/s. 200 W -> ~9.3 m/s (33 km/h). Coasting at 0 W stops.
 SPEED_K = 0.25
+FIT_EPOCH_S = 631_065_600  # 1989-12-31T00:00:00Z as a Unix timestamp
 # Fixed timestamp for zip members, so zips are byte-identical between runs.
 ZIP_DATE_TIME = (2025, 1, 1, 0, 0, 0)
 
@@ -243,6 +244,9 @@ def build(spec: RideSpec) -> bytes:
     activity.timestamp = end_ms
     activity.total_timer_time = float(spec.duration_s)
     activity.num_sessions = 1
+    if spec.utc_offset_s is not None:
+        # Seconds since the FIT epoch (1989-12-31 00:00), in local time.
+        activity.local_timestamp = end_ms // 1000 - FIT_EPOCH_S + spec.utc_offset_s
     activity.type = Activity.MANUAL
     activity.event = Event.ACTIVITY
     activity.event_type = EventType.STOP
@@ -281,6 +285,18 @@ def build_all() -> dict[str, bytes]:
     for name, (source_name, keep) in CORRUPT.items():
         files[f"{name}.fit"] = rides[source_name][:keep]
     return files
+
+
+def committed_bytes(spec_name: str) -> bytes:
+    """A ride's bytes as committed in ``tests/fixtures/fit/`` (faster than ``build``).
+
+    ``tests/test_fixtures_current.py`` guarantees these equal ``build(spec)``.
+    """
+    spec = next(s for s in RIDES if s.name == spec_name)
+    if spec.zip_name:
+        with zipfile.ZipFile(FIT_DIR / f"{spec.zip_name}.zip") as archive:
+            return archive.read(f"{spec.name}.fit")
+    return (FIT_DIR / f"{spec.name}.fit").read_bytes()
 
 
 def write_all(out_dir: Path = FIT_DIR) -> list[Path]:

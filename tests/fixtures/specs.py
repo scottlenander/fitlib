@@ -96,6 +96,9 @@ class RideSpec:
     hr_base: float = 90
     hr_per_watt: float = 0.25
     serial_number: int = 0x0F17_0001
+    # Local time minus UTC, written to the activity message. Garmin rides are in CEST (+2 h);
+    # Zwift files carry no local time.
+    utc_offset_s: int | None = None
 
     @property
     def duration_s(self) -> int:
@@ -153,6 +156,8 @@ def _intervals(
     return (warmup, *[seg for _ in range(reps) for seg in (work, rest)], cooldown)
 
 
+CEST = 2 * 3600
+
 ZWIFT_STEADY_START = datetime(2025, 8, 2, 6, 30, tzinfo=UTC)
 
 RIDES: tuple[RideSpec, ...] = (
@@ -167,6 +172,7 @@ RIDES: tuple[RideSpec, ...] = (
     RideSpec(
         name="garmin_nord_intervals_5x4",
         source=Source.GARMIN,
+        utc_offset_s=CEST,
         start=datetime(2025, 8, 5, 17, 0, tzinfo=UTC),
         segments=_intervals(
             warmup=Segment(seconds=600, power=150, cadence=85),
@@ -182,6 +188,7 @@ RIDES: tuple[RideSpec, ...] = (
     RideSpec(
         name="garmin_nord_pause_10min",
         source=Source.GARMIN,
+        utc_offset_s=CEST,
         start=datetime(2025, 8, 9, 8, 0, tzinfo=UTC),
         segments=(Segment(seconds=1800, power=190),),
         loop=NORD_LOOP,
@@ -191,6 +198,7 @@ RIDES: tuple[RideSpec, ...] = (
     RideSpec(
         name="garmin_nord_smart_recording",
         source=Source.GARMIN,
+        utc_offset_s=CEST,
         start=datetime(2025, 8, 12, 18, 0, tzinfo=UTC),
         segments=(Segment(seconds=1800, power=180),),
         loop=NORD_LOOP,
@@ -200,6 +208,7 @@ RIDES: tuple[RideSpec, ...] = (
     RideSpec(
         name="garmin_nord_hr_no_power",
         source=Source.GARMIN,
+        utc_offset_s=CEST,
         start=datetime(2025, 8, 16, 9, 0, tzinfo=UTC),
         segments=(Segment(seconds=2700, power=170, cadence=88),),
         loop=NORD_LOOP,
@@ -209,6 +218,7 @@ RIDES: tuple[RideSpec, ...] = (
     RideSpec(
         name="garmin_indoor_no_hr",
         source=Source.GARMIN,
+        utc_offset_s=CEST,
         start=datetime(2025, 8, 19, 18, 30, tzinfo=UTC),
         segments=(Segment(seconds=1800, power=210),),
         loop=NORD_LOOP,
@@ -221,6 +231,7 @@ RIDES: tuple[RideSpec, ...] = (
     RideSpec(
         name="zwift_watopia_steady_60min_head_unit",
         source=Source.GARMIN,
+        utc_offset_s=CEST,
         start=datetime(2025, 8, 2, 6, 30, 30, tzinfo=UTC),
         segments=(Segment(seconds=3600, power=200),),
         loop=NORD_LOOP,
@@ -230,6 +241,7 @@ RIDES: tuple[RideSpec, ...] = (
     RideSpec(
         name="garmin_nord_run_20min",
         source=Source.GARMIN,
+        utc_offset_s=CEST,
         start=datetime(2025, 8, 21, 7, 0, tzinfo=UTC),
         sport="running",
         segments=(Segment(seconds=1200, power=20, cadence=85),),
@@ -240,6 +252,7 @@ RIDES: tuple[RideSpec, ...] = (
     RideSpec(
         name="garmin_export_ride_a",
         source=Source.GARMIN,
+        utc_offset_s=CEST,
         start=datetime(2025, 8, 23, 7, 0, tzinfo=UTC),
         segments=(Segment(seconds=1200, power=160),),
         loop=NORD_LOOP,
@@ -249,6 +262,7 @@ RIDES: tuple[RideSpec, ...] = (
     RideSpec(
         name="garmin_export_ride_b",
         source=Source.GARMIN,
+        utc_offset_s=CEST,
         start=datetime(2025, 8, 24, 7, 0, tzinfo=UTC),
         segments=(Segment(seconds=1500, power=175),),
         loop=NORD_LOOP,
