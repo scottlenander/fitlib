@@ -1,0 +1,110 @@
+"""The ``fitlib athlete`` commands: FTP, weight and max heart rate over time."""
+
+from __future__ import annotations
+
+from datetime import date, datetime
+from typing import Annotated
+
+import typer
+from rich.table import Table
+
+from fitlib import display
+from fitlib.cli.common import UnitsOption, athlete_app, fail, library, out
+from fitlib.metrics import load
+from fitlib.models import (
+    AthleteEntry,
+)
+
+
+@athlete_app.command(
+    "set",
+    help="Record FTP, weight and/or max heart rate from a date on. Values not given are "
+    "unchanged. Weight is in your display units.",
+)
+def athlete_set(
+    ctx: typer.Context,
+    from_date: Annotated[
+        datetime,
+        typer.Option("--from", formats=["%Y-%m-%d"], help="First day the values apply."),
+    ],
+    ftp: Annotated[int | None, typer.Option(min=1, help="FTP in watts.")] = None,
+    weight: Annotated[float | None, typer.Option(min=1, help="Body weight (lb or kg).")] = None,
+    max_hr: Annotated[int | None, typer.Option(min=1, help="Max heart rate in bpm.")] = None,
+    units: UnitsOption = None,
+) -> None:
+    """Add (or replace) the athlete history entry for a date.
+
+    Args:
+        ctx: Typer context holding the config path.
+        from_date: The first day the values apply.
+        ftp: FTP in watts, if changing.
+        weight: Body weight in the display units, if changing.
+        max_hr: Max heart rate in bpm, if changing.
+        units: Units ``weight`` is given in; the config's by default.
+
+    Raises:
+        typer.Exit: No value was given (code 2).
+    """
+    if ftp is None and weight is None and max_hr is None:
+        raise fail("Give at least one of --ftp, --weight or --max-hr.")
+    with library(ctx) as lib:
+        chosen = lib.units(units)
+        entry = AthleteEntry(
+            effective_from=from_date.date(),
+            ftp=ftp,
+            weight_kg=display.kg_from(weight, chosen) if weight is not None else None,
+            max_hr=max_hr,
+        )
+        lib.stores.catalog.set_athlete_entry(entry)
+    out.print(f"Saved athlete values from {entry.effective_from:%Y-%m-%d}.")
+
+
+@athlete_app.command("show", help="Show the athlete history and today's values.")
+def athlete_show(ctx: typer.Context, units: UnitsOption = None) -> None:
+    """Print every athlete history entry, then the values in effect today.
+
+    Args:
+        ctx: Typer context holding the config path.
+        units: Units to show weight in; the config's by default.
+    """
+    with library(ctx) as lib:
+        history = lib.stores.catalog.athlete_history()
+        chosen = lib.units(units)
+    if not history:
+        out.print("No athlete history yet. Add some with `fitlib athlete set`.")
+        return
+    table = Table("From", "FTP", "Weight", "Max HR", box=None)
+    for entry in history:
+        table.add_row(
+            f"{entry.effective_from:%Y-%m-%d}",
+            display.watts(entry.ftp),
+            display.weight(entry.weight_kg, chosen),
+            display.bpm(entry.max_hr),
+        )
+    out.print(table)
+    now = load.values_on(history, date.today())
+    out.print(
+        f"\nToday: FTP {display.watts(now.ftp)}, weight {display.weight(now.weight_kg, chosen)}, "
+        f"max HR {display.bpm(now.max_hr)}."
+    )
+
+
+@athlete_app.command("remove", help="Remove the athlete history entry for a date.")
+def athlete_remove(
+    ctx: typer.Context,
+    entry_date: Annotated[datetime, typer.Argument(formats=["%Y-%m-%d"], help="The entry's date.")],
+) -> None:
+    """Remove the athlete history entry for a date.
+
+    Args:
+        ctx: Typer context holding the config path.
+        entry_date: The entry's date.
+
+    Raises:
+        typer.Exit: There is no entry for that date (code 2).
+    """
+    with library(ctx) as lib:
+        removed = lib.stores.catalog.delete_athlete_entry(entry_date.date())
+    if not removed:
+        raise fail(f"No athlete entry on {entry_date:%Y-%m-%d}.")
+    out.print(f"Removed the athlete entry for {entry_date:%Y-%m-%d}.")

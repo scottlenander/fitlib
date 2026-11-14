@@ -124,7 +124,7 @@ are never written to logs.
 | `fitlib/store/` | `CatalogStore` / `BlobStore` interfaces; `local/` (SQLite + files) and `memory/` backends; `factory.py` picks one |
 | `fitlib/importer.py` | Hash, dedupe, analyse in worker processes, store |
 | `fitlib/recompute.py` | Rebuild rides from their raw files when calculations change |
-| `fitlib/cli.py` | The `fitlib` command |
+| `fitlib/cli/` | The `fitlib` command: `rides`, `bikes`, `athlete` commands, shared `common` helpers and `output` printing |
 
 Only `store/factory.py` chooses a backend; everything else depends on the interfaces.
 `import-linter` enforces this and the layering
