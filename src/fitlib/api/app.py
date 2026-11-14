@@ -8,7 +8,7 @@ from fastapi import APIRouter, FastAPI, HTTPException
 
 from fitlib import __version__
 from fitlib.api import errors
-from fitlib.api.routers import health, rides, tags
+from fitlib.api.routers import athlete, bikes, health, rides, tags
 from fitlib.api.static import PLACEHOLDER_DIR, mount_app
 from fitlib.config import Config
 
@@ -31,6 +31,8 @@ def create_app(config: Config, static_dir: Path | None = None) -> FastAPI:
     api.include_router(health.router)
     api.include_router(rides.router)
     api.include_router(tags.router)
+    api.include_router(bikes.router)
+    api.include_router(athlete.router)
 
     @api.api_route(
         "/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"], include_in_schema=False

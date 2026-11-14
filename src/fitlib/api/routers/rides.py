@@ -13,10 +13,17 @@ from fastapi import APIRouter, HTTPException, Query
 
 from fitlib.analysis.training import training
 from fitlib.api.deps import StoresDep
-from fitlib.api.schemas import RideDetail, RidePage, Streams, ride_detail, ride_item
+from fitlib.api.schemas import (
+    MetaPatch,
+    RideDetail,
+    RidePage,
+    Streams,
+    ride_detail,
+    ride_item,
+)
 from fitlib.ingest.normalize import VALUE_COLUMNS
 from fitlib.metadata import normalize_tag
-from fitlib.models import Filters, Ride, SortKey, Source
+from fitlib.models import Filters, Ride, RideMeta, SortKey, Source
 from fitlib.store.factory import Stores
 
 router = APIRouter(prefix="/rides", tags=["rides"])
@@ -193,3 +200,44 @@ def get_streams(
         t=frame["t"].to_list(),
         columns={f: frame[f].to_list() for f in chosen},
     )
+
+
+@router.patch("/{ref}/meta")
+def update_meta(stores: StoresDep, ref: str, patch: MetaPatch) -> RideDetail:
+    """Change a ride's name, notes, effort, bike or tags.
+
+    Fields left out of the body stay as they are; ``null`` clears one. A bike chosen here
+    counts as set by hand, so default-bike backfills leave it alone.
+
+    Args:
+        stores: The library's stores.
+        ref: The ride's id or a unique prefix.
+        patch: The changes.
+
+    Returns:
+        The updated ride.
+
+    Raises:
+        BikeNotFound: ``bike_id`` isn't a bike (a 404).
+        InvalidTag: A tag is empty, too long or has a comma (a 422).
+    """
+    catalog = stores.catalog
+    ride = find_ride(stores, ref)
+    sent = patch.model_fields_set
+    m = ride.meta
+    if "bike_id" in sent and patch.bike_id is not None:
+        catalog.get_bike(patch.bike_id)
+    tags = m.tags
+    if "tags" in sent:
+        tags = tuple(dict.fromkeys(normalize_tag(t) for t in patch.tags or ()))
+    meta = RideMeta(
+        name=patch.name if "name" in sent else m.name,
+        notes=patch.notes if "notes" in sent else m.notes,
+        rpe=patch.rpe if "rpe" in sent else m.rpe,
+        bike_id=patch.bike_id if "bike_id" in sent else m.bike_id,
+        tags=tags,
+        # A bike chosen here is the user's; otherwise keep where the bike came from.
+        bike_from_default=m.bike_from_default and "bike_id" not in sent,
+    )
+    catalog.update_meta(ride.id, meta)
+    return get_ride(stores, ride.id)

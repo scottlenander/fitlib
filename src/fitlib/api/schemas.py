@@ -6,13 +6,14 @@ times are UTC; ``local_start`` is the rider's clock time with no time zone attac
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
+from typing import Annotated
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from fitlib.analysis.training import Training
 from fitlib.metrics import zones
-from fitlib.models import Bike, BikeKind, Curve, GeoSummary, Lap, Ride, Source
+from fitlib.models import Bike, BikeKind, BikeSlot, Curve, GeoSummary, Lap, Ride, Source
 
 
 class BikeRef(BaseModel):
@@ -512,3 +513,230 @@ def bike_out(bike: Bike) -> BikeOut:
         The bike for the API.
     """
     return BikeOut(id=bike.id, name=bike.name, kind=bike.kind, retired=bike.retired)
+
+
+# -- requests and write responses --------------------------------------------------------------
+
+
+def _clean_text(value: str | None) -> str | None:
+    """Trim free text; blank text means no value.
+
+    Args:
+        value: The text as sent.
+
+    Returns:
+        The trimmed text, or ``None`` if blank or not given.
+    """
+    if value is None:
+        return None
+    return value.strip() or None
+
+
+class MetaPatch(BaseModel):
+    """Changes to a ride's metadata. Fields left out stay as they are; ``null`` clears one.
+
+    Attributes:
+        name: The ride's name. Blank clears it.
+        notes: Free-text notes. Blank clears them.
+        rpe: Perceived effort, 1-10.
+        bike_id: The ride's bike. Choosing one here marks it as set by hand.
+        tags: The ride's full set of tags, replacing the current ones.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = None
+    notes: str | None = None
+    rpe: Annotated[int | None, Field(ge=1, le=10)] = None
+    bike_id: str | None = None
+    tags: list[str] | None = None
+
+    @field_validator("name", "notes")
+    @classmethod
+    def _clean(cls, value: str | None) -> str | None:
+        """Trim the name and notes; blank clears them.
+
+        Args:
+            value: The text as sent.
+
+        Returns:
+            The trimmed text, or ``None``.
+        """
+        return _clean_text(value)
+
+
+def _bike_name(value: str) -> str:
+    """Tidy a bike name: runs of spaces become one, and it can't be blank.
+
+    Args:
+        value: The name as sent.
+
+    Returns:
+        The tidied name.
+
+    Raises:
+        ValueError: The name is blank.
+    """
+    clean = " ".join(value.split())
+    if not clean:
+        raise ValueError("Bike names can't be empty")
+    return clean
+
+
+class BikeCreate(BaseModel):
+    """A new bike.
+
+    Attributes:
+        name: The bike's name; spaces are tidied and it can't be blank.
+        kind: Road, gravel, TT and so on.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    kind: BikeKind | None = None
+
+    @field_validator("name")
+    @classmethod
+    def _tidy(cls, value: str) -> str:
+        """Tidy the name.
+
+        Args:
+            value: The name as sent.
+
+        Returns:
+            The tidied name.
+        """
+        return _bike_name(value)
+
+
+class BikePatch(BaseModel):
+    """Changes to a bike. Fields left out stay as they are.
+
+    Attributes:
+        name: A new name; spaces are tidied and it can't be blank.
+        kind: A new kind; ``null`` clears it.
+        retired: Retire (true) or bring back (false) the bike.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = None
+    kind: BikeKind | None = None
+    retired: bool | None = None
+
+    @field_validator("name")
+    @classmethod
+    def _tidy(cls, value: str | None) -> str | None:
+        """Tidy the name, if one was sent.
+
+        Args:
+            value: The name as sent, or ``None``.
+
+        Returns:
+            The tidied name, or ``None``.
+        """
+        return None if value is None else _bike_name(value)
+
+
+class BikeWithTotals(BikeOut):
+    """A bike and how much it has been ridden.
+
+    Attributes:
+        rides: Rides on the bike.
+        distance_m: Their total distance.
+        moving_s: Their total moving time.
+    """
+
+    rides: int
+    distance_m: float
+    moving_s: int
+
+
+class DefaultOut(BaseModel):
+    """One entry in the default-bike timeline.
+
+    Attributes:
+        slot: Which kind of ride: zwift, indoor or outdoor.
+        effective_from: The first day the entry applies.
+        bike: The default bike from that day, or ``None`` to stop defaulting.
+    """
+
+    slot: BikeSlot
+    effective_from: date
+    bike: BikeRef | None
+
+
+class DefaultSet(BaseModel):
+    """The bike to default to from a date.
+
+    Attributes:
+        bike_id: The bike, or ``null`` to stop defaulting from that date.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    bike_id: str | None
+
+
+class BackfillChange(BaseModel):
+    """How many rides a backfill gives (or would give) one bike.
+
+    Attributes:
+        bike: The bike, or ``None`` for rides that lose their default bike.
+        rides: How many rides.
+    """
+
+    bike: BikeRef | None
+    rides: int
+
+
+class BackfillResult(BaseModel):
+    """What a backfill changed, or would change on a dry run.
+
+    Attributes:
+        dry_run: Whether nothing was saved.
+        changes: Rides per bike, most first.
+    """
+
+    dry_run: bool
+    changes: list[BackfillChange]
+
+
+class AthleteValuesIn(BaseModel):
+    """Athlete values from a date. Values left out carry forward from earlier entries.
+
+    Attributes:
+        ftp: FTP in watts.
+        weight_kg: Body weight in kilograms.
+        max_hr: Max heart rate in bpm.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    ftp: Annotated[int | None, Field(gt=0, le=2000)] = None
+    weight_kg: Annotated[float | None, Field(gt=0, le=300)] = None
+    max_hr: Annotated[int | None, Field(gt=0, le=250)] = None
+
+
+class AthleteEntryOut(AthleteValuesIn):
+    """One dated entry in the athlete history.
+
+    Attributes:
+        effective_from: The first day the entry applies.
+    """
+
+    effective_from: date
+
+
+class Athlete(BaseModel):
+    """The athlete history and the values in effect today.
+
+    Attributes:
+        history: Every entry, oldest first.
+        today: FTP, weight and max heart rate in effect today, each from the latest entry
+            that sets it.
+    """
+
+    history: list[AthleteEntryOut]
+    today: AthleteValuesIn
