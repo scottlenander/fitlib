@@ -37,7 +37,7 @@ from fitlib.store.interfaces import (
 )
 from fitlib.store.local import SqliteCatalog
 from fitlib.store.memory import MemoryCatalog
-from tests.factories import DEFAULT_START, make_ride, make_summary
+from tests.unit.factories import DEFAULT_START, make_ride, make_summary
 
 
 @pytest.fixture(params=["sqlite", "memory"])

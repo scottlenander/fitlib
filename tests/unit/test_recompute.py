@@ -8,7 +8,7 @@ from fitlib.ingest.summarize import METRICS_VERSION
 from fitlib.models import RideMeta
 from fitlib.recompute import Recomputer
 from fitlib.store.streams import raw_key
-from tests.conftest import ImportedLibrary
+from tests.unit.conftest import ImportedLibrary
 
 ZWIFT = "zwift_watopia_steady_60min.fit"
 
