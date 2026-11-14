@@ -29,7 +29,7 @@ def built_app(tmp_path: Path, config: Config) -> Generator[TestClient]:
     (dist / "assets" / "main.js").write_text("console.log('app')")
     (dist / "favicon.svg").write_text("<svg/>")
     (tmp_path / "secret.txt").write_text("outside")
-    with TestClient(create_app(config, static_dir=dist)) as test_client:
+    with TestClient(create_app(config, static_dir=dist, workers=1)) as test_client:
         yield test_client
 
 
