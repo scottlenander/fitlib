@@ -8,7 +8,7 @@ import pytest
 
 from fitlib.metadata import InvalidTag, default_bike, normalize_tag, slot_for
 from fitlib.models import BikeDefault, BikeSlot, Source
-from tests.factories import make_summary
+from tests.unit.factories import make_summary
 
 
 @pytest.mark.parametrize(

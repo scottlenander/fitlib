@@ -8,7 +8,7 @@ import pytest
 
 from fitlib.analysis.training import training
 from fitlib.models import AthleteEntry
-from tests.conftest import ImportedLibrary
+from tests.unit.conftest import ImportedLibrary
 
 ZWIFT = "zwift_watopia_steady_60min.fit"  # 2 Aug, 60 min at 200 W
 SMART = "garmin_nord_smart_recording.fit"  # 12 Aug, 30 min at 180 W

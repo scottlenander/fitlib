@@ -16,9 +16,9 @@ from fitlib.store.interfaces import BlobStore, CatalogStore
 from fitlib.store.local import FsBlobStore, SqliteCatalog
 from fitlib.store.memory import MemoryBlobStore, MemoryCatalog
 from fitlib.store.streams import StreamStore, raw_key
-from tests.factories import make_summary
 from tests.fixtures.generate import FIT_DIR
 from tests.fixtures.specs import RIDES, ride
+from tests.unit.factories import make_summary
 
 IMPORTED = sorted(
     f"{s.zip_name}.zip:{s.name}.fit" if s.zip_name else f"{s.name}.fit"

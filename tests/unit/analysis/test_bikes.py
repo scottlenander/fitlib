@@ -6,7 +6,7 @@ from datetime import date
 
 from fitlib.analysis.bikes import NO_BIKE, backfill_bikes
 from fitlib.models import Bike, BikeDefault, BikeSlot, Filters, RideMeta
-from tests.conftest import ImportedLibrary
+from tests.unit.conftest import ImportedLibrary
 
 GIANT = Bike(id="b1000000-0000-4000-8000-000000000001", name="Giant Contend 1")
 TARMAC = Bike(id="b1000000-0000-4000-8000-000000000002", name="Tarmac SL7")
