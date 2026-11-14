@@ -7,8 +7,9 @@ comparison, similar-ride matching, fitness trends and a browser UI.
 The project is built in phases. Phase 1a added the core: importing, storage, basic ride
 figures and a command line. Phase 1b added training figures (NP, IF, TSS, zones, best
 efforts, decoupling), the athlete's FTP/weight/max HR history, `recompute`, and imperial/metric
-units. **Phase 1c (this)** adds editing rides (name, notes, effort, bike, tags), bikes with
-dated default bikes, and tag/bike/effort filters.
+units. Phase 1c added editing rides (name, notes, effort, bike, tags), bikes with dated
+default bikes, and tag/bike/effort filters. **Phase 2 (this)** adds a local web API
+(`fitlib serve`) covering everything the command line does, ready for the browser app.
 
 ## Setup
 
@@ -77,6 +78,35 @@ uv run fitlib --help                        # every command and option
   fitlib's calculations change (`import` says so); by default it updates just the rides that
   need it, or give ride ids or `--all`.
 
+### Web API
+
+```bash
+uv run fitlib serve            # http://localhost:8000/ ; --port, --host, --open
+```
+
+The server listens on this computer only (127.0.0.1) and has no login, so don't expose it.
+It serves a placeholder page at `/` until the browser app lands, and interactive API docs at
+`/docs`. Everything is under `/api`, and every figure is in SI units (metres, seconds, m/s,
+kg); `GET /api/settings` gives the configured display units.
+
+| Endpoint | What |
+|---|---|
+| `GET /api/health` | Status, version and ride count |
+| `GET /api/rides` | The library: `q` text search, `since`/`until`, `source`, `indoor`, `min_duration_s`/`max_duration_s`, `has_power`, `tag` (repeat for all of several), `bike_id`, `has_bike`, `min_rpe`/`max_rpe`, `sort`, `desc`, `offset`, `limit` (≤ 200) |
+| `GET /api/rides/{id}` | One ride (id or 4+ character prefix): summary, training figures, zones, power/HR curves, laps, location box, metadata |
+| `GET /api/rides/{id}/streams` | 1 Hz samples as columns; `fields` to choose (lat/lon only when asked for), `step` to thin out |
+| `PATCH /api/rides/{id}/meta` | Name, notes, rpe, bike_id, tags. Fields left out stay; `null` clears |
+| `GET /api/tags` | Tags with ride counts |
+| `GET/POST /api/bikes`, `PATCH /api/bikes/{id}` | Bikes with totals; add; rename, kind, retire |
+| `GET /api/bikes/defaults`, `PUT/DELETE /api/bikes/defaults/{slot}/{date}` | Dated default bikes |
+| `POST /api/bikes/backfill?dry_run=` | Re-apply default bikes, as `bikes backfill` |
+| `GET /api/athlete`, `PUT/DELETE /api/athlete/{date}` | Athlete history and today's values |
+| `POST /api/imports` | Upload `.fit`/`.zip` files (multipart `files`); returns what happened to each |
+| `GET /api/settings` | Default display units, library folder |
+
+Errors are JSON with a `detail` message: 404 for unknown rides or bikes, 409 for ambiguous id
+prefixes (with `candidates`) and duplicate bike names, 422 for invalid values.
+
 ### Training figures
 
 FTP-based figures (IF, TSS, W/kg, zone times) are **worked out when shown**, from figures
@@ -124,11 +154,17 @@ are never written to logs.
 | `fitlib/store/` | `CatalogStore` / `BlobStore` interfaces; `local/` (SQLite + files) and `memory/` backends; `factory.py` picks one |
 | `fitlib/importer.py` | Hash, dedupe, analyse in worker processes, store |
 | `fitlib/recompute.py` | Rebuild rides from their raw files when calculations change |
-| `fitlib/cli/` | The `fitlib` command: `rides`, `bikes`, `athlete` commands, shared `common` helpers and `output` printing |
+| `fitlib/api/` | FastAPI app: `app.py` builds it, `routers/` one per area, `schemas.py` request/response models, `errors.py` error responses, `static.py` the browser app's files |
+| `fitlib/cli/` | The `fitlib` command: `rides`, `bikes`, `athlete` and `serve` commands, shared `common` helpers and `output` printing |
 
-Only `store/factory.py` chooses a backend; everything else depends on the interfaces.
-`import-linter` enforces this and the layering
-(`models ← metrics ← ingest ← importer | recompute | analysis ← cli`).
+Only `store/factory.py` chooses a backend; everything else depends on the interfaces. The API
+opens the stores per request. `import-linter` enforces this and the layering
+(`models ← metrics ← ingest ← importer | recompute | analysis ← api ← cli`).
+
+**E2E mode** (for the browser tests in a later phase): with `FITLIB_E2E=1` and
+`FITLIB_E2E_FIXTURES` pointing at a fixtures folder, `fitlib serve` adds `/e2e` shortcuts that
+wipe the library and import the fixtures, undo a ride's edits or import one fixture. It only
+runs over a library inside the system temp folder, so a reset can't delete real rides.
 
 ## Tests
 
@@ -136,8 +172,12 @@ Only `store/factory.py` chooses a backend; everything else depends on the interf
 uv run ruff check .            # lint
 uv run ruff format --check .   # formatting (`uv run ruff format .` fixes it)
 uv run lint-imports            # module boundaries
-uv run pytest                  # tests
+uv run pytest                  # every test
+uv run pytest tests/unit       # or one suite: tests/unit, tests/api
 ```
+
+`tests/unit/` covers the Python modules; `tests/api/` drives the web API through FastAPI's
+test client. Both use the synthetic rides in `tests/fixtures/`.
 
 CI runs the same four checks on every pull request (`.github/workflows/ci.yml`).
 
@@ -197,7 +237,18 @@ uv run python -m tests.fixtures.generate
 - **Importer** (`tests/unit/test_importer.py`): the whole fixture folder (imports, duplicates,
   skips, failures), re-import, stored files and streams, overlapping recordings, the process
   pool, cleanup after a failed write, and no coordinates in logs.
-- **CLI** (`tests/unit/test_cli.py`), **config** and **display formatting** (both unit systems).
+- **CLI** (`tests/unit/test_cli.py`, including `serve` in normal and e2e mode), **config** and
+  **display formatting** (both unit systems).
+- **API** (`tests/api/`): the fixture rides are imported once into a template library;
+  read-only tests share it and tests that change anything get their own copy. Covered: every
+  list filter, sorting and paging, bad parameters; ride detail by id and prefix, ambiguous
+  prefixes, training figures with estimated and set FTP, zones and curves; streams (default
+  columns, location only on request, thinning, unknown fields); metadata edits (partial,
+  clearing, validation leaving the ride unchanged); tags, bikes, default-bike timeline and
+  backfill keeping hand-set bikes; athlete history; uploads (`.fit`, `.zip`, duplicates, bad
+  and non-FIT files, unsafe file names, default bikes, no coordinates in logs); settings; the
+  placeholder page, app-route fallback and 404s for unknown API paths and missing assets;
+  `/e2e` shortcuts only in e2e mode and never over a library outside the temp folder.
 
 ### Performance check
 
