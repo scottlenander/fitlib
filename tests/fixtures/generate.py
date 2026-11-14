@@ -5,7 +5,7 @@ Usage (from the repo root)::
     uv run python -m tests.fixtures.generate
 
 Output is deterministic: the same specs always produce byte-identical files, which
-``tests/test_fixtures_current.py`` checks.
+``tests/unit/test_fixtures_current.py`` checks.
 """
 
 from __future__ import annotations
@@ -411,7 +411,7 @@ def build_all() -> dict[str, bytes]:
 def committed_bytes(spec_name: str) -> bytes:
     """Read a ride's committed FIT bytes (much faster than ``build``).
 
-    ``tests/test_fixtures_current.py`` guarantees these equal ``build(spec)``.
+    ``tests/unit/test_fixtures_current.py`` guarantees these equal ``build(spec)``.
 
     Args:
         spec_name: The ride spec's name.

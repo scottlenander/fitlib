@@ -163,41 +163,41 @@ the specs or the generator, rebuild them:
 uv run python -m tests.fixtures.generate
 ```
 
-`tests/test_fixtures_current.py` fails if the committed files are out of date.
+`tests/unit/test_fixtures_current.py` fails if the committed files are out of date.
 
 ### What's tested
 
-- **FIT round trip** (`tests/test_fit_roundtrip.py`): rides written with `fit-tool` decode with
+- **FIT round trip** (`tests/unit/test_fit_roundtrip.py`): rides written with `fit-tool` decode with
   `fitdecode` on Python 3.14 with identical timestamps, power, heart rate, cadence, positions,
   distance, speed, altitude, session and laps; missing channels stay missing; a truncated file
   is rejected. This guards both libraries, neither of which declares Python 3.14 support.
-- **Fixtures are current** (`tests/test_fixtures_current.py`).
-- **Storage contracts** (`tests/store/`): one suite runs against every catalog (SQLite, memory)
+- **Fixtures are current** (`tests/unit/test_fixtures_current.py`).
+- **Storage contracts** (`tests/unit/store/`): one suite runs against every catalog (SQLite, memory)
   and blob store (filesystem, memory): round trips, duplicate hashes, id prefixes, time
   windows, every search filter, text search, sorting with missing values last, paging,
   replacing summaries, best efforts in a window, athlete history, editing metadata, bikes
   (unique names ignoring case, name/prefix lookup, renames refreshing search, totals), tag
   counts, default-bike entries and the tag/bike/effort filters, invalid blob keys, Parquet
   streams; plus upgrading a phase 1a database.
-- **Ingest** (`tests/ingest/`): scanning folders, files and zips (skipping hidden files and
+- **Ingest** (`tests/unit/ingest/`): scanning folders, files and zips (skipping hidden files and
   macOS zip junk); decoding device, sport, local time, records and laps; rejecting bad files;
   1 Hz normalization (short gaps filled, pauses kept, duplicate timestamps).
-- **Metrics** (`tests/metrics/`): elapsed and moving time, distance, speed, climbing, power,
+- **Metrics** (`tests/unit/metrics/`): elapsed and moving time, distance, speed, climbing, power,
   heart rate, cadence, location box and laps; NP (against a step-by-step reference), kJ, VI,
   best efforts (incl. never across a pause), decoupling, histograms, zone boundaries, IF/TSS,
   estimated FTP and athlete values carrying forward. Expected values are worked out from the
   specs (e.g. 200 W for an hour at FTP 250 → IF 0.80, TSS 64).
-- **Training** (`tests/analysis/`): FTP, weight and max HR from the history; estimated FTP
+- **Training** (`tests/unit/analysis/`): FTP, weight and max HR from the history; estimated FTP
   from the best ride in the window; FTP changes applying without a recompute.
-- **Metadata** (`tests/test_metadata.py`, `tests/analysis/test_bikes.py`): tag
+- **Metadata** (`tests/unit/test_metadata.py`, `tests/unit/analysis/test_bikes.py`): tag
   normalization; ride kinds; dated default bikes by local date; backfill never overwriting a
   bike set by hand, dry runs, and repeat runs.
-- **Recompute** (`tests/test_recompute.py`): outdated rides brought up to date with metadata
+- **Recompute** (`tests/unit/test_recompute.py`): outdated rides brought up to date with metadata
   kept; streams rewritten; missing raw files reported.
-- **Importer** (`tests/test_importer.py`): the whole fixture folder (imports, duplicates,
+- **Importer** (`tests/unit/test_importer.py`): the whole fixture folder (imports, duplicates,
   skips, failures), re-import, stored files and streams, overlapping recordings, the process
   pool, cleanup after a failed write, and no coordinates in logs.
-- **CLI** (`tests/test_cli.py`), **config** and **display formatting** (both unit systems).
+- **CLI** (`tests/unit/test_cli.py`), **config** and **display formatting** (both unit systems).
 
 ### Performance check
 
