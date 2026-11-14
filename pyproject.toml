@@ -3,6 +3,8 @@ name = "fitlib"
 version = "0.1.0"
 description = "Local library for storing and analysing cycling .fit files from Zwift and Garmin."
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.14"
 dependencies = [
     "fastapi>=0.163.0",

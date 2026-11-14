@@ -258,3 +258,7 @@ library and times some searches:
 ```bash
 uv run python scripts/perf_import.py --rides 2000
 ```
+
+## License
+
+[MIT](LICENSE)
