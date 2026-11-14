@@ -7,6 +7,7 @@ import shutil
 from pathlib import Path
 
 import pytest
+from fastapi.testclient import TestClient
 from typer.testing import CliRunner
 
 from fitlib.cli import EXIT_ERROR, EXIT_IMPORT_FAILURES, app
@@ -556,3 +557,131 @@ def test_editing_the_bike_protects_it_from_backfill(config: Path):
     assert "Bike: Scott Addict (default)" in before.output
     assert "Set Giant Contend 1 on 5 ride(s)." in moved.output, "6 outdoor rides, 1 by hand"
     assert bike_line == "Bike: Giant Contend 1", "a hand-set bike has no (default) marker"
+
+
+# -- serve ------------------------------------------------------------------------------------
+
+
+@pytest.fixture
+def served(monkeypatch: pytest.MonkeyPatch) -> dict:
+    """Stop ``fitlib serve`` from really starting a server, and record what it would run.
+
+    Args:
+        monkeypatch: Pytest's patcher.
+
+    Returns:
+        Filled in by ``serve`` with the ``app``, ``host`` and ``port`` it would run.
+    """
+    calls: dict = {}
+
+    def fake_run(web, host: str, port: int) -> None:
+        """Record the server's arguments instead of running it.
+
+        Args:
+            web: The app.
+            host: The address.
+            port: The port.
+        """
+        calls.update(app=web, host=host, port=port)
+
+    monkeypatch.setattr("fitlib.cli.serve.uvicorn.run", fake_run)
+    monkeypatch.delenv("FITLIB_E2E", raising=False)
+    return calls
+
+
+def status(web, path: str) -> int:
+    """Ask an app for a path, without a real server.
+
+    Args:
+        web: The FastAPI app.
+        path: The path to GET.
+
+    Returns:
+        The response's status code.
+    """
+    with TestClient(web) as client:
+        return client.get(path).status_code
+
+
+def test_serve_runs_the_app_on_localhost(config: Path, tmp_path: Path, served: dict):
+    """``fitlib serve`` runs the app for the configured library on 127.0.0.1:8000.
+
+    Given: a config file and no options.
+    Expect: the server runs on 127.0.0.1:8000 over the configured library, without the
+    ``/e2e`` routes, and says where it's serving.
+    """
+    result = run(config, "serve")
+
+    assert result.exit_code == 0, result.output
+    assert (served["host"], served["port"]) == ("127.0.0.1", 8000)
+    assert served["app"].state.config.library == tmp_path / "library"
+    assert status(served["app"], "/api/health") == 200
+    assert status(served["app"], "/e2e/rides") == 404, "no test shortcuts outside e2e mode"
+    assert "http://localhost:8000/" in result.output
+
+
+def test_serve_warns_when_listening_beyond_this_computer(config: Path, served: dict):
+    """Listening on a non-local address prints a warning, since there is no login.
+
+    Given: ``--host 0.0.0.0 --port 9000``.
+    Expect: the server runs there, after a warning.
+    """
+    result = run(config, "serve", "--host", "0.0.0.0", "--port", "9000")
+
+    assert (served["host"], served["port"]) == ("0.0.0.0", 9000)
+    assert "anyone who can reach this address" in result.output
+
+
+def test_serve_in_e2e_mode_adds_the_test_shortcuts(
+    config: Path, served: dict, monkeypatch: pytest.MonkeyPatch
+):
+    """With ``FITLIB_E2E=1`` and a fixtures folder, the ``/e2e`` routes are mounted.
+
+    Given: e2e mode, the fixture folder, and a library in the temp folder.
+    Expect: the app answers ``/e2e/rides``.
+    """
+    monkeypatch.setenv("FITLIB_E2E", "1")
+    monkeypatch.setenv("FITLIB_E2E_FIXTURES", str(FIT_DIR))
+
+    result = run(config, "serve")
+
+    assert result.exit_code == 0, result.output
+    assert status(served["app"], "/e2e/rides") == 200
+
+
+def test_serve_in_e2e_mode_needs_the_fixtures_folder(
+    config: Path, served: dict, monkeypatch: pytest.MonkeyPatch
+):
+    """E2E mode without a fixtures folder refuses to start.
+
+    Given: ``FITLIB_E2E=1`` and no ``FITLIB_E2E_FIXTURES``.
+    Expect: exit code 2 naming the missing variable, and no server.
+    """
+    monkeypatch.setenv("FITLIB_E2E", "1")
+    monkeypatch.delenv("FITLIB_E2E_FIXTURES", raising=False)
+
+    result = run(config, "serve")
+
+    assert result.exit_code == EXIT_ERROR
+    assert "FITLIB_E2E_FIXTURES" in result.output
+    assert served == {}, "no server should start"
+
+
+def test_serve_in_e2e_mode_refuses_a_library_outside_temp(
+    tmp_path: Path, served: dict, monkeypatch: pytest.MonkeyPatch
+):
+    """E2E mode won't serve a library that could be real, because reset deletes it.
+
+    Given: e2e mode with a config whose library is under the home folder.
+    Expect: exit code 2 explaining why, and no server.
+    """
+    path = tmp_path / "home.toml"
+    path.write_text(f'library = "{Path.home() / ".fitlib" / "library"}"\n')
+    monkeypatch.setenv("FITLIB_E2E", "1")
+    monkeypatch.setenv("FITLIB_E2E_FIXTURES", str(FIT_DIR))
+
+    result = run(path, "serve")
+
+    assert result.exit_code == EXIT_ERROR
+    assert "e2e mode only serves a library inside" in result.output
+    assert served == {}, "no server should start"

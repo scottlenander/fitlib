@@ -4,7 +4,7 @@ Command help shown by ``--help`` comes from each command's ``help=`` argument; t
 are for developers. Importing this package registers every command on ``app``.
 """
 
-from fitlib.cli import athlete, bikes, rides  # noqa: F401 - registers the commands
+from fitlib.cli import athlete, bikes, rides, serve  # noqa: F401 - registers the commands
 from fitlib.cli.common import EXIT_ERROR, EXIT_IMPORT_FAILURES, app
 
 __all__ = ["EXIT_ERROR", "EXIT_IMPORT_FAILURES", "app"]
