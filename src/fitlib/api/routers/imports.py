@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import shutil
 import tempfile
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Annotated
 
@@ -16,7 +17,7 @@ from fastapi import APIRouter, File, Request, UploadFile
 from pydantic import BaseModel
 
 from fitlib.api.deps import StoresDep
-from fitlib.importer import Importer
+from fitlib.importer import Importer, ImportReport
 from fitlib.ingest.scanner import FIT_SUFFIX, ZIP_SUFFIX
 
 router = APIRouter(prefix="/imports", tags=["imports"])
@@ -48,6 +49,24 @@ class ImportResult(BaseModel):
     duplicates: list[FileOutcome]
     skipped: list[FileOutcome]
     failed: list[FileOutcome]
+
+
+def import_result(report: ImportReport, rejected: Sequence[tuple[str, str]] = ()) -> ImportResult:
+    """Build the API's view of an import report.
+
+    Args:
+        report: What the importer did.
+        rejected: Uploads refused before importing, as ``(file name, reason)``.
+
+    Returns:
+        The outcome of every file; refused uploads count as failed.
+    """
+    return ImportResult(
+        imported=_outcomes(report.imported),
+        duplicates=_outcomes(report.duplicates),
+        skipped=_outcomes(report.skipped),
+        failed=_outcomes([*report.failed, *rejected]),
+    )
 
 
 def _outcomes(rows: list[tuple[str, str]]) -> list[FileOutcome]:
@@ -97,9 +116,4 @@ def import_files(
             stores.catalog, stores.blobs, stores.streams, workers=request.app.state.workers
         )
         report = importer.run(paths)
-    return ImportResult(
-        imported=_outcomes(report.imported),
-        duplicates=_outcomes(report.duplicates),
-        skipped=_outcomes(report.skipped),
-        failed=_outcomes(report.failed + rejected),
-    )
+    return import_result(report, rejected)

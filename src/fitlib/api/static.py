@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import APIRouter, FastAPI, HTTPException
+from fastapi import APIRouter, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
 
 # Placeholder page until the React app is built (phase 3).
@@ -28,19 +28,23 @@ def mount_app(app: FastAPI, static_dir: Path) -> None:
     root = static_dir.resolve()
     router = APIRouter(include_in_schema=False)
 
-    @router.get("/{path:path}")
-    def page(path: str) -> FileResponse:
+    @router.api_route("/{path:path}", methods=["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"])
+    def page(request: Request, path: str) -> FileResponse:
         """Return the file at ``path`` if there is one, otherwise ``index.html``.
 
         Args:
+            request: The request; only GET and HEAD can load a page.
             path: The requested path, without the leading slash.
 
         Returns:
             The file, or the app's ``index.html``.
 
         Raises:
-            HTTPException: 404 for unknown ``/api`` and ``/e2e`` paths and missing assets.
+            HTTPException: 404 for other methods, unknown ``/api`` and ``/e2e`` paths, and
+                missing assets.
         """
+        if request.method not in ("GET", "HEAD"):
+            raise HTTPException(status_code=404)
         file = (root / path).resolve()
         if path and file.is_relative_to(root) and file.is_file():
             return FileResponse(file)
