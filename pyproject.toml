@@ -5,9 +5,12 @@ description = "Local library for storing and analysing cycling .fit files from Z
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
+    "fastapi>=0.163.0",
     "fitdecode>=0.11.0",
     "polars>=2.1.0",
+    "python-multipart>=0.0.33",
     "typer>=0.29.1",
+    "uvicorn>=0.54.0",
 ]
 
 [project.scripts]
@@ -20,6 +23,7 @@ build-backend = "uv_build"
 [dependency-groups]
 dev = [
     "fit-tool>=0.9.17",
+    "httpx2>=2.16.0",
     "import-linter>=2.16",
     "pytest>=9.2.0",
     "ruff>=0.17.5",
@@ -61,6 +65,7 @@ source_modules = [
     "fitlib.metrics",
     "fitlib.importer",
     "fitlib.cli",
+    "fitlib.api",
     "fitlib.display",
     "fitlib.config",
     "fitlib.recompute",
@@ -72,10 +77,11 @@ forbidden_modules = ["fitlib.store.local", "fitlib.store.memory", "sqlite3"]
 allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
-name = "Layers: models <- metrics <- ingest <- importer | recompute | analysis <- cli"
+name = "Layers: models <- metrics <- ingest <- importer | recompute | analysis <- api <- cli"
 type = "layers"
 layers = [
     "fitlib.cli",
+    "fitlib.api",
     "fitlib.importer | fitlib.recompute | fitlib.analysis",
     "fitlib.ingest",
     "fitlib.metrics",
