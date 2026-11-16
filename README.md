@@ -2,16 +2,18 @@
 
 A local library for cycling `.fit` files from Zwift and Garmin. It imports rides from folders,
 stores them compactly, and summarises each ride in readable numbers, on the command line or in
-a browser. Later phases add ride comparison, similar-ride matching and fitness trends.
+a browser, and finds rides on the same route or with a similar effort. Later phases add
+side-by-side ride comparison and fitness trends.
 
 The project is built in phases. Phase 1a added the core: importing, storage, basic ride
 figures and a command line. Phase 1b added training figures (NP, IF, TSS, zones, best
 efforts, decoupling), the athlete's FTP/weight/max HR history, `recompute`, and imperial/metric
 units. Phase 1c added editing rides (name, notes, effort, bike, tags), bikes with dated
 default bikes, and tag/bike/effort filters. Phase 2 added a local web API (`fitlib serve`).
-Phase 3a added the browser app (library, ride detail, import) and its Playwright tests.
-**Phase 3b (this)** adds editing rides, bikes and default bikes, the athlete history, and
-dark mode to the browser app.
+Phase 3a added the browser app (library, ride detail, import) and its Playwright tests;
+phase 3b added editing rides, bikes and default bikes, the athlete history, and dark mode.
+**Phase 4a (this)** adds route fingerprints and similar rides: `fitlib similar`, an API
+endpoint, and a Similar rides section on each ride's page.
 
 ## Setup
 
@@ -32,6 +34,8 @@ uv run fitlib list                          # newest first
 uv run fitlib list --source zwift --since 2025-01-01 --sort power
 uv run fitlib list --text "arenberg" --outdoor --min-minutes 60
 uv run fitlib show 3f2a9c                   # a ride by id prefix (4+ characters)
+uv run fitlib similar 3f2a9c                # rides on the same route
+uv run fitlib similar 3f2a9c --effort       # rides with a similar effort
 uv run fitlib show 3f2a9c --units metric    # override the configured units once
 uv run fitlib athlete set --from 2025-01-01 --ftp 250 --weight 165 --max-hr 188
 uv run fitlib athlete show                  # history, and today's values
@@ -58,6 +62,10 @@ uv run fitlib --help                        # every command and option
   heart rate and cadence; a **Training** block (NP, IF, TSS, VI, work, W/kg, decoupling);
   time in **power zones** (7 Coggan zones) and **heart-rate zones** (5 zones by % of max HR);
   **best efforts** (5 s to 60 min); and laps.
+- **similar** lists rides on the same route as a ride, with how much of its route each
+  covered ("same" when both cover at least 70 % of each other's, "partly" from 30 %), or with
+  `--effort`, the rides with the most similar effort (100 = identical; by length, NP or
+  average HR, steadiness and the shape of the power or HR curve, independent of FTP).
 - **athlete** records FTP, weight and max HR from a date on. Each value carries forward until
   changed, so `--ftp 260` alone keeps the earlier weight. Weight is entered and shown in your
   display units and stored in kg. `athlete remove DATE` deletes an entry.
@@ -94,7 +102,9 @@ uv run fitlib serve --open     # http://localhost:8000/ ; --port, --host
   marked with `*`.
 - **Ride** (`/rides/<id>`): summary and training figures; power, heart rate, cadence, speed and
   altitude over the ride on one zoomable time axis; time in power and heart-rate zones; best
-  efforts; laps. **Edit details** sets the name, notes, effort, bike and tags.
+  efforts; laps. **Edit details** sets the name, notes, effort, bike and tags. **Similar
+  rides** lists rides on the same route (newest first, to see progress) and with a similar
+  effort.
 - **Import** (`/import`): choose or drop `.fit` and `.zip` files; the results list what was
   imported (with links), already in the library, skipped and failed.
 - **Bikes** (`/bikes`): bikes with their rides, distance and time; add, rename, change kind,
@@ -121,9 +131,10 @@ Interactive docs are at `/docs`. Everything is under `/api`, and every figure is
 
 | Endpoint | What |
 |---|---|
-| `GET /api/health` | Status, version and ride count |
+| `GET /api/health` | Status, version, ride count and how many rides need `fitlib recompute` |
 | `GET /api/rides` | The library: `q` text search, `since`/`until`, `source`, `indoor`, `min_duration_s`/`max_duration_s`, `has_power`, `tag` (repeat for all of several), `bike_id`, `has_bike`, `min_rpe`/`max_rpe`, `sort`, `desc`, `offset`, `limit` (≤ 200) |
 | `GET /api/rides/{id}` | One ride (id or 4+ character prefix): summary, training figures, zones, power/HR curves, laps, location box, metadata |
+| `GET /api/rides/{id}/similar` | `kind=route` (default): rides covering ≥ 30 % of this ride's route, with `overlap` each way and `same_route`; `kind=effort`: the closest efforts with `similarity` (0–100). `limit` ≤ 50. `has_route` says whether the ride has positions |
 | `GET /api/rides/{id}/streams` | 1 Hz samples as columns; `fields` to choose (lat/lon only when asked for), `step` to thin out |
 | `PATCH /api/rides/{id}/meta` | Name, notes, rpe, bike_id, tags. Fields left out stay; `null` clears |
 | `GET /api/tags` | Tags with ride counts |
@@ -164,13 +175,18 @@ units, as in the FIT files themselves.
 ```
 library/
   catalog.sqlite3                     per ride: summary, laps, best efforts, watt/bpm histograms,
-                                      your notes/tags (searchable); athlete history
+                                      route fingerprint, your notes/tags (searchable); athlete
+                                      history
   blobs/raw/<sha[:2]>/<sha>.fit       every original file, unchanged
   blobs/streams/<year>/<id>.parquet   each ride's 1-second samples (zstd Parquet)
 ```
 
-Ride ids are random. Location (start point and area) is kept in its own table, and coordinates
-are never written to logs.
+Ride ids are random. Location (start point and area, and the route fingerprint: the ~150 m
+cells a ride passed through) is kept in its own tables, and coordinates are never written to
+logs.
+
+**After upgrading** to a version with new calculations, run `fitlib recompute` (the CLI and
+the library page say when). Rides imported before phase 4a need it for route matching.
 
 ## Code layout
 
@@ -178,8 +194,8 @@ are never written to logs.
 |---|---|
 | `fitlib/models.py` | Domain objects shared by every layer |
 | `fitlib/ingest/` | Find files (incl. zips), decode with `fitdecode`, normalize to 1 Hz, summarize |
-| `fitlib/metrics/` | Ride figures from a 1 Hz stream (basic, power, HR, curves, zones) and FTP-based formulas (`load.py`) |
-| `fitlib/analysis/` | FTP-based figures for a ride (athlete history or estimated FTP); default-bike backfill |
+| `fitlib/metrics/` | Ride figures from a 1 Hz stream (basic, power, HR, curves, zones), route fingerprints (`route.py`) and FTP-based formulas (`load.py`) |
+| `fitlib/analysis/` | FTP-based figures for a ride (athlete history or estimated FTP); default-bike backfill; similar rides (`similar.py`) |
 | `fitlib/metadata.py` | Tag rules, ride kinds for default bikes, and which dated default applies |
 | `fitlib/store/` | `CatalogStore` / `BlobStore` interfaces; `local/` (SQLite + files) and `memory/` backends; `factory.py` picks one |
 | `fitlib/importer.py` | Hash, dedupe, analyse in worker processes, store |
@@ -283,6 +299,12 @@ uv run python -m tests.fixtures.generate
   specs (e.g. 200 W for an hour at FTP 250 → IF 0.80, TSS 64).
 - **Training** (`tests/unit/analysis/`): FTP, weight and max HR from the history; estimated FTP
   from the best ride in the window; FTP changes applying without a recompute.
+- **Routes and similar rides** (`tests/unit/metrics/test_route.py`,
+  `tests/unit/analysis/test_similar.py`): geohash cells against published values,
+  neighbours (including across the date line), the fixture loops' fingerprints (same loop
+  shares its cells, Watopia none, indoor empty); route matches with GPS drift, partial and
+  one-sided overlap, ordering and limits; effort features, the similarity scale, ranking, and
+  power rides kept apart from HR-only ones. Import and recompute store fingerprints.
 - **Metadata** (`tests/unit/test_metadata.py`, `tests/unit/analysis/test_bikes.py`): tag
   normalization; ride kinds; dated default bikes by local date; backfill never overwriting a
   bike set by hand, dry runs, and repeat runs.
@@ -291,7 +313,8 @@ uv run python -m tests.fixtures.generate
 - **Importer** (`tests/unit/test_importer.py`): the whole fixture folder (imports, duplicates,
   skips, failures), re-import, stored files and streams, overlapping recordings, the process
   pool, cleanup after a failed write, and no coordinates in logs.
-- **CLI** (`tests/unit/test_cli.py`, including `serve` in normal and e2e mode), **config** and
+- **CLI** (`tests/unit/test_cli.py`, including `serve` in normal and e2e mode, and `similar`
+  by route and effort, with nothing to match, and for rides needing a recompute), **config** and
   **display formatting** (both unit systems).
 - **API** (`tests/api/`): the fixture rides are imported once into a template library;
   read-only tests share it and tests that change anything get their own copy. Covered: every
@@ -303,7 +326,9 @@ uv run python -m tests.fixtures.generate
   and non-FIT files, unsafe file names, default bikes, no coordinates in logs); settings; the
   placeholder page, app-route fallback and 404s for unknown API paths and missing assets;
   `/e2e` shortcuts (including deleting a ride so it can be imported again) only in e2e mode
-  and never over a library outside the temp folder; the built app served when present.
+  and never over a library outside the temp folder; the built app served when present;
+  similar rides (the loop's rides as the same route, a partly shared copy, rides without a
+  route, effort ranking, bad requests) and the outdated-rides count.
 - **Browser app unit tests** (`web/src/*.test.ts`): durations, distances, speeds, heights and
   weights in both unit systems, and weights typed in either; local versus UTC start times; the
   library's URL state (reading, writing, defaults, every filter, turning it into an API
@@ -327,8 +352,11 @@ uv run python -m tests.fixtures.generate
   - *Settings*: the theme button showing the system's mode until clicked, its hover hint,
     switching and staying switched across reloads and pages, header and Settings in sync;
     metric units switched in Settings only and applying everywhere.
-  - *Accessibility*: axe WCAG 2.2 AA scans of every page (including Bikes, Settings and the
-    ride's edit form) in light mode, dark mode from the system, and dark mode chosen in the
+  - *Similar rides*: the other rides on the loop listed as the same route, newest first, and
+    opened; the effort tab reached with the arrow keys, closest first, no HR-only rides; the
+    indoor ride (no GPS) and the Zwift ride (alone in Watopia) saying why there's nothing.
+  - *Accessibility*: axe WCAG 2.2 AA scans of every page (including Bikes, Settings, the
+    ride's edit form and both Similar rides tabs) in light mode, dark mode from the system, and dark mode chosen in the
     app.
 
 ### Performance check
