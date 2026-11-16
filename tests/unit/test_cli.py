@@ -11,6 +11,8 @@ from fastapi.testclient import TestClient
 from typer.testing import CliRunner
 
 from fitlib.cli import EXIT_ERROR, EXIT_IMPORT_FAILURES, app
+from fitlib.config import Config
+from fitlib.store.factory import open_stores
 from tests.fixtures.generate import FIT_DIR
 
 # Wide output so tables don't wrap and assertions can match whole rows.
@@ -685,3 +687,90 @@ def test_serve_in_e2e_mode_refuses_a_library_outside_temp(
     assert result.exit_code == EXIT_ERROR
     assert "e2e mode only serves a library inside" in result.output
     assert served == {}, "no server should start"
+
+
+# -- similar ----------------------------------------------------------------------------------
+
+
+def ride_id_on(config: Path, day: str) -> str:
+    """Find the id prefix of the ride on a day.
+
+    Args:
+        config: The library's config file.
+        day: The ride's date, e.g. ``"2025-08-05"``.
+
+    Returns:
+        The ride's 8-character id.
+    """
+    next_day = f"{day[:8]}{int(day[8:]) + 1:02d}"
+    [ride_id] = ride_ids(run(config, "list", "--since", day, "--until", next_day).output)
+    return ride_id
+
+
+def test_similar_lists_rides_on_the_same_route(imported: Path):
+    """``fitlib similar`` lists the other rides on a ride's route, with their overlap.
+
+    Given: the interval ride, on the Nord loop like the 5 other outdoor fixture rides.
+    Expect: those 5 rides, each "100%" and "same".
+    """
+    ride_id = ride_id_on(imported, "2025-08-05")
+
+    result = run(imported, "similar", ride_id)
+
+    assert result.exit_code == 0, result.output
+    assert "Rides on the route of Garmin ride, 5 Aug 2025" in result.output
+    assert len(ride_ids(result.output)) == 5
+    assert result.output.count("100%") == 5 and result.output.count(" same ") == 5
+
+
+def test_similar_efforts(imported: Path):
+    """``--effort`` lists rides with a similar effort, most similar first.
+
+    Given: the 25-minute export ride, with ``--limit 2``.
+    Expect: 2 rides, the 30-minute ride at 180 W first.
+    """
+    ride_id = ride_id_on(imported, "2025-08-24")
+
+    result = run(imported, "similar", ride_id, "--effort", "--limit", "2")
+
+    assert result.exit_code == 0, result.output
+    assert "Similar efforts to Garmin ride, 24 Aug 2025" in result.output
+    rows = [line for line in result.output.splitlines() if re.match(r"^\s*[0-9a-f]{8}\s", line)]
+    assert len(rows) == 2
+    assert "Garmin ride, 12 Aug 2025" in rows[0], "the closest effort should come first"
+
+
+@pytest.mark.parametrize(
+    ("day", "message"),
+    [
+        ("2025-08-02", "No other rides share the route of Zwift ride, 2 Aug 2025"),
+        ("2025-08-19", "has no GPS positions, so it has no route to match"),
+    ],
+    ids=["alone-on-route", "no-gps"],
+)
+def test_similar_without_matches(imported: Path, day: str, message: str):
+    """Rides alone on their route, or without GPS, say so.
+
+    Given: the Zwift ride (alone in Watopia) and the indoor ride (no GPS).
+    Expect: a message saying why there's nothing to list.
+    """
+    result = run(imported, "similar", ride_id_on(imported, day))
+
+    assert result.exit_code == 0, result.output
+    assert message in result.output
+
+
+def test_similar_points_older_rides_to_recompute(imported: Path, tmp_path: Path):
+    """A ride imported before routes were recorded is pointed at ``fitlib recompute``.
+
+    Given: the interval ride marked as computed by version 2 with no route cells.
+    Expect: a message to run ``fitlib recompute``.
+    """
+    ride_id = ride_id_on(imported, "2025-08-05")
+    with open_stores(Config(library=tmp_path / "library")) as stores:
+        ride = stores.catalog.get_ride(stores.catalog.resolve_id(ride_id))
+        stores.catalog.replace_summary(ride.id, ride.summary, metrics_version=2)
+
+    result = run(imported, "similar", ride_id)
+
+    assert "run `fitlib recompute`" in result.output

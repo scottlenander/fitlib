@@ -12,6 +12,7 @@ from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn
 from rich.table import Table
 
 from fitlib import display
+from fitlib.analysis.similar import similar_efforts, similar_routes
 from fitlib.analysis.training import training
 from fitlib.cli.common import (
     EXIT_IMPORT_FAILURES,
@@ -26,9 +27,10 @@ from fitlib.cli.common import (
     outdated_hint,
     tags_from,
 )
-from fitlib.cli.output import print_report, print_ride
+from fitlib.cli.output import print_report, print_ride, section
 from fitlib.importer import Importer
 from fitlib.ingest.scanner import scan
+from fitlib.ingest.summarize import METRICS_VERSION
 from fitlib.models import (
     Filters,
     RideMeta,
@@ -227,6 +229,95 @@ def show(
         bike = catalog.get_bike(found.meta.bike_id) if found.meta.bike_id else None
         chosen = lib.units(units)
     print_ride(found, figures, chosen, bike)
+
+
+@app.command(help="List rides on the same route as a ride, or with a similar effort (--effort).")
+def similar(
+    ctx: typer.Context,
+    ride: Annotated[str, typer.Argument(help="Ride id or a unique prefix (4+ characters).")],
+    effort: Annotated[
+        bool, typer.Option("--effort", help="Similar effort instead of the same route.")
+    ] = False,
+    limit: Annotated[int, typer.Option(min=1, max=50, help="How many rides to list.")] = 10,
+    units: UnitsOption = None,
+) -> None:
+    """Print the rides most like one ride, by route or by effort.
+
+    Args:
+        ctx: Typer context holding the config path.
+        ride: The ride's id, or a prefix of at least 4 characters that matches one ride.
+        effort: Match by effort (``--effort``) rather than by route.
+        limit: The most rides to list.
+        units: Units to show distance in; the config's by default.
+
+    Raises:
+        typer.Exit: No ride matches, or the prefix matches several (code 2).
+    """
+    with library(ctx) as lib:
+        catalog = lib.stores.catalog
+        found = find_ride(catalog, ride)
+        chosen = lib.units(units)
+        history = catalog.athlete_history()
+        if effort:
+            efforts = similar_efforts(catalog, found, limit)
+            figures = {m.ride.id: training(catalog, m.ride, history) for m in efforts}
+        else:
+            routes = similar_routes(catalog, found, limit)
+            has_route = bool(catalog.route_cells(found.id))
+
+    title = (
+        f"{found.display_name} ({display.date(found.summary.local_start or found.summary.start)})"
+    )
+    if effort:
+        if not efforts:
+            out.print(f"No rides with a similar effort to {title}.")
+            return
+        section(f"Similar efforts to {title}")
+        table = Table(box=None)
+        for column in ("ID", "Date", "Time", "Distance", "NP", "TSS", "Similarity", "Name"):
+            table.add_column(column, no_wrap=column != "Name")
+        for match in efforts:
+            r = match.ride.summary
+            table.add_row(
+                match.ride.short_id,
+                display.date(r.local_start or r.start),
+                display.duration(r.moving_s),
+                display.distance(r.distance_m, chosen),
+                display.watts(r.np),
+                display.tss(figures[match.ride.id].tss),
+                f"{match.similarity}",
+                match.ride.display_name,
+            )
+        out.print(table)
+        return
+
+    if not has_route:
+        if found.metrics_version < METRICS_VERSION and found.summary.has_gps:
+            out.print("This ride was imported before routes were recorded; run `fitlib recompute`.")
+        else:
+            out.print(f"{title} has no GPS positions, so it has no route to match.")
+        return
+    if not routes:
+        out.print(f"No other rides share the route of {title}.")
+        return
+    section(f"Rides on the route of {title}")
+    table = Table(box=None)
+    for column in ("ID", "Date", "Time", "Distance", "Power", "Overlap", "Route", "Name"):
+        table.add_column(column, no_wrap=column != "Name")
+    for match in routes:
+        r = match.ride.summary
+        table.add_row(
+            match.ride.short_id,
+            display.date(r.local_start or r.start),
+            display.duration(r.moving_s),
+            display.distance(r.distance_m, chosen),
+            display.watts(r.avg_power),
+            f"{match.overlap:.0%}",
+            "same" if match.same_route else "partly",
+            match.ride.display_name,
+        )
+    out.print(table)
+    out.print("Overlap: how much of this ride's route the other ride covered.")
 
 
 @app.command(

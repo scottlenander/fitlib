@@ -27,7 +27,7 @@ SHAPE_DURATIONS_S = (60, 300, 1200)
 # How far apart each feature can be before rides count as "1 unit" different.
 DURATION_SCALE = math.log(1.5)  # half as long again
 INTENSITY_SCALE = math.log(1.10)  # 10 % more NP (or average HR)
-VI_SCALE = 0.05
+VI_SCALE = 0.10
 SHAPE_SCALE = 0.10
 
 
