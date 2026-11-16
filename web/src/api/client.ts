@@ -25,6 +25,9 @@ export type DefaultEntry = Schemas['DefaultOut']
 export type BackfillResult = Schemas['BackfillResult']
 export type MetaPatch = Schemas['MetaPatch']
 export type TagCount = Schemas['TagCount']
+export type SimilarRides = Schemas['SimilarRides']
+export type SimilarRide = Schemas['SimilarRide']
+export type Health = Schemas['Health']
 export type RideQuery = NonNullable<operations['list_rides_api_rides_get']['parameters']['query']>
 
 // An error from the API, with its status and message.
@@ -96,6 +99,20 @@ export function useRide(ref: string) {
     queryKey: ['ride', ref],
     queryFn: () => request<RideDetail>(`/api/rides/${encodeURIComponent(ref)}`),
     retry: (count, error) => !(error instanceof ApiError && error.status < 500) && count < 2,
+  })
+}
+
+export function useHealth() {
+  return useQuery({ queryKey: ['health'], queryFn: () => request<Health>('/api/health') })
+}
+
+export function useSimilar(rideId: string, kind: 'route' | 'effort') {
+  return useQuery({
+    queryKey: ['similar', rideId, kind],
+    queryFn: () =>
+      request<SimilarRides>(
+        `/api/rides/${encodeURIComponent(rideId)}/similar${queryString({ kind })}`,
+      ),
   })
 }
 

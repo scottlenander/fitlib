@@ -23,6 +23,7 @@ from fitlib.models import (
     Ride,
     RideMeta,
     RideSummary,
+    Route,
     SortKey,
 )
 
@@ -103,24 +104,62 @@ class InvalidBlobKey(StoreError):
 class CatalogStore(Protocol):
     """One searchable entry per ride: summary, laps, location and the user's metadata."""
 
-    def add_ride(self, ride: Ride) -> None:
+    def add_ride(self, ride: Ride, route: Route = frozenset()) -> None:
         """Store a new ride, all or nothing.
 
         Args:
             ride: The ride to add. Its id and sha256 must both be new.
+            route: The ride's route fingerprint; empty for rides without positions.
 
         Raises:
             DuplicateRide: A ride with the same sha256 is already stored.
         """
         ...
 
-    def replace_summary(self, ride_id: str, summary: RideSummary, metrics_version: int) -> None:
+    def replace_summary(
+        self,
+        ride_id: str,
+        summary: RideSummary,
+        metrics_version: int,
+        route: Route = frozenset(),
+    ) -> None:
         """Replace a ride's computed figures, keeping its id, import details and metadata.
 
         Args:
             ride_id: The ride's id.
             summary: The newly computed summary.
             metrics_version: The calculations version that produced it.
+            route: The ride's newly computed route fingerprint (replaces the old one).
+
+        Raises:
+            RideNotFound: No ride has this id.
+        """
+        ...
+
+    def route_cells(self, ride_id: str) -> Route:
+        """Load a ride's route fingerprint.
+
+        Args:
+            ride_id: The ride's full id.
+
+        Returns:
+            The cells it passed through; empty for rides without positions.
+
+        Raises:
+            RideNotFound: No ride has this id.
+        """
+        ...
+
+    def route_candidates(self, ride_id: str, limit: int = 50) -> list[tuple[str, int]]:
+        """Find the rides that share the most route cells with a ride.
+
+        Args:
+            ride_id: The ride's full id.
+            limit: The most rides to return.
+
+        Returns:
+            ``(other ride's id, cells shared)`` for rides sharing at least one cell, most
+            shared first (ties by id). The ride itself is left out.
 
         Raises:
             RideNotFound: No ride has this id.

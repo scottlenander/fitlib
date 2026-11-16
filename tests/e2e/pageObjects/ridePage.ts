@@ -1,5 +1,6 @@
 import type { Locator, Page } from '@playwright/test'
 import { Header } from './components/header'
+import { SimilarRides } from './components/similarRides'
 import { Stats } from './components/stats'
 
 // One ride (/rides/:id): summary and training cards, charts, zones, best efforts, laps.
@@ -34,6 +35,7 @@ export class RidePage {
   readonly editError: Locator
   // "No bike, effort, tags or notes yet."
   readonly noDetails: Locator
+  readonly similar: SimilarRides
   readonly notFound: Locator
   readonly backToLibrary: Locator
 
@@ -64,6 +66,7 @@ export class RidePage {
     this.saved = page.getByTestId('form-notice')
     this.editError = this.editForm.getByTestId('form-error')
     this.noDetails = page.getByText('No bike, effort, tags or notes yet.')
+    this.similar = new SimilarRides(page)
     this.notFound = page.getByRole('heading', { name: 'Ride not found', level: 1 })
     this.backToLibrary = page.getByRole('link', { name: 'Back to the library' })
   }

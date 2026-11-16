@@ -23,6 +23,7 @@ from pathlib import Path
 # Make the repo root importable (for tests.fixtures), also in spawned worker processes.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from fitlib.analysis.similar import similar_efforts, similar_routes  # noqa: E402
 from fitlib.config import Config  # noqa: E402
 from fitlib.importer import Importer  # noqa: E402
 from fitlib.models import Filters, SortKey  # noqa: E402
@@ -103,6 +104,10 @@ def main() -> None:
                     limit=20,
                 ),
             )
+            # Worst case for route matching: every synthetic ride laps one of two loops.
+            newest = c.search(Filters(indoor=False), limit=1).items[0]
+            timed("similar routes (newest outdoor ride)", lambda: similar_routes(c, newest))
+            timed("similar efforts (newest outdoor ride)", lambda: similar_efforts(c, newest))
         library_mb = sum(p.stat().st_size for p in library.rglob("*") if p.is_file()) / 1e6
         print(f"Library size: {library_mb:.0f} MB")
     finally:

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router'
-import { useBikes, useRides, useTags, type RideItem, type SortKey } from '../api/client'
+import { useBikes, useHealth, useRides, useTags, type RideItem, type SortKey } from '../api/client'
 import * as f from '../format'
 import { useUnits } from '../units'
 import { usePageTitle } from '../usePageTitle'
@@ -31,7 +31,9 @@ export function LibraryPage() {
   const [params, setParams] = useSearchParams()
   const state = fromParams(params)
   const rides = useRides(toQuery(state))
+  const health = useHealth()
   const { units } = useUnits()
+  const outdated = health.data?.outdated_rides ?? 0
 
   // The URL state as last set, which may be ahead of this render: two quick changes (such
   // as "Clear filters" then a new filter) must build on each other, not on the same render.
@@ -63,6 +65,12 @@ export function LibraryPage() {
   return (
     <>
       <h1>Library</h1>
+      {outdated > 0 && (
+        <p className="notice" data-testid="outdated-notice">
+          {outdated} {outdated === 1 ? 'ride was' : 'rides were'} computed with older calculations.
+          Run <code>fitlib recompute</code> to bring {outdated === 1 ? 'it' : 'them'} up to date.
+        </p>
+      )}
       <SearchBox key={state.q} initial={state.q} onSearch={(q) => update({ q })} />
       <Filters state={state} onChange={update} />
 

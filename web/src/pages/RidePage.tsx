@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react'
 import { Link, useParams } from 'react-router'
 import { ApiError, useRide, type RideDetail } from '../api/client'
 import { RideDetails } from '../components/RideDetails'
+import { SimilarRides } from '../components/SimilarRides'
 import { Stats, type Stat } from '../components/Stats'
 import { ZoneTable } from '../components/ZoneTable'
 import * as f from '../format'
@@ -195,6 +196,8 @@ function Ride({ ride }: { ride: RideDetail }) {
           </div>
         </section>
       )}
+
+      <SimilarRides ride={ride} />
     </article>
   )
 }

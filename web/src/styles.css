@@ -501,3 +501,31 @@ textarea {
   right: 0;
   transform: none;
 }
+
+/* Tabs: a row of buttons over one panel. */
+.tabs {
+  display: flex;
+  gap: 0.25rem;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 0.5rem;
+}
+.tabs [role='tab'] {
+  border: none;
+  border-bottom: 3px solid transparent;
+  border-radius: 0;
+  background: none;
+  padding: 0.4rem 0.75rem;
+  color: var(--muted);
+}
+.tabs [role='tab'][aria-selected='true'] {
+  color: var(--text);
+  font-weight: 600;
+  border-bottom-color: var(--accent);
+}
+
+.notice {
+  background: var(--surface);
+  border-left: 4px solid var(--accent);
+  padding: 0.5rem 0.75rem;
+  border-radius: 4px;
+}

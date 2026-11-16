@@ -58,6 +58,13 @@ for (const theme of THEMES) {
       await ride.goto(await testData.rideId(FULL_RIDE.file))
       await expect(ride.traceChart).toBeVisible()
       await expect(ride.curveChart).toBeVisible()
+      await expect(ride.similar.routeTable).toBeVisible()
+      await expectNoViolations(page)
+    })
+
+    await test.step('Ride with its similar efforts tab open', async () => {
+      await ride.similar.effortTab.click()
+      await expect(ride.similar.effortTable).toBeVisible()
       await expectNoViolations(page)
     })
 

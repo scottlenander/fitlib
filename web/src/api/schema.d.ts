@@ -259,7 +259,7 @@ export interface paths {
     }
     /**
      * Health
-     * @description Report that the server is up, with the library's ride count.
+     * @description Report that the server is up, with the library's ride counts.
      *
      *     Args:
      *         stores: The library's stores.
@@ -407,6 +407,35 @@ export interface paths {
      *         InvalidTag: A tag is empty, too long or has a comma (a 422).
      */
     patch: operations['update_meta_api_rides__ref__meta_patch']
+    trace?: never
+  }
+  '/api/rides/{ref}/similar': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * Get Similar
+     * @description Find rides on the same roads, or with a similar effort.
+     *
+     *     Args:
+     *         stores: The library's stores.
+     *         ref: The ride's id or a unique prefix.
+     *         kind: ``route`` or ``effort``.
+     *         limit: The most rides to return.
+     *
+     *     Returns:
+     *         The matches, with their overlap or similarity.
+     */
+    get: operations['get_similar_api_rides__ref__similar_get']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
     trace?: never
   }
   '/api/rides/{ref}/streams': {
@@ -777,8 +806,12 @@ export interface components {
      *         status: Always ``"ok"`` when the server answers.
      *         version: fitlib's version.
      *         rides: How many rides the library holds.
+     *         outdated_rides: Rides computed with older calculations; ``fitlib recompute`` brings
+     *             them up to date.
      */
     Health: {
+      /** Outdated Rides */
+      outdated_rides: number
       /** Rides */
       rides: number
       /** Status */
@@ -1112,6 +1145,47 @@ export interface components {
       /** Library */
       library: string
       units: components['schemas']['Units']
+    }
+    /**
+     * SimilarRide
+     * @description A ride like another one.
+     *
+     *     Attributes:
+     *         ride: The similar ride.
+     *         overlap: Route matches: the share of the asked-about ride's route this ride covered.
+     *         other_overlap: Route matches: the share of this ride's route the asked-about ride
+     *             covered.
+     *         same_route: Route matches: both overlaps are high enough to be the same route.
+     *         similarity: Effort matches: 100 for an identical effort, lower as they differ.
+     */
+    SimilarRide: {
+      /** Other Overlap */
+      other_overlap?: number | null
+      /** Overlap */
+      overlap?: number | null
+      ride: components['schemas']['RideItem']
+      /** Same Route */
+      same_route?: boolean | null
+      /** Similarity */
+      similarity?: number | null
+    }
+    /**
+     * SimilarRides
+     * @description Rides like a given one.
+     *
+     *     Attributes:
+     *         kind: ``route`` (on the same roads) or ``effort`` (a similar effort).
+     *         has_route: Whether the asked-about ride has positions to match routes on.
+     *         items: The matches: for routes, same-route ones first, then by overlap; for efforts,
+     *             most similar first.
+     */
+    SimilarRides: {
+      /** Has Route */
+      has_route: boolean
+      /** Items */
+      items: components['schemas']['SimilarRide'][]
+      /** Kind */
+      kind: string
     }
     /**
      * SortKey
@@ -1698,6 +1772,40 @@ export interface operations {
         }
         content: {
           'application/json': components['schemas']['RideDetail']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  get_similar_api_rides__ref__similar_get: {
+    parameters: {
+      query?: {
+        kind?: 'route' | 'effort'
+        limit?: number
+      }
+      header?: never
+      path: {
+        ref: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['SimilarRides']
         }
       }
       /** @description Validation Error */

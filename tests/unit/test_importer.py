@@ -242,11 +242,12 @@ def test_failed_catalog_write_leaves_no_stream(library: Library):
     class BrokenCatalog(MemoryCatalog):
         """A catalog whose writes always fail, to test clean-up after a failed write."""
 
-        def add_ride(self, ride):
+        def add_ride(self, ride, route=frozenset()):
             """Fail as a full disk would.
 
             Args:
                 ride: The ride that would have been stored.
+                route: Its route fingerprint.
 
             Raises:
                 RuntimeError: Always.
@@ -347,3 +348,22 @@ def test_new_rides_get_the_dated_default_bike(library: Library):
     assert bike_of("garmin_nord_smart_recording.fit") == "Tarmac"
     assert bike_of("zwift_watopia_steady_60min.fit") == "Kickr"
     assert bike_of("garmin_indoor_no_hr.fit") is None, "there is no indoor default"
+
+
+def test_imported_rides_get_route_fingerprints(library: Library):
+    """Rides with positions are stored with their route cells; indoor rides without any.
+
+    Given: the fixture folder imported.
+    Expect: the Nord interval ride and the Zwift ride have cells (Zwift files carry Watopia's
+    coordinates); the indoor ride without GPS has none.
+    """
+    report = library.importer().run([FIT_DIR])
+    ids = dict(report.imported)
+
+    nord = library.catalog.route_cells(ids["garmin_nord_intervals_5x4.fit"])
+    zwift = library.catalog.route_cells(ids["zwift_watopia_steady_60min.fit"])
+    indoor = library.catalog.route_cells(ids["garmin_indoor_no_hr.fit"])
+
+    assert nord and zwift, "rides with positions should have route cells"
+    assert not nord & zwift, "the two loops are on opposite sides of the world"
+    assert indoor == frozenset()

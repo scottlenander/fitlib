@@ -7,16 +7,20 @@ the command line.
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, HTTPException, Query
 
+from fitlib.analysis.similar import similar_efforts, similar_routes
 from fitlib.analysis.training import training
 from fitlib.api.deps import StoresDep
 from fitlib.api.schemas import (
     MetaPatch,
     RideDetail,
+    RideItem,
     RidePage,
+    SimilarRide,
+    SimilarRides,
     Streams,
     ride_detail,
     ride_item,
@@ -200,6 +204,59 @@ def get_streams(
         t=frame["t"].to_list(),
         columns={f: frame[f].to_list() for f in chosen},
     )
+
+
+@router.get("/{ref}/similar")
+def get_similar(
+    stores: StoresDep,
+    ref: str,
+    kind: Literal["route", "effort"] = "route",
+    limit: Annotated[int, Query(ge=1, le=50)] = 10,
+) -> SimilarRides:
+    """Find rides on the same roads, or with a similar effort.
+
+    Args:
+        stores: The library's stores.
+        ref: The ride's id or a unique prefix.
+        kind: ``route`` or ``effort``.
+        limit: The most rides to return.
+
+    Returns:
+        The matches, with their overlap or similarity.
+    """
+    catalog = stores.catalog
+    ride = find_ride(stores, ref)
+    history = catalog.athlete_history()
+    bikes = {b.id: b for b in catalog.list_bikes()}
+
+    def item(other: Ride) -> RideItem:
+        """Build a list entry for a matching ride.
+
+        Args:
+            other: The matching ride.
+
+        Returns:
+            Its list entry, with TSS.
+        """
+        return ride_item(other, training(catalog, other, history), bikes)
+
+    has_route = bool(catalog.route_cells(ride.id))
+    if kind == "route":
+        items = [
+            SimilarRide(
+                ride=item(m.ride),
+                overlap=round(m.overlap, 3),
+                other_overlap=round(m.other_overlap, 3),
+                same_route=m.same_route,
+            )
+            for m in similar_routes(catalog, ride, limit)
+        ]
+    else:
+        items = [
+            SimilarRide(ride=item(m.ride), similarity=m.similarity)
+            for m in similar_efforts(catalog, ride, limit)
+        ]
+    return SimilarRides(kind=kind, has_route=has_route, items=items)
 
 
 @router.patch("/{ref}/meta")

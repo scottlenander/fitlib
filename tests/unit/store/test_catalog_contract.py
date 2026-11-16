@@ -423,6 +423,79 @@ def test_delete_unknown_ride(catalog: CatalogStore):
         catalog.delete_ride("00000000-0000-0000-0000-000000000000")
 
 
+# -- route fingerprints -----------------------------------------------------------------------
+
+
+def test_route_cells_round_trip_and_rides_without_one(catalog: CatalogStore):
+    """A ride's route cells are stored with it; rides added without any have none.
+
+    Given: a ride added with three cells and one added without a route.
+    Expect: the three cells back for the first; an empty set for the second.
+    """
+    with_route, without = make_ride(), make_ride(start=at(1))
+    cells = frozenset({"u0fqtqw", "u0fqtqx", "u0fqtqy"})
+
+    catalog.add_ride(with_route, route=cells)
+    catalog.add_ride(without)
+
+    assert catalog.route_cells(with_route.id) == cells
+    assert catalog.route_cells(without.id) == frozenset()
+
+
+def test_route_candidates_rank_rides_by_shared_cells(catalog: CatalogStore):
+    """Rides sharing the most cells with a ride come first; rides sharing none are left out.
+
+    Given: a ride with 4 cells, others sharing 3, 1 and 0 of them, and a limit of 5.
+    Expect: the rides sharing 3 then 1 (not the ride itself, nor the one sharing none); with
+    a limit of 1, only the first.
+    """
+    mine = make_ride()
+    most, some, none = make_ride(start=at(1)), make_ride(start=at(2)), make_ride(start=at(3))
+    catalog.add_ride(mine, route=frozenset({"a000000", "a000001", "a000002", "a000003"}))
+    catalog.add_ride(most, route=frozenset({"a000000", "a000001", "a000002", "zzzzzzz"}))
+    catalog.add_ride(some, route=frozenset({"a000003"}))
+    catalog.add_ride(none, route=frozenset({"bbbbbbb"}))
+
+    ranked = catalog.route_candidates(mine.id, limit=5)
+    first = catalog.route_candidates(mine.id, limit=1)
+
+    assert ranked == [(most.id, 3), (some.id, 1)]
+    assert first == [(most.id, 3)]
+
+
+def test_replacing_a_summary_replaces_the_route_and_deleting_drops_it(catalog: CatalogStore):
+    """Recompute replaces a ride's cells; a deleted ride is no longer a candidate.
+
+    Given: two rides sharing a cell; the second recomputed with different cells, then the
+    first recomputed back to sharing and the second deleted.
+    Expect: after the first recompute the rides share nothing; after deleting, no candidates.
+    """
+    first, second = make_ride(), make_ride(start=at(1))
+    catalog.add_ride(first, route=frozenset({"c000000"}))
+    catalog.add_ride(second, route=frozenset({"c000000"}))
+
+    catalog.replace_summary(second.id, second.summary, 3, route=frozenset({"d000000"}))
+    after_recompute = catalog.route_candidates(first.id)
+    catalog.replace_summary(second.id, second.summary, 3, route=frozenset({"c000000"}))
+    catalog.delete_ride(second.id)
+    after_delete = catalog.route_candidates(first.id)
+
+    assert after_recompute == []
+    assert after_delete == []
+
+
+def test_route_lookups_of_unknown_ride(catalog: CatalogStore):
+    """Asking for a missing ride's route is an error.
+
+    Given: an empty catalog.
+    Expect: ``RideNotFound`` from both lookups.
+    """
+    with pytest.raises(RideNotFound):
+        catalog.route_cells("missing")
+    with pytest.raises(RideNotFound):
+        catalog.route_candidates("missing")
+
+
 def test_replace_summary_of_unknown_ride(catalog: CatalogStore):
     """Recomputing a ride that doesn't exist is an error.
 
@@ -750,7 +823,7 @@ def test_sqlite_catalog_persists_and_is_migrated(tmp_path: Path):
     reopened.close()
 
     assert loaded == ride, "the ride should survive closing and reopening the catalog"
-    assert version == 3
+    assert version == 4
 
 
 def test_phase_1a_database_is_upgraded(tmp_path: Path):
@@ -781,7 +854,7 @@ def test_phase_1a_database_is_upgraded(tmp_path: Path):
     version = catalog.schema_version
     catalog.close()
 
-    assert version == 3
+    assert version == 4
     assert ride.metrics_version == 1, "the old ride should be marked for recompute"
     assert ride.summary.np is None and ride.summary.power_curve == ()
 

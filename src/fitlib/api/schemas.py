@@ -92,6 +92,40 @@ class RidePage(BaseModel):
     limit: int
 
 
+class SimilarRide(BaseModel):
+    """A ride like another one.
+
+    Attributes:
+        ride: The similar ride.
+        overlap: Route matches: the share of the asked-about ride's route this ride covered.
+        other_overlap: Route matches: the share of this ride's route the asked-about ride
+            covered.
+        same_route: Route matches: both overlaps are high enough to be the same route.
+        similarity: Effort matches: 100 for an identical effort, lower as they differ.
+    """
+
+    ride: RideItem
+    overlap: float | None = None
+    other_overlap: float | None = None
+    same_route: bool | None = None
+    similarity: int | None = None
+
+
+class SimilarRides(BaseModel):
+    """Rides like a given one.
+
+    Attributes:
+        kind: ``route`` (on the same roads) or ``effort`` (a similar effort).
+        has_route: Whether the asked-about ride has positions to match routes on.
+        items: The matches: for routes, same-route ones first, then by overlap; for efforts,
+            most similar first.
+    """
+
+    kind: str
+    has_route: bool
+    items: list[SimilarRide]
+
+
 class LapOut(BaseModel):
     """One lap.
 
