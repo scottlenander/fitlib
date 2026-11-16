@@ -1,7 +1,7 @@
 import { NavLink, Outlet } from 'react-router'
-import { UnitsToggle } from './UnitsToggle'
+import { ThemeToggle } from './ThemeToggle'
 
-// Header with the app's name, the main navigation and the units switch, around each page.
+// Header with the app's name, the main navigation and the light/dark toggle, around each page.
 export function Layout() {
   return (
     <>
@@ -17,8 +17,12 @@ export function Layout() {
             Library
           </NavLink>
           <NavLink to="/import">Import</NavLink>
+          <NavLink to="/bikes">Bikes</NavLink>
+          <NavLink to="/settings">Settings</NavLink>
         </nav>
-        <UnitsToggle />
+        <div className="header-switches">
+          <ThemeToggle />
+        </div>
       </header>
       <main id="main" tabIndex={-1}>
         <Outlet />

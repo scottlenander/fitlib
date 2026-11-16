@@ -78,7 +78,18 @@ class AmbiguousBike(StoreError):
 
 
 class DuplicateBike(StoreError):
-    """Another bike already has this name (ignoring case)."""
+    """Another bike already has this name (ignoring case).
+
+    Args:
+        name: The name that is taken.
+
+    Attributes:
+        name: The name that is taken.
+    """
+
+    def __init__(self, name: str):
+        super().__init__(f"There is already a bike called {name!r}")
+        self.name = name
 
 
 class BlobNotFound(StoreError):

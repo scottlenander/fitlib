@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { LibraryPage } from '../../pageObjects/libraryPage'
 import { RidePage } from '../../pageObjects/ridePage'
+import { SettingsPage } from '../../pageObjects/settingsPage'
 import { RIDES } from '../../libs/constants'
 import { TestData } from '../../libs/testData'
 
@@ -92,22 +93,32 @@ test('switching units changes the figures everywhere and is remembered', async (
 }) => {
   const ride = new RidePage(page)
   const library = new LibraryPage(page)
+  const settings = new SettingsPage(page)
+  let rideId = ''
 
   await test.step('Open the indoor ride in imperial units (the default)', async () => {
-    await ride.goto(await new TestData(request).rideId(INDOOR.file))
-    await expect(ride.header.imperial).toBeChecked()
+    rideId = await new TestData(request).rideId(INDOOR.file)
+    await ride.goto(rideId)
     await expect(ride.summary.value('Distance')).toHaveText('10.5 mi')
   })
 
-  await test.step('Switch to metric', async () => {
-    await ride.header.metric.check()
-    await expect(ride.summary.value('Distance')).toHaveText('17.0 km')
-    await expect(ride.summary.value('Climbing')).toHaveText('70 m')
+  await test.step('Switch to metric in Settings', async () => {
+    await ride.header.settingsLink.click()
+    await expect(settings.metricUnits, {
+      message: 'Metric units should be off: the config says imperial',
+    }).not.toBeChecked()
+    await settings.metricUnits.click()
   })
 
-  await test.step('Still metric after a reload, and in the library', async () => {
+  await test.step('The ride is in metric, after a reload too', async () => {
+    await ride.goto(rideId)
+    await expect(ride.summary.value('Distance')).toHaveText('17.0 km')
+    await expect(ride.summary.value('Climbing')).toHaveText('70 m')
     await page.reload()
     await expect(ride.summary.value('Distance')).toHaveText('17.0 km')
+  })
+
+  await test.step('And in the library', async () => {
     await ride.header.libraryLink.click()
     await expect(library.row(INDOOR.name)).toContainText('17.0 km')
   })

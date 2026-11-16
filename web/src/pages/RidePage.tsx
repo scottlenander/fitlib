@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react'
 import { Link, useParams } from 'react-router'
 import { ApiError, useRide, type RideDetail } from '../api/client'
+import { RideDetails } from '../components/RideDetails'
 import { Stats, type Stat } from '../components/Stats'
 import { ZoneTable } from '../components/ZoneTable'
 import * as f from '../format'
@@ -91,21 +92,6 @@ function Ride({ ride }: { ride: RideDetail }) {
       : []),
   ]
 
-  const meta = ride.meta
-  const details: Stat[] = [
-    ...(meta.bike
-      ? [
-          {
-            label: 'Bike',
-            value: meta.bike.name,
-            note: meta.bike_from_default ? '(default)' : undefined,
-          },
-        ]
-      : []),
-    ...(meta.rpe !== null ? [{ label: 'Effort', value: `${meta.rpe}/10` }] : []),
-    ...(meta.tags.length ? [{ label: 'Tags', value: meta.tags.join(', ') }] : []),
-  ]
-
   return (
     <article className="ride">
       <header>
@@ -128,13 +114,7 @@ function Ride({ ride }: { ride: RideDetail }) {
         </section>
       )}
 
-      {(details.length > 0 || meta.notes) && (
-        <section aria-labelledby="details-heading">
-          <h2 id="details-heading">Details</h2>
-          <Stats stats={details} testId="detail-stats" />
-          {meta.notes && <p className="notes">{meta.notes}</p>}
-        </section>
-      )}
+      <RideDetails ride={ride} />
 
       <section aria-labelledby="traces-heading">
         <h2 id="traces-heading">Over the ride</h2>

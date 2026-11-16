@@ -9,8 +9,9 @@ figures and a command line. Phase 1b added training figures (NP, IF, TSS, zones,
 efforts, decoupling), the athlete's FTP/weight/max HR history, `recompute`, and imperial/metric
 units. Phase 1c added editing rides (name, notes, effort, bike, tags), bikes with dated
 default bikes, and tag/bike/effort filters. Phase 2 added a local web API (`fitlib serve`).
-**Phase 3a (this)** adds the browser app (library, ride detail, import) and its Playwright
-tests; phase 3b will add editing rides, bikes and the athlete history in the browser.
+Phase 3a added the browser app (library, ride detail, import) and its Playwright tests.
+**Phase 3b (this)** adds editing rides, bikes and default bikes, the athlete history, and
+dark mode to the browser app.
 
 ## Setup
 
@@ -88,15 +89,22 @@ uv run fitlib serve --open     # http://localhost:8000/ ; --port, --host
 ```
 
 - **Library** (`/`): search (name, notes, tags, bike, device), filters (source, indoor/outdoor,
-  power, dates, minimum riding time), sortable columns and paging. All of it is kept in the
+  power, dates, minimum riding time, tag, bike, effort), sortable columns and paging. All of it is kept in the
   URL, so reloads, the back button and links keep the view. TSS from an estimated FTP is
   marked with `*`.
 - **Ride** (`/rides/<id>`): summary and training figures; power, heart rate, cadence, speed and
   altitude over the ride on one zoomable time axis; time in power and heart-rate zones; best
-  efforts; laps.
+  efforts; laps. **Edit details** sets the name, notes, effort, bike and tags.
 - **Import** (`/import`): choose or drop `.fit` and `.zip` files; the results list what was
   imported (with links), already in the library, skipped and failed.
-- **Units**: the header switch starts from the config's units and is remembered in the browser.
+- **Bikes** (`/bikes`): bikes with their rides, distance and time; add, rename, change kind,
+  retire and bring back. The dated default-bike timeline, and applying the defaults to
+  existing rides (Preview, then Apply; bikes chosen by hand are never changed).
+- **Settings** (`/settings`): the theme, the **Metric units** switch and the athlete history
+  (FTP, weight in your units, max HR from a date on).
+- **Light or dark**: one button in the header (and in Settings) showing the mode in use, a sun
+  or a moon, named in a hint on hover; clicking switches mode. The theme follows your system
+  until you choose; units start from the config. Both choices are remembered in this browser.
 
 The server listens on this computer only (127.0.0.1) and has no login, so don't expose it.
 Without a build of `web/` it shows a page saying how to build one.
@@ -192,7 +200,7 @@ the system temp folder, so they can't touch real rides:
 | Shortcut | `TestData` | Also tested through the UI by |
 |---|---|---|
 | `GET /e2e/rides` | `rideIds`, `rideId`, `findRideId` | (read-only) |
-| `POST /e2e/rides/{id}/reset-meta` | `resetMeta` | Editing rides (phase 3b) |
+| `POST /e2e/rides/{id}/reset-meta` | `resetMeta` | Editing rides (`rideEdits.spec.ts`) |
 | `POST /e2e/rides/{id}/delete` | `deleteRide` | Nothing yet: the app can't delete rides |
 | `POST /e2e/reset`, `POST /e2e/import/{file}` | (not used yet) | Importing (`import.spec.ts`) |
 
@@ -297,8 +305,9 @@ uv run python -m tests.fixtures.generate
   `/e2e` shortcuts (including deleting a ride so it can be imported again) only in e2e mode
   and never over a library outside the temp folder; the built app served when present.
 - **Browser app unit tests** (`web/src/*.test.ts`): durations, distances, speeds, heights and
-  weights in both unit systems; local versus UTC start times; the library's URL state (reading,
-  writing, defaults, turning it into an API query).
+  weights in both unit systems, and weights typed in either; local versus UTC start times; the
+  library's URL state (reading, writing, defaults, every filter, turning it into an API
+  query); tag parsing; which theme applies (remembered choice, else the system).
 - **Browser tests** (`tests/e2e/`), each written as steps with page objects:
   - *Smoke*: library → open a ride → back → import page.
   - *Library*: search and an empty result; each filter and filters combined; sorting both ways;
@@ -308,7 +317,19 @@ uv run python -m tests.fixtures.generate
     remembered across reloads and pages; an unknown ride.
   - *Import*: a new ride imported and opened from the results; duplicates, a run, an
     overlapping recording and a broken file reported.
-  - *Accessibility*: axe WCAG 2.2 AA scans of every page, in light and dark mode.
+  - *Ride edits*: every detail edited, shown on the ride and found in the library by name,
+    tag, bike and effort; clearing details; a too-long tag refused with nothing saved; Cancel.
+  - *Bikes*: add (a duplicate name refused), rename and change kind, retire and bring back;
+    the default timeline (set, no bike, remove); Preview and Apply, giving the indoor ride
+    its default bike.
+  - *Athlete*: save, carry forward, replace and remove values; weight in lb and kg; an empty
+    entry refused.
+  - *Settings*: the theme button showing the system's mode until clicked, its hover hint,
+    switching and staying switched across reloads and pages, header and Settings in sync;
+    metric units switched in Settings only and applying everywhere.
+  - *Accessibility*: axe WCAG 2.2 AA scans of every page (including Bikes, Settings and the
+    ride's edit form) in light mode, dark mode from the system, and dark mode chosen in the
+    app.
 
 ### Performance check
 

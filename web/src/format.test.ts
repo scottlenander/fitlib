@@ -46,6 +46,15 @@ describe('units', () => {
     }
   })
 
+  test('weights typed in display units are saved in kilograms', () => {
+    expect(f.kgFrom(165, 'imperial')).toBeCloseTo(74.843, 3)
+    expect(f.kgFrom(74.8, 'metric')).toBe(74.8)
+    expect([f.weightValue(74.843, 'imperial'), f.weightValue(74.843, 'metric')]).toEqual([
+      165, 74.8,
+    ])
+    expect([f.weightUnit('imperial'), f.weightUnit('metric')]).toEqual(['lb', 'kg'])
+  })
+
   test('chart values convert speed and altitude', () => {
     expect(f.speedValue(10, 'metric')).toBeCloseTo(36)
     expect(f.speedValue(10, 'imperial')).toBeCloseTo(22.369, 3)

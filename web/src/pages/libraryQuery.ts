@@ -14,6 +14,10 @@ export type LibraryState = {
   until: string // YYYY-MM-DD, inclusive
   power: '' | 'yes' | 'no'
   minMinutes: string
+  tag: string
+  bike: string // a bike id, or 'none' for rides without a bike
+  minRpe: string
+  maxRpe: string
   sort: SortKey
   asc: boolean
   page: number // from 1
@@ -28,6 +32,12 @@ const positive = (value: string | null, fallback: number) => {
   return Number.isInteger(number) && number > 0 ? number : fallback
 }
 
+// An effort from the URL: "1" to "10", else no filter.
+const rpe = (value: string | null) => {
+  const number = Number(value)
+  return Number.isInteger(number) && number >= 1 && number <= 10 ? String(number) : ''
+}
+
 export function fromParams(params: URLSearchParams): LibraryState {
   return {
     q: params.get('q') ?? '',
@@ -37,6 +47,10 @@ export function fromParams(params: URLSearchParams): LibraryState {
     until: params.get('until') ?? '',
     power: pick(params.get('power'), ['', 'yes', 'no'] as const, ''),
     minMinutes: params.get('min') ?? '',
+    tag: params.get('tag') ?? '',
+    bike: params.get('bike') ?? '',
+    minRpe: rpe(params.get('rpe_min')),
+    maxRpe: rpe(params.get('rpe_max')),
     sort: pick(params.get('sort'), SORTS, 'start'),
     asc: params.get('dir') === 'asc',
     page: positive(params.get('page'), 1),
@@ -57,6 +71,10 @@ export function toParams(state: LibraryState): URLSearchParams {
   set('until', state.until)
   set('power', state.power)
   set('min', state.minMinutes)
+  set('tag', state.tag)
+  set('bike', state.bike)
+  set('rpe_min', state.minRpe)
+  set('rpe_max', state.maxRpe)
   set('sort', state.sort, 'start')
   set('dir', state.asc ? 'asc' : 'desc', 'desc')
   set('page', String(state.page), '1')
@@ -81,6 +99,11 @@ export function toQuery(state: LibraryState): RideQuery {
     until: state.until ? nextDay(state.until) : undefined,
     has_power: state.power ? state.power === 'yes' : undefined,
     min_duration_s: state.minMinutes && minutes > 0 ? Math.round(minutes * 60) : undefined,
+    tag: state.tag ? [state.tag] : undefined,
+    bike_id: state.bike && state.bike !== 'none' ? state.bike : undefined,
+    has_bike: state.bike === 'none' ? false : undefined,
+    min_rpe: state.minRpe ? Number(state.minRpe) : undefined,
+    max_rpe: state.maxRpe ? Number(state.maxRpe) : undefined,
     sort: state.sort,
     desc: !state.asc,
     offset: (state.page - 1) * state.limit,
@@ -88,9 +111,21 @@ export function toQuery(state: LibraryState): RideQuery {
   }
 }
 
+// Everything "Clear filters" resets.
+export const NO_FILTERS = {
+  q: '',
+  source: '',
+  where: '',
+  since: '',
+  until: '',
+  power: '',
+  minMinutes: '',
+  tag: '',
+  bike: '',
+  minRpe: '',
+  maxRpe: '',
+} as const satisfies Partial<LibraryState>
+
 export function hasFilters(state: LibraryState): boolean {
-  return (
-    Boolean(state.q || state.source || state.where || state.since || state.until || state.power) ||
-    Boolean(state.minMinutes)
-  )
+  return (Object.keys(NO_FILTERS) as (keyof typeof NO_FILTERS)[]).some((key) => state[key] !== '')
 }

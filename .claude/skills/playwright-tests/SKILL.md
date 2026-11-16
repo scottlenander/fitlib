@@ -18,6 +18,7 @@ All commands run from `tests/e2e/` unless noted.
 | `tests/accessibility/pages.spec.ts` | axe WCAG 2.2 AA scans of every page, in light and dark mode. Add a step here when you add a page. |
 | `pageObjects/*Page.ts` | One class per page, named `<Name>Page` in `<name>Page.ts` (`RidePage` in `ridePage.ts`). |
 | `pageObjects/components/` | Parts used on more than one page (`Header`, `Stats`). No `Page` suffix. |
+| `tests/regression/{rideEdits,bikes,athlete,settings}.spec.ts` | Editing, bikes and defaults, the athlete history, and the theme and units. |
 | `libs/constants.ts` | `RIDES` (the fixture rides, with who uses them) and `UPLOADS` (fixture files that are never in the library). |
 | `libs/testData.ts` | `TestData`: ride ids and set-up shortcuts through the `/e2e/...` routes. |
 
@@ -29,7 +30,9 @@ The app side: React pages in `web/src/pages/`, components in `web/src/components
 2. **Pick the data.** Rides are the fixture rides in `RIDES`; check `usedBy` and `changes`.
    - Reading a ride can be shared. **If the test changes a ride** (edits it, deletes it, re-imports it), claim one nobody else changes: add your spec to its `usedBy`, set `changes: true`, and write a one-line comment saying what happens to it.
    - Ride ids are random each time the server starts. Get them by file name: `await new TestData(request).rideId(RIDES.ZWIFT.file)`.
-   - **Counts and paging** must leave out rides that other specs change, because specs run in parallel. Narrow with a date filter (see `SINCE_10_AUG` in `library.spec.ts`).
+   - **Counts and paging** must leave out rides that other specs change, because specs run in parallel. Narrow with a date filter (see `SINCE_13_AUG` in `library.spec.ts`).
+   - **Settings shared by the whole library** are claimed too (see the comment in `libs/constants.ts`): the bikes spec owns the `indoor` default-bike slot, the athlete spec owns athlete entries dated 2026. Don't set defaults or athlete values that would change other specs' rides.
+   - **Bikes can't be deleted**, so a spec that adds one names it with a per-run suffix (`` `Tarmac ${Date.now().toString(36)}` ``) to stay re-runnable.
 3. **Add or extend page objects** before writing the spec. A spec should not contain raw locators except for a one-off check built from page object pieces.
 4. **Write the spec** with `test.step`s (template in [reference.md](reference.md)).
 5. **Run the checks** in "Verify" below.
@@ -52,7 +55,8 @@ The app side: React pages in `web/src/pages/`, components in `web/src/components
 - **Wait for the result before moving on.** After an action that loads data (a filter, an import), assert the new rows, count or summary before the next action.
 - **Set-up:** use `TestData` to reach a known start. Anything the test is *about* must go through the UI. Each `TestData` shortcut must also be done through the UI in at least one test. The exception is `deleteRide`, until the app can delete rides.
 - **Re-runnable:** a test must pass when run twice against the same server without re-importing. Reset what it changes at the start, not only at the end (`import.spec.ts` deletes its ride first if it's there).
-- **Browser state:** each test gets a fresh browser context, so the units choice (kept in localStorage) starts from the config's imperial every time.
+- **Browser state:** each test gets a fresh browser context, so the units and dark-mode choices (kept in localStorage) start fresh every time: imperial (the e2e config) and the emulated system colour scheme (`page.emulateMedia({ colorScheme })`).
+- **Shared state in a file** (two tests editing the same ride): `test.describe.configure({ mode: 'serial' })` with a comment saying why.
 - **Comments** are short and say *why*: what the data is for, why a wait is needed, what markup a locator relies on.
 
 ## Rules for page objects and components
@@ -61,7 +65,9 @@ The app side: React pages in `web/src/pages/`, components in `web/src/components
 - **One class per page.** A part used on more than one page, or big enough to stand alone, becomes a component class in `components/`, exposed as a field: `ride.header.metric`, `ride.summary.value('Distance')`.
 - **Scope locators** to a `root` or landmark when the page has several similar areas (`this.filters.getByLabel('Source')`, `this.nav.getByRole('link', ...)`).
 - **A comment on the class** says which page or URL it covers and anything unusual (sections that only appear with some data). Comment fields whose text varies.
-- **Only page-level actions belong in page objects.** Assertions about what a test expects stay in the spec.
+- **Only page-level actions belong in page objects.** Assertions about what a test expects stay in the spec; a method may use `expect` only to wait for its own action to finish (as `SettingsPage.removeEntry()` does).
+- **Confirmations** (`window.confirm`): `this.page.once('dialog', (dialog) => void dialog.accept())` right before the click.
+- **The theme toggle** is one button showing the mode in use (a sun or a moon), named "Light mode" or "Dark mode"; clicking switches mode. Check it with `toHaveAccessibleName`. It's in the header and on the Settings page; `Header` scopes its own to the banner. **Units** are switched on the Settings page only.
 
 ## Finding elements (in this order)
 
@@ -69,7 +75,7 @@ The app side: React pages in `web/src/pages/`, components in `web/src/components
 2. **`getByLabel`** for form fields, **`getByPlaceholder`** only when there's no label.
 3. **`getByText`** for fixed messages.
 4. **`getByTestId`** when none of the above fits (a row, a card, a count, a chart). Add `data-testid="..."` in the React component. Kebab-case, named after what it *is*: `ride-row`, `ride-count`, `trace-chart`, `import-summary`. Repeated items share one id and are narrowed with `.filter({ has: ... })`.
-5. **Never CSS classes or page structure** (`.stat`, `tbody tr`, `td.first()`). `npm run lint` rejects class selectors in `.locator(...)`.
+5. **Never CSS classes or page structure** (`.stat`, `tbody tr`, `td.first()`). `npm run lint` rejects class selectors in `.locator(...)`. The one allowed `locator()` use is `page.locator('html')`, to check the theme attribute (`data-theme`).
 
 If an element has no good accessible name, fix the component (a label, an `aria-label`, a caption) rather than adding a test id; that helps real users too.
 
@@ -104,7 +110,7 @@ Work out *which* kind of failure it is before changing anything. Don't "fix" a t
 | Symptom | Likely cause | Fix |
 |---|---|---|
 | Locator not found / times out; the screenshot shows different text | The component's wording or markup changed | Update the page object (one place), not each spec |
-| Strict mode violation: "resolved to 2 elements" | The locator matches more than intended | Scope it to a root or landmark, add `exact: true`, or filter |
+| Strict mode violation: "resolved to 2 elements" | The locator matches more than intended (e.g. label "From" also matches "Effort from") | Scope it to a root or landmark, add `exact: true`, or filter |
 | A count or page is off by one, only in the full run | It includes a ride another spec deletes or re-imports | Narrow with a date filter that leaves the claimed ride out |
 | Passes first run, fails the second | The test doesn't reset what it changes | Reset in the first step |
 | An old filter or value comes back after quick changes | The app built a change on stale state | Fix the app; the test found a real bug |
