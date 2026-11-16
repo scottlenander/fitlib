@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router'
 import { App } from './App'
 import './styles.css'
+import { ThemeProvider } from './theme'
 import { UnitsProvider } from './units'
 
 const queryClient = new QueryClient({
@@ -13,11 +14,13 @@ const queryClient = new QueryClient({
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <UnitsProvider>
-        <BrowserRouter>
-          <App />
-        </BrowserRouter>
-      </UnitsProvider>
+      <ThemeProvider>
+        <UnitsProvider>
+          <BrowserRouter>
+            <App />
+          </BrowserRouter>
+        </UnitsProvider>
+      </ThemeProvider>
     </QueryClientProvider>
   </StrictMode>,
 )

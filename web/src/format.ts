@@ -50,6 +50,18 @@ export function weight(kg: Maybe, units: Units): string {
   return units === 'imperial' ? `${fixed(kg * POUNDS_PER_KG, 1)} lb` : `${fixed(kg, 1)} kg`
 }
 
+// A weight typed in display units, in kilograms (for saving), and kilograms in display
+// units (for filling a form), rounded to 0.1.
+export function kgFrom(value: number, units: Units): number {
+  return units === 'imperial' ? value / POUNDS_PER_KG : value
+}
+
+export function weightValue(kg: number, units: Units): number {
+  return Math.round((units === 'imperial' ? kg * POUNDS_PER_KG : kg) * 10) / 10
+}
+
+export const weightUnit = (units: Units) => (units === 'imperial' ? 'lb' : 'kg')
+
 // Converts a speed or altitude sample for charts: mph/km/h and ft/m.
 export function speedValue(mps: number, units: Units): number {
   return units === 'imperial' ? (mps * 3600) / METRES_PER_MILE : mps * 3.6

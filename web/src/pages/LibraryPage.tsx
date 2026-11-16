@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router'
-import { useRides, type RideItem, type SortKey } from '../api/client'
+import { useBikes, useRides, useTags, type RideItem, type SortKey } from '../api/client'
 import * as f from '../format'
 import { useUnits } from '../units'
 import { usePageTitle } from '../usePageTitle'
 import {
+  NO_FILTERS,
   PAGE_SIZES,
   fromParams,
   hasFilters,
@@ -99,6 +100,8 @@ export function LibraryPage() {
                       'NP',
                       'TSS',
                       'Avg HR',
+                      'Bike',
+                      'Tags',
                     ].map((column) => (
                       <ColumnHeader
                         key={column}
@@ -186,7 +189,11 @@ function SearchBox({ initial, onSearch }: { initial: string; onSearch: (q: strin
 
 type FiltersProps = { state: LibraryState; onChange: (changes: Partial<LibraryState>) => void }
 
+const EFFORTS = Array.from({ length: 10 }, (_, i) => String(i + 1))
+
 function Filters({ state, onChange }: FiltersProps) {
+  const tags = useTags()
+  const bikes = useBikes()
   return (
     <fieldset className="filters">
       <legend>Filters</legend>
@@ -250,20 +257,56 @@ function Filters({ state, onChange }: FiltersProps) {
           onChange={(e) => onChange({ minMinutes: e.target.value })}
         />
       </label>
-      <button
-        type="button"
-        onClick={() =>
-          onChange({
-            q: '',
-            source: '',
-            where: '',
-            since: '',
-            until: '',
-            power: '',
-            minMinutes: '',
-          })
-        }
-      >
+      <label>
+        Tag
+        <select value={state.tag} onChange={(e) => onChange({ tag: e.target.value })}>
+          <option value="">Any</option>
+          {tags.data?.map((t) => (
+            <option key={t.name} value={t.name}>
+              {t.name}
+            </option>
+          ))}
+          {/* A tag from the URL that no ride has any more. */}
+          {state.tag && !tags.data?.some((t) => t.name === state.tag) && (
+            <option value={state.tag}>{state.tag}</option>
+          )}
+        </select>
+      </label>
+      <label>
+        Bike
+        <select value={state.bike} onChange={(e) => onChange({ bike: e.target.value })}>
+          <option value="">Any</option>
+          <option value="none">No bike</option>
+          {bikes.data?.map((b) => (
+            <option key={b.id} value={b.id}>
+              {b.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        Effort from
+        <select value={state.minRpe} onChange={(e) => onChange({ minRpe: e.target.value })}>
+          <option value="">Any</option>
+          {EFFORTS.map((n) => (
+            <option key={n} value={n}>
+              {n}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        Effort to
+        <select value={state.maxRpe} onChange={(e) => onChange({ maxRpe: e.target.value })}>
+          <option value="">Any</option>
+          {EFFORTS.map((n) => (
+            <option key={n} value={n}>
+              {n}
+            </option>
+          ))}
+        </select>
+      </label>
+      <button type="button" onClick={() => onChange(NO_FILTERS)}>
         Clear filters
       </button>
     </fieldset>
@@ -319,6 +362,8 @@ function RideRow({ ride, units }: { ride: RideItem; units: f.Units }) {
         {estimated && <abbr title="TSS from an estimated FTP">*</abbr>}
       </td>
       <td className="num">{f.bpm(ride.avg_hr)}</td>
+      <td>{ride.bike?.name ?? f.DASH}</td>
+      <td>{ride.tags.join(', ') || f.DASH}</td>
     </tr>
   )
 }

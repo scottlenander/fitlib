@@ -11,6 +11,7 @@ import {
 import * as echarts from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
 import { useEffect, useRef } from 'react'
+import { useTheme } from '../theme'
 
 echarts.use([
   LineChart,
@@ -33,10 +34,12 @@ type Props = {
 export function EChart({ option, label, height, testId }: Props) {
   const element = useRef<HTMLDivElement>(null)
   const chart = useRef<echarts.ECharts | null>(null)
+  const { theme } = useTheme()
 
+  // Drawn again from scratch when the theme changes, in ECharts' matching colours.
   useEffect(() => {
     if (!element.current) return
-    const instance = echarts.init(element.current)
+    const instance = echarts.init(element.current, theme === 'dark' ? 'dark' : undefined)
     chart.current = instance
     const observer = new ResizeObserver(() => instance.resize())
     observer.observe(element.current)
@@ -45,11 +48,12 @@ export function EChart({ option, label, height, testId }: Props) {
       instance.dispose()
       chart.current = null
     }
-  }, [])
+  }, [theme])
 
+  // Runs after the effect above, so a new chart (after a theme change) gets the option too.
   useEffect(() => {
-    chart.current?.setOption(option, { notMerge: true })
-  }, [option])
+    chart.current?.setOption({ backgroundColor: 'transparent', ...option }, { notMerge: true })
+  }, [option, theme])
 
   return <div ref={element} role="img" aria-label={label} data-testid={testId} style={{ height }} />
 }

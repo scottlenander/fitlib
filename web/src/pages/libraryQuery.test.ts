@@ -28,7 +28,7 @@ describe('writing the URL', () => {
 
   test('a full state round-trips', () => {
     const search =
-      'q=x&source=garmin&where=outdoor&since=2025-08-01&until=2025-08-31&power=yes&min=30&sort=power&dir=asc&page=2&limit=10'
+      'q=x&source=garmin&where=outdoor&since=2025-08-01&until=2025-08-31&power=yes&min=30&tag=z2&bike=b1&rpe_min=3&rpe_max=7&sort=power&dir=asc&page=2&limit=10'
 
     expect(toParams(parse(search)).toString()).toBe(search)
   })
@@ -48,6 +48,26 @@ describe('the API query', () => {
       has_power: false,
       min_duration_s: 2700,
     })
+  })
+
+  test('tag, bike and effort filters', () => {
+    expect(toQuery(parse('tag=z2&bike=b1&rpe_min=3&rpe_max=7'))).toMatchObject({
+      tag: ['z2'],
+      bike_id: 'b1',
+      min_rpe: 3,
+      max_rpe: 7,
+    })
+    expect(toQuery(parse('bike=none'))).toMatchObject({ has_bike: false, bike_id: undefined })
+  })
+
+  test('an effort outside 1-10 is ignored', () => {
+    expect(parse('rpe_min=0&rpe_max=11')).toMatchObject({ minRpe: '', maxRpe: '' })
+  })
+
+  test('every filter counts as a filter', () => {
+    for (const search of ['tag=z2', 'bike=none', 'rpe_min=3', 'min=10']) {
+      expect(hasFilters(parse(search)), search).toBe(true)
+    }
   })
 
   test('the page and size become an offset and limit', () => {
