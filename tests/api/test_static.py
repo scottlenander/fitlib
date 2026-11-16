@@ -9,6 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from fitlib.api import create_app
+from fitlib.api.static import PLACEHOLDER_DIR, default_static_dir
 from fitlib.config import Config
 
 
@@ -33,17 +34,35 @@ def built_app(tmp_path: Path, config: Config) -> Generator[TestClient]:
         yield test_client
 
 
-def test_root_serves_the_placeholder_page(client: TestClient):
-    """Before the browser app is built, ``/`` shows a placeholder page.
+def test_placeholder_page_explains_how_to_build_the_app(config: Config):
+    """The placeholder page says the server runs and how to build the browser app.
 
-    Given: the app with its default static folder.
-    Expect: an HTML page saying the server is running.
+    Given: the app serving the placeholder folder.
+    Expect: an HTML page with the build command.
     """
-    response = client.get("/")
+    with TestClient(create_app(config, static_dir=PLACEHOLDER_DIR, workers=1)) as client:
+        response = client.get("/")
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/html")
-    assert "The server is running" in response.text
+    assert "npm --prefix web run build" in response.text
+
+
+def test_built_app_is_served_when_present(tmp_path: Path):
+    """The built browser app is served when there is one, the placeholder otherwise.
+
+    Given: a build folder, first empty, then with an ``index.html``.
+    Expect: the placeholder folder, then the build folder.
+    """
+    dist = tmp_path / "web_dist"
+    dist.mkdir()
+
+    before = default_static_dir(dist)
+    (dist / "index.html").write_text("<html>app</html>")
+    after = default_static_dir(dist)
+
+    assert before == PLACEHOLDER_DIR
+    assert after == dist
 
 
 @pytest.mark.parametrize("path", ["/", "/rides/abc123", "/trends/2025"])

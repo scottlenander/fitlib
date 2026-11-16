@@ -8,6 +8,16 @@ __pycache__/
 dist/
 build/
 
+# Web app: dependencies and build output (served by fitlib)
+node_modules/
+/src/fitlib/web_dist/
+
+# E2E: Playwright output
+/e2e/test-results/
+/e2e/playwright-report/
+/e2e/blob-report/
+/e2e/playwright/.cache/
+
 # Local fitlib library data (rides imported from real files)
 library/
 

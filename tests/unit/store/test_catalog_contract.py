@@ -387,6 +387,42 @@ def test_replace_summary_keeps_identity_and_metadata(catalog: CatalogStore):
     assert ids(catalog.search(Filters(text="windy"))) == [ride.id], "still found by its notes"
 
 
+def test_delete_ride_removes_it_everywhere(catalog: CatalogStore):
+    """A deleted ride is gone from lookups, search, counts and totals; others stay.
+
+    Given: two rides on a bike, one with notes and tags, and the tagged one deleted.
+    Expect: the deleted ride returned as it was; it can't be loaded or found by id, hash or
+    notes; its tag no longer counts; the bike counts one ride; the other ride is untouched.
+    """
+    bike = Bike(id="b1", name="Giant Contend 1")
+    catalog.add_bike(bike)
+    gone = make_ride(meta=RideMeta(notes="windy", tags=("cobbles",), bike_id="b1"))
+    kept = make_ride(start=at(1), meta=RideMeta(bike_id="b1"))
+    catalog.add_ride(gone)
+    catalog.add_ride(kept)
+
+    removed = catalog.delete_ride(gone.id)
+
+    assert removed.id == gone.id and removed.meta.notes == "windy"
+    with pytest.raises(RideNotFound):
+        catalog.get_ride(gone.id)
+    assert catalog.find_by_hash(gone.sha256) is None
+    assert ids(catalog.search(Filters(text="windy"))) == [], "search should forget it"
+    assert catalog.tag_counts() == []
+    assert [(t.bike.id, t.rides) for t in catalog.bike_totals()] == [("b1", 1)]
+    assert ids(catalog.search()) == [kept.id]
+
+
+def test_delete_unknown_ride(catalog: CatalogStore):
+    """Deleting a ride that doesn't exist is an error.
+
+    Given: an empty catalog.
+    Expect: ``RideNotFound``.
+    """
+    with pytest.raises(RideNotFound):
+        catalog.delete_ride("00000000-0000-0000-0000-000000000000")
+
+
 def test_replace_summary_of_unknown_ride(catalog: CatalogStore):
     """Recomputing a ride that doesn't exist is an error.
 

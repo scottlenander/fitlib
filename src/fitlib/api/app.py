@@ -9,7 +9,7 @@ from fastapi import APIRouter, FastAPI, HTTPException
 from fitlib import __version__
 from fitlib.api import errors
 from fitlib.api.routers import athlete, bikes, e2e, health, imports, rides, settings, tags
-from fitlib.api.static import PLACEHOLDER_DIR, mount_app
+from fitlib.api.static import default_static_dir, mount_app
 from fitlib.config import Config
 
 
@@ -23,7 +23,8 @@ def create_app(
 
     Args:
         config: Which library to serve, and its settings.
-        static_dir: Folder with the browser app; a placeholder page by default.
+        static_dir: Folder with the browser app; by default the built app, or a
+            placeholder page if it hasn't been built.
         workers: Processes for decoding imports; up to 4 by default, 1 to decode in the
             server process.
         e2e_fixtures: Turns on e2e mode: the ``/e2e`` test shortcuts, importing fixtures
@@ -68,5 +69,5 @@ def create_app(
     app.include_router(api)
     if e2e_fixtures is not None:
         app.include_router(e2e.make_router(e2e_fixtures))
-    mount_app(app, static_dir or PLACEHOLDER_DIR)
+    mount_app(app, static_dir or default_static_dir())
     return app
