@@ -33,6 +33,7 @@ export const RIDES = {
       'smoke/libraryToRide.spec.ts',
       'regression/library.spec.ts',
       'regression/rideDetail.spec.ts',
+      'regression/similarRides.spec.ts',
       'accessibility/pages.spec.ts',
     ],
   },
@@ -42,6 +43,7 @@ export const RIDES = {
     date: '2025-08-05',
     changes: false,
     usedBy: [
+      'regression/similarRides.spec.ts',
       'smoke/libraryToRide.spec.ts',
       'regression/library.spec.ts',
       'regression/rideDetail.spec.ts',
@@ -70,6 +72,7 @@ export const RIDES = {
     date: '2025-08-16',
     changes: false,
     usedBy: [
+      'regression/similarRides.spec.ts',
       'regression/library.spec.ts',
       'regression/rideDetail.spec.ts',
       'accessibility/pages.spec.ts',
@@ -83,6 +86,7 @@ export const RIDES = {
     // The other specs only read figures the bike doesn't change.
     changes: true,
     usedBy: [
+      'regression/similarRides.spec.ts',
       'regression/bikes.spec.ts',
       'regression/library.spec.ts',
       'regression/rideDetail.spec.ts',
@@ -93,14 +97,18 @@ export const RIDES = {
     name: 'Garmin ride, 23 Aug 2025',
     date: '2025-08-23',
     changes: false,
-    usedBy: ['regression/library.spec.ts'],
+    usedBy: ['regression/similarRides.spec.ts', 'regression/library.spec.ts'],
   },
   EXPORT_B: {
     file: 'garmin_export_ride_b.fit',
     name: 'Garmin ride, 24 Aug 2025',
     date: '2025-08-24',
     changes: false,
-    usedBy: ['smoke/libraryToRide.spec.ts', 'regression/library.spec.ts'],
+    usedBy: [
+      'regression/similarRides.spec.ts',
+      'smoke/libraryToRide.spec.ts',
+      'regression/library.spec.ts',
+    ],
   },
 } as const satisfies Record<string, FixtureRide>
 
