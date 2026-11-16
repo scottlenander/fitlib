@@ -12,12 +12,17 @@ def test_health_reports_ok_and_the_ride_count(client: TestClient):
     """The health check answers without any rides imported.
 
     Given: an app over an empty library.
-    Expect: 200 with status ``ok``, fitlib's version and 0 rides.
+    Expect: 200 with status ``ok``, fitlib's version, 0 rides and none outdated.
     """
     response = client.get("/api/health")
 
     assert response.status_code == 200
-    assert response.json() == {"status": "ok", "version": __version__, "rides": 0}
+    assert response.json() == {
+        "status": "ok",
+        "version": __version__,
+        "rides": 0,
+        "outdated_rides": 0,
+    }
 
 
 def test_openapi_description_lists_the_api(client: TestClient):
