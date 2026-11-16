@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# Serve fitlib for the Playwright tests (tests/e2e/): a fresh library in a temp folder with the
+# fixture rides imported, in e2e mode (the /e2e shortcuts on), on $PORT (default 3200).
+# Builds web/ first if it hasn't been built or its sources changed since. The library is
+# deleted when the server stops.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+PORT="${PORT:-3200}"
+FIXTURES="$ROOT/tests/fixtures/fit"
+BUILT="$ROOT/src/fitlib/web_dist/index.html"
+
+if [[ ! -f "$BUILT" ]] ||
+  [[ -n "$(find "$ROOT/web/src" "$ROOT/web/public" "$ROOT/web/index.html" -newer "$BUILT" -print -quit)" ]]; then
+  echo "Building web/ ..."
+  npm --prefix "$ROOT/web" run build
+fi
+
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/fitlib-e2e.XXXXXX")"
+SERVER=""
+cleanup() {
+  [[ -n "$SERVER" ]] && kill "$SERVER" 2>/dev/null && wait "$SERVER" 2>/dev/null
+  rm -rf "$WORK"
+}
+trap cleanup EXIT
+trap 'exit 0' INT TERM
+
+printf 'library = "%s"\nunits = "imperial"\n' "$WORK/library" >"$WORK/config.toml"
+cd "$ROOT"
+# Exit code 1 is expected: the fixtures include a truncated file that fails to import.
+uv run fitlib --config "$WORK/config.toml" import "$FIXTURES" --workers 1 >/dev/null || [[ $? -eq 1 ]]
+
+FITLIB_E2E=1 FITLIB_E2E_FIXTURES="$FIXTURES" \
+  uv run fitlib --config "$WORK/config.toml" serve --port "$PORT" &
+SERVER=$!
+wait "$SERVER"

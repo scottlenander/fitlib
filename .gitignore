@@ -13,10 +13,10 @@ node_modules/
 /src/fitlib/web_dist/
 
 # E2E: Playwright output
-/e2e/test-results/
-/e2e/playwright-report/
-/e2e/blob-report/
-/e2e/playwright/.cache/
+/tests/e2e/test-results/
+/tests/e2e/playwright-report/
+/tests/e2e/blob-report/
+/tests/e2e/playwright/.cache/
 
 # Local fitlib library data (rides imported from real files)
 library/
