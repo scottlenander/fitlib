@@ -7,7 +7,7 @@ import pytest
 
 from fitlib.ingest.decoder import decode
 from fitlib.ingest.normalize import to_frame
-from fitlib.metrics.route import decode_index, encode, fingerprint, neighbours
+from fitlib.metrics.route import decode_index, dilate, encode, fingerprint, neighbours, overlap
 from tests.fixtures.generate import committed_bytes
 from tests.fixtures.specs import ride
 
@@ -143,3 +143,31 @@ def test_no_positions_no_fingerprint():
 
     assert indoor == frozenset()
     assert no_columns == frozenset()
+
+
+def test_dilate_grows_each_cell_by_its_neighbours():
+    """Growing one cell gives it and its 8 neighbours.
+
+    Given: a single cell.
+    Expect: 9 grid positions: the cell and every neighbour.
+    """
+    cell = encode(50.3967, 3.4153)
+
+    grown = dilate(frozenset({cell}))
+
+    assert grown == {decode_index(c) for c in neighbours(cell) | {cell}}
+
+
+def test_overlap_counts_cells_in_or_next_to_the_other_route():
+    """Overlap is the share of one route lying in or next to the other route's cells.
+
+    Given: two cells far apart, compared with a route of just the first; and an empty route.
+    Expect: half overlaps; an empty route overlaps nothing.
+    """
+    near, far = encode(50.3967, 3.4153), encode(10.0, 10.0)
+
+    half = overlap(frozenset({near, far}), dilate(frozenset({near})))
+    empty = overlap(frozenset(), dilate(frozenset({near})))
+
+    assert half == 0.5
+    assert empty == 0.0

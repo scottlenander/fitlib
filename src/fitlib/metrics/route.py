@@ -10,6 +10,8 @@ Cells are location data: they're stored apart from other figures and never logge
 
 from __future__ import annotations
 
+from functools import lru_cache
+
 import polars as pl
 
 from fitlib.models import Route
@@ -62,6 +64,8 @@ def encode_index(row: int, column: int) -> str:
     return "".join(_BASE32[(value >> shift) & 31] for shift in range(30, -1, -5))
 
 
+# Cached: rides on the same route share most of their cells.
+@lru_cache(maxsize=1 << 16)
 def decode_index(cell: str) -> tuple[int, int]:
     """Find a geohash cell's grid row and column.
 
@@ -156,3 +160,41 @@ def fingerprint(frame: pl.DataFrame) -> Route:
         .unique()
     )
     return frozenset(encode_index(r, c) for r, c in cells.iter_rows())
+
+
+def dilate(cells: Route) -> set[tuple[int, int]]:
+    """Grow a set of cells by one cell all round, as grid positions.
+
+    Comparing one ride's cells with another's grown set tolerates GPS drift and routes that
+    run along a cell edge.
+
+    Args:
+        cells: The cells to grow.
+
+    Returns:
+        The ``(row, column)`` of every cell and of every cell touching one.
+    """
+    grown = set()
+    for cell in cells:
+        row, column = decode_index(cell)
+        for r in (row - 1, row, row + 1):
+            if 0 <= r < _LAT_CELLS:
+                for c in (column - 1, column, column + 1):
+                    grown.add((r, c % _LON_CELLS))
+    return grown
+
+
+def overlap(mine: Route, theirs_grown: set[tuple[int, int]]) -> float:
+    """Measure how much of a route another ride covered.
+
+    Args:
+        mine: One ride's cells.
+        theirs_grown: The other ride's cells, grown with ``dilate``.
+
+    Returns:
+        The fraction of ``mine`` that lies in or next to the other ride's cells, from 0 to 1;
+        0 when ``mine`` is empty.
+    """
+    if not mine:
+        return 0.0
+    return sum(decode_index(cell) in theirs_grown for cell in mine) / len(mine)
