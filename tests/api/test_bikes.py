@@ -70,6 +70,8 @@ def test_add_bike_rejects_bad_bikes(client: TestClient, body: dict, status: int)
 
     assert response.status_code == status
     assert len(client.get("/api/bikes").json()) == 1
+    if status == 409:
+        assert response.json()["detail"] == "There is already a bike called 'giant contend 1'"
 
 
 def test_rename_retire_and_bring_back(client: TestClient):
