@@ -95,12 +95,14 @@ test('switching units changes the figures everywhere and is remembered', async (
 
   await test.step('Open the indoor ride in imperial units (the default)', async () => {
     await ride.goto(await new TestData(request).rideId(INDOOR.file))
-    await expect(ride.header.imperial).toBeChecked()
+    await expect(ride.header.metricUnits, {
+      message: 'Metric units should be off: the config says imperial',
+    }).not.toBeChecked()
     await expect(ride.summary.value('Distance')).toHaveText('10.5 mi')
   })
 
   await test.step('Switch to metric', async () => {
-    await ride.header.metric.check()
+    await ride.header.metricUnits.click()
     await expect(ride.summary.value('Distance')).toHaveText('17.0 km')
     await expect(ride.summary.value('Climbing')).toHaveText('70 m')
   })

@@ -2,10 +2,11 @@ import { test, expect } from '@playwright/test'
 import { LibraryPage } from '../../pageObjects/libraryPage'
 import { RIDES } from '../../libs/constants'
 
-// Read-only. Counts and paging only use rides from 10 Aug on, leaving out the 9 Aug ride
-// that the import spec deletes and imports again.
-const SINCE_10_AUG = { since: '2025-08-10' }
-const { ZWIFT, INTERVALS, SMART, HR_ONLY, INDOOR, EXPORT_A, EXPORT_B } = RIDES
+// Read-only. Counts, sorting and paging only use rides from 13 Aug on, leaving out the
+// 9 Aug ride (deleted and imported again by the import spec) and the 12 Aug ride (renamed by
+// the ride edits spec).
+const SINCE_13_AUG = { since: '2025-08-13' }
+const { ZWIFT, INTERVALS, HR_ONLY, INDOOR, EXPORT_A, EXPORT_B } = RIDES
 
 test('searching finds rides by their device, and an empty result says so', async ({ page }) => {
   const library = new LibraryPage(page)
@@ -75,7 +76,7 @@ test('sorting by a column, then the other way', async ({ page }) => {
   const library = new LibraryPage(page)
 
   await test.step('Newest first to start with', async () => {
-    await library.goto(SINCE_10_AUG)
+    await library.goto(SINCE_13_AUG)
     await expect(library.columnHeader('Date')).toHaveAttribute('aria-sort', 'descending')
     await expect(library.rideNames().first()).toHaveText(EXPORT_B.name)
   })
@@ -102,34 +103,29 @@ test('paging through rides, kept in the URL across a reload', async ({ page }) =
   const library = new LibraryPage(page)
 
   await test.step('Two rides a page', async () => {
-    await library.goto({ ...SINCE_10_AUG, limit: '2' })
+    await library.goto({ ...SINCE_13_AUG, limit: '2' })
     await expect(library.rideNames()).toHaveText([EXPORT_B.name, EXPORT_A.name])
-    await expect(library.pageStatus(1, 3)).toBeVisible()
+    await expect(library.pageStatus(1, 2)).toBeVisible()
     await expect(library.previous, { message: 'There is no page before the first' }).toBeDisabled()
   })
 
-  await test.step('Next page', async () => {
+  await test.step('Next page, the last', async () => {
     await library.next.click()
     await expect(library.rideNames()).toHaveText([INDOOR.name, HR_ONLY.name])
-    await expect(library.count).toHaveText('Showing 3–4 of 5 rides')
+    await expect(library.count).toHaveText('Showing 3–4 of 4 rides')
+    await expect(library.next, { message: 'There is no page after the last' }).toBeDisabled()
   })
 
   await test.step('Reload: still on page 2', async () => {
     await page.reload()
-    await expect(library.pageStatus(2, 3)).toBeVisible()
+    await expect(library.pageStatus(2, 2)).toBeVisible()
     await expect(library.rideNames()).toHaveText([INDOOR.name, HR_ONLY.name])
-  })
-
-  await test.step('Last page', async () => {
-    await library.next.click()
-    await expect(library.rideNames()).toHaveText([SMART.name])
-    await expect(library.next, { message: 'There is no page after the last' }).toBeDisabled()
   })
 
   await test.step('More rides a page goes back to page 1', async () => {
     await library.perPage.selectOption('10')
     await expect(library.pageStatus(1, 1)).toBeVisible()
-    await expect(library.rows).toHaveCount(5)
+    await expect(library.rows).toHaveCount(4)
   })
 })
 

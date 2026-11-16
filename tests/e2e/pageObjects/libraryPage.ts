@@ -16,6 +16,10 @@ export class LibraryPage {
   readonly from: Locator
   readonly to: Locator
   readonly minMinutes: Locator
+  readonly tag: Locator
+  readonly bike: Locator
+  readonly effortFrom: Locator
+  readonly effortTo: Locator
   readonly clearFilters: Locator
   // "Showing 1–8 of 8 rides" or "No rides found."
   readonly count: Locator
@@ -37,9 +41,13 @@ export class LibraryPage {
     this.source = this.filters.getByLabel('Source')
     this.where = this.filters.getByLabel('Where')
     this.power = this.filters.getByLabel('Power')
-    this.from = this.filters.getByLabel('From')
-    this.to = this.filters.getByLabel('To')
+    this.from = this.filters.getByLabel('From', { exact: true })
+    this.to = this.filters.getByLabel('To', { exact: true })
     this.minMinutes = this.filters.getByLabel('At least (minutes)')
+    this.tag = this.filters.getByLabel('Tag')
+    this.bike = this.filters.getByLabel('Bike')
+    this.effortFrom = this.filters.getByLabel('Effort from')
+    this.effortTo = this.filters.getByLabel('Effort to')
     this.clearFilters = this.filters.getByRole('button', { name: 'Clear filters' })
     this.count = page.getByTestId('ride-count')
     this.table = page.getByRole('table', { name: 'Rides' })

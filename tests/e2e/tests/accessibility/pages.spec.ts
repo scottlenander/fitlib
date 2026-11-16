@@ -25,16 +25,24 @@ async function expectNoViolations(page: Page) {
   expect(summary, `accessibility problems on ${page.url()}`).toEqual([])
 }
 
-for (const scheme of ['light', 'dark'] as const) {
-  test(`every page passes an automated scan (${scheme} mode)`, async ({ page, request }) => {
+// Light and dark from the system, and dark chosen in the app on a light system.
+const THEMES = [
+  { name: 'light mode', system: 'light', choose: false },
+  { name: 'dark mode from the system', system: 'dark', choose: false },
+  { name: 'dark mode chosen in the app', system: 'light', choose: true },
+] as const
+
+for (const theme of THEMES) {
+  test(`every page passes an automated scan (${theme.name})`, async ({ page, request }) => {
     const library = new LibraryPage(page)
     const ride = new RidePage(page)
     const importPage = new ImportPage(page)
     const testData = new TestData(request)
-    await page.emulateMedia({ colorScheme: scheme })
+    await page.emulateMedia({ colorScheme: theme.system })
 
     await test.step('Library', async () => {
       await library.goto()
+      if (theme.choose) await library.header.darkMode.click()
       await expect(library.rows.first()).toBeVisible()
       await expectNoViolations(page)
     })
@@ -52,6 +60,12 @@ for (const scheme of ['light', 'dark'] as const) {
       await expectNoViolations(page)
     })
 
+    await test.step('Ride with its details form open', async () => {
+      await ride.editButton.click()
+      await expect(ride.editForm).toBeVisible()
+      await expectNoViolations(page)
+    })
+
     await test.step('Ride without power', async () => {
       await ride.goto(await testData.rideId(NO_POWER.file))
       await expect(ride.traceChart).toBeVisible()
@@ -64,6 +78,18 @@ for (const scheme of ['light', 'dark'] as const) {
       // Already in the library, so nothing changes.
       await importPage.importFixtures(UPLOADS.EXPORT_ZIP)
       await expect(importPage.summary).toBeVisible()
+      await expectNoViolations(page)
+    })
+
+    await test.step('Bikes', async () => {
+      await page.goto('/bikes')
+      await expect(page.getByRole('heading', { name: 'Bikes', level: 1 })).toBeVisible()
+      await expectNoViolations(page)
+    })
+
+    await test.step('Settings', async () => {
+      await page.goto('/settings')
+      await expect(page.getByRole('heading', { name: 'Athlete' })).toBeVisible()
       await expectNoViolations(page)
     })
 

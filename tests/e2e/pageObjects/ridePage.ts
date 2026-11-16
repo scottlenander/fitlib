@@ -19,6 +19,21 @@ export class RidePage {
   readonly curveChart: Locator
   readonly efforts: Locator
   readonly laps: Locator
+  readonly notes: Locator
+  readonly editButton: Locator
+  readonly editForm: Locator
+  readonly editName: Locator
+  readonly editEffort: Locator
+  readonly editBike: Locator
+  // Tags typed as one line, separated by commas.
+  readonly editTags: Locator
+  readonly editNotes: Locator
+  readonly saveButton: Locator
+  readonly cancelButton: Locator
+  readonly saved: Locator
+  readonly editError: Locator
+  // "No bike, effort, tags or notes yet."
+  readonly noDetails: Locator
   readonly notFound: Locator
   readonly backToLibrary: Locator
 
@@ -36,6 +51,19 @@ export class RidePage {
     this.curveChart = page.getByTestId('curve-chart')
     this.efforts = page.getByRole('table', { name: 'Best efforts' })
     this.laps = page.getByRole('table', { name: 'Laps' })
+    this.notes = page.getByTestId('ride-notes')
+    this.editButton = page.getByRole('button', { name: 'Edit details' })
+    this.editForm = page.getByRole('form', { name: 'Edit details' })
+    this.editName = this.editForm.getByLabel('Name')
+    this.editEffort = this.editForm.getByLabel('Effort')
+    this.editBike = this.editForm.getByLabel('Bike')
+    this.editTags = this.editForm.getByLabel('Tags')
+    this.editNotes = this.editForm.getByLabel('Notes')
+    this.saveButton = this.editForm.getByRole('button', { name: 'Save' })
+    this.cancelButton = this.editForm.getByRole('button', { name: 'Cancel' })
+    this.saved = page.getByTestId('form-notice')
+    this.editError = this.editForm.getByTestId('form-error')
+    this.noDetails = page.getByText('No bike, effort, tags or notes yet.')
     this.notFound = page.getByRole('heading', { name: 'Ride not found', level: 1 })
     this.backToLibrary = page.getByRole('link', { name: 'Back to the library' })
   }
