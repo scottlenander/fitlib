@@ -41,7 +41,7 @@ export function RidePage() {
 function Ride({ ride }: { ride: RideDetail }) {
   const { units } = useUnits()
   const t = ride.training
-  const where = ride.source === 'zwift' ? 'Zwift' : ride.indoor ? 'Indoor' : 'Outdoor'
+  const where = ride.indoor ? 'Indoor' : 'Outdoor'
 
   const summary: Stat[] = [
     { label: 'Moving time', value: f.duration(ride.moving_s) },
@@ -68,7 +68,8 @@ function Ride({ ride }: { ride: RideDetail }) {
   ]
 
   const training: Stat[] = [
-    ...(t.ftp !== null
+    // FTP-based figures only mean something for rides with power.
+    ...(ride.has_power && t.ftp !== null
       ? [
           {
             label: 'FTP',

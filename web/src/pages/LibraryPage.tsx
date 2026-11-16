@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { useRides, type RideItem, type SortKey } from '../api/client'
 import * as f from '../format'
@@ -32,10 +32,22 @@ export function LibraryPage() {
   const rides = useRides(toQuery(state))
   const { units } = useUnits()
 
+  // The URL state as last set, which may be ahead of this render: two quick changes (such
+  // as "Clear filters" then a new filter) must build on each other, not on the same render.
+  const latest = useRef(params)
+  useEffect(() => {
+    latest.current = params
+  }, [params])
+
   // Changing a filter or sort starts again from page 1.
   function update(changes: Partial<LibraryState>, keepPage = false) {
-    const next = { ...state, ...changes, ...(keepPage ? {} : { page: 1 }) }
-    setParams(toParams(next))
+    const next = toParams({
+      ...fromParams(latest.current),
+      ...changes,
+      ...(keepPage ? {} : { page: 1 }),
+    })
+    latest.current = next
+    setParams(next)
   }
 
   function sortBy(key: SortKey) {
