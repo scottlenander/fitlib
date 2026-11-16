@@ -12,7 +12,8 @@ from fitlib.ingest.decoder import DecodeError, decode
 from fitlib.ingest.normalize import to_frame
 from fitlib.ingest.source import is_cycling
 from fitlib.ingest.summarize import summarize
-from fitlib.models import RideSummary
+from fitlib.metrics.route import fingerprint
+from fitlib.models import RideSummary, Route
 from fitlib.parquet import to_parquet
 
 
@@ -23,10 +24,12 @@ class Analysed:
     Attributes:
         summary: The ride's figures.
         stream: The ride's 1 Hz samples as zstd Parquet bytes.
+        route: The ride's route fingerprint; empty without positions.
     """
 
     summary: RideSummary
     stream: bytes
+    route: Route = frozenset()
 
 
 @dataclass(frozen=True)
@@ -60,7 +63,7 @@ def analyse(data: bytes) -> Analysed | NotARide | Failed:
         data: The .fit file's bytes.
 
     Returns:
-        The ride's summary and stream; or that it isn't a ride; or why it failed (unreadable,
+        The ride's summary, stream and route; or that it isn't a ride; or why it failed (unreadable,
         or no records).
     """
     try:
@@ -72,4 +75,4 @@ def analyse(data: bytes) -> Analysed | NotARide | Failed:
     frame = to_frame(decoded.records)
     if frame.is_empty():
         return Failed("the file has no recorded data")
-    return Analysed(summarize(decoded, frame), to_parquet(frame))
+    return Analysed(summarize(decoded, frame), to_parquet(frame), fingerprint(frame))

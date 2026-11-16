@@ -22,6 +22,9 @@ type Curve = tuple[tuple[int, float], ...]
 type Histogram = tuple[tuple[int, int], ...]
 """Time at each value as ``(value, seconds)``, lowest value first, e.g. seconds at each watt."""
 
+type Route = frozenset[str]
+"""The ~150 m grid cells (7-character geohashes) a ride passed through: its route fingerprint."""
+
 
 class Units(StrEnum):
     """Which units figures are shown in. Stored data is always SI."""

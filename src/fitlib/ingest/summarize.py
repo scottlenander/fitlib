@@ -10,7 +10,8 @@ from fitlib.metrics import basic, curves, hr, power, zones
 from fitlib.models import RideSummary
 
 # Bump when any computed figure changes, so `recompute` knows which rides are out of date.
-METRICS_VERSION = 2
+# 3: route fingerprints.
+METRICS_VERSION = 3
 
 
 def summarize(decoded: DecodedActivity, frame: pl.DataFrame) -> RideSummary:

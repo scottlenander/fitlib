@@ -14,7 +14,7 @@ ZWIFT = "zwift_watopia_steady_60min.fit"
 
 
 def downgrade(lib: ImportedLibrary, file_name: str) -> str:
-    """Make a ride look like phase 1a left it: version 1, no training figures, with notes.
+    """Make a ride look like phase 1a left it: version 1, no training figures or route, with notes.
 
     Args:
         lib: The imported library.
@@ -46,22 +46,26 @@ def test_outdated_rides_are_found_and_brought_up_to_date(imported: ImportedLibra
     """Rides computed with older calculations are recomputed from their raw files.
 
     Given: the imported fixtures with the Zwift ride downgraded to version 1 (no NP, no
-    curve) and given notes and a tag.
+    curve, no route cells) and given notes and a tag.
     Expect: it is the only outdated ride; after recompute it is at the current version with
-    NP 200 W and a power curve again, and its notes, tags, id and import time are unchanged.
+    NP 200 W, a power curve and route cells again, and its notes, tags, id and import time
+    are unchanged.
     """
     ride_id = downgrade(imported, ZWIFT)
     before = imported.catalog.get_ride(ride_id)
+    route_before = imported.catalog.route_cells(ride_id)
     rc = recomputer(imported)
 
     outdated = rc.outdated()
     report = rc.run(outdated)
     after = imported.catalog.get_ride(ride_id)
 
+    assert route_before == frozenset(), "the downgraded ride should have no route cells"
     assert outdated == [ride_id], "only the downgraded ride should be outdated"
     assert report.updated == [ride_id] and report.failed == []
     assert after.metrics_version == METRICS_VERSION
     assert after.summary.np == 200 and after.summary.power_curve != ()
+    assert imported.catalog.route_cells(ride_id), "recompute should add the route cells"
     assert after.meta == before.meta, "notes and tags should survive a recompute"
     assert (after.id, after.imported_at) == (before.id, before.imported_at)
     assert rc.outdated() == [], "nothing should be outdated afterwards"

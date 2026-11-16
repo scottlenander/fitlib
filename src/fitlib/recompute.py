@@ -124,6 +124,6 @@ class Recomputer:
             return
         self._streams.delete(ride.id, ride.summary.start)
         self._streams.put_bytes(ride.id, result.summary.start, result.stream)
-        self._catalog.replace_summary(ride.id, result.summary, METRICS_VERSION)
+        self._catalog.replace_summary(ride.id, result.summary, METRICS_VERSION, route=result.route)
         report.updated.append(ride.id)
         log.info("recomputed ride %s", ride.short_id)

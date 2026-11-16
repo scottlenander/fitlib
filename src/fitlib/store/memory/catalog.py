@@ -16,6 +16,7 @@ from fitlib.models import (
     Ride,
     RideMeta,
     RideSummary,
+    Route,
     SortKey,
 )
 from fitlib.store.interfaces import (
@@ -123,6 +124,7 @@ class MemoryCatalog:
         self._athlete: dict[date, AthleteEntry] = {}
         self._bikes: dict[str, Bike] = {}
         self._bike_defaults: dict[tuple[BikeSlot, date], BikeDefault] = {}
+        self._routes: dict[str, Route] = {}
 
     def _bike_name(self, ride: Ride) -> str | None:
         """The name of a ride's bike.
@@ -299,19 +301,63 @@ class MemoryCatalog:
         """
         return self._bike_defaults.pop((slot, effective_from), None) is not None
 
-    def replace_summary(self, ride_id: str, summary: RideSummary, metrics_version: int) -> None:
+    def replace_summary(
+        self,
+        ride_id: str,
+        summary: RideSummary,
+        metrics_version: int,
+        route: Route = frozenset(),
+    ) -> None:
         """Replace a ride's computed figures, keeping its id, import details and metadata.
 
         Args:
             ride_id: The ride's id.
             summary: The newly computed summary.
             metrics_version: The calculations version that produced it.
+            route: The ride's newly computed route fingerprint (replaces the old one).
 
         Raises:
             RideNotFound: No ride has this id.
         """
         ride = self.get_ride(ride_id)
         self._rides[ride_id] = replace(ride, summary=summary, metrics_version=metrics_version)
+        self._routes[ride_id] = frozenset(route)
+
+    def route_cells(self, ride_id: str) -> Route:
+        """Load a ride's route fingerprint.
+
+        Args:
+            ride_id: The ride's full id.
+
+        Returns:
+            The cells it passed through; empty for rides without positions.
+
+        Raises:
+            RideNotFound: No ride has this id.
+        """
+        self.get_ride(ride_id)
+        return self._routes.get(ride_id, frozenset())
+
+    def route_candidates(self, ride_id: str, limit: int = 50) -> list[tuple[str, int]]:
+        """Find the rides that share the most route cells with a ride.
+
+        Args:
+            ride_id: The ride's full id.
+            limit: The most rides to return.
+
+        Returns:
+            ``(other ride's id, cells shared)``, most shared first (ties by id).
+
+        Raises:
+            RideNotFound: No ride has this id.
+        """
+        mine = self.route_cells(ride_id)
+        shared = [
+            (other, len(mine & cells))
+            for other, cells in self._routes.items()
+            if other != ride_id and mine & cells
+        ]
+        return sorted(shared, key=lambda pair: (-pair[1], pair[0]))[:limit]
 
     def ride_ids(self, below_version: int | None = None) -> list[str]:
         """List ride ids, oldest ride first.
@@ -374,11 +420,12 @@ class MemoryCatalog:
         """
         return self._athlete.pop(effective_from, None) is not None
 
-    def add_ride(self, ride: Ride) -> None:
+    def add_ride(self, ride: Ride, route: Route = frozenset()) -> None:
         """Store a new ride, all or nothing.
 
         Args:
             ride: The ride to add.
+            route: The ride's route fingerprint; empty for rides without positions.
 
         Raises:
             DuplicateRide: A ride with the same sha256 is already stored.
@@ -389,6 +436,7 @@ class MemoryCatalog:
         if ride.meta.bike_id is not None:
             self.get_bike(ride.meta.bike_id)
         self._rides[ride.id] = replace(ride, meta=_stored(ride.meta))
+        self._routes[ride.id] = frozenset(route)
 
     def delete_ride(self, ride_id: str) -> Ride:
         """Remove a ride and its metadata.
@@ -404,6 +452,7 @@ class MemoryCatalog:
         """
         ride = self.get_ride(ride_id)
         del self._rides[ride_id]
+        self._routes.pop(ride_id, None)
         return ride
 
     def get_ride(self, ride_id: str) -> Ride:

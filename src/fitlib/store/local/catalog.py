@@ -24,6 +24,7 @@ from fitlib.models import (
     Ride,
     RideMeta,
     RideSummary,
+    Route,
     SortKey,
     Source,
 )
@@ -193,11 +194,12 @@ class SqliteCatalog:
 
     # -- writes -----------------------------------------------------------------------------
 
-    def add_ride(self, ride: Ride) -> None:
+    def add_ride(self, ride: Ride, route: Route = frozenset()) -> None:
         """Store a new ride, all or nothing.
 
         Args:
             ride: The ride to add.
+            route: The ride's route fingerprint; empty for rides without positions.
 
         Raises:
             DuplicateRide: A ride with the same sha256 is already stored.
@@ -223,6 +225,7 @@ class SqliteCatalog:
                     raise DuplicateRide(ride.sha256) from exc
                 raise
             self._write_details(db, ride.id, ride.summary)
+            self._write_route(db, ride.id, route)
             if ride.meta.bike_id is not None:
                 self._require_bike(db, ride.meta.bike_id)
             self._write_meta(db, ride.id, ride.meta)
@@ -248,13 +251,20 @@ class SqliteCatalog:
             db.execute("DELETE FROM rides WHERE id = ?", (ride_id,))
         return ride
 
-    def replace_summary(self, ride_id: str, summary: RideSummary, metrics_version: int) -> None:
+    def replace_summary(
+        self,
+        ride_id: str,
+        summary: RideSummary,
+        metrics_version: int,
+        route: Route = frozenset(),
+    ) -> None:
         """Replace a ride's computed figures, keeping its id, import details and metadata.
 
         Args:
             ride_id: The ride's id.
             summary: The newly computed summary.
             metrics_version: The calculations version that produced it.
+            route: The ride's newly computed route fingerprint (replaces the old one).
 
         Raises:
             RideNotFound: No ride has this id.
@@ -268,11 +278,76 @@ class SqliteCatalog:
             ).rowcount
             if not updated:
                 raise RideNotFound(ride_id)
-            for table in ("laps", "ride_geo", "ride_curves", "ride_bins"):
+            for table in ("laps", "ride_geo", "ride_curves", "ride_bins", "ride_route"):
                 db.execute(f"DELETE FROM {table} WHERE ride_id = ?", (ride_id,))
             self._write_details(db, ride_id, summary)
+            self._write_route(db, ride_id, route)
             row = db.execute("SELECT * FROM rides WHERE id = ?", (ride_id,)).fetchone()
             self._index(db, self._load(row))
+
+    def _write_route(self, db: sqlite3.Connection, ride_id: str, route: Route) -> None:
+        """Write a ride's route cells.
+
+        Args:
+            db: The connection, inside a transaction.
+            ride_id: The ride's id.
+            route: Its cells.
+        """
+        db.executemany(
+            "INSERT INTO ride_route (ride_id, cell) VALUES (?, ?)",
+            [(ride_id, cell) for cell in sorted(route)],
+        )
+
+    def route_cells(self, ride_id: str) -> Route:
+        """Load a ride's route fingerprint.
+
+        Args:
+            ride_id: The ride's full id.
+
+        Returns:
+            The cells it passed through; empty for rides without positions.
+
+        Raises:
+            RideNotFound: No ride has this id.
+        """
+        self._require_ride(ride_id)
+        rows = self._db.execute("SELECT cell FROM ride_route WHERE ride_id = ?", (ride_id,))
+        return frozenset(cell for (cell,) in rows)
+
+    def route_candidates(self, ride_id: str, limit: int = 50) -> list[tuple[str, int]]:
+        """Find the rides that share the most route cells with a ride.
+
+        Args:
+            ride_id: The ride's full id.
+            limit: The most rides to return.
+
+        Returns:
+            ``(other ride's id, cells shared)``, most shared first (ties by id).
+
+        Raises:
+            RideNotFound: No ride has this id.
+        """
+        self._require_ride(ride_id)
+        rows = self._db.execute(
+            "SELECT other.ride_id, COUNT(*) AS shared FROM ride_route AS mine "
+            "JOIN ride_route AS other ON other.cell = mine.cell AND other.ride_id != mine.ride_id "
+            "WHERE mine.ride_id = ? GROUP BY other.ride_id ORDER BY shared DESC, other.ride_id "
+            "LIMIT ?",
+            (ride_id, limit),
+        )
+        return [(other, shared) for other, shared in rows]
+
+    def _require_ride(self, ride_id: str) -> None:
+        """Check that a ride exists.
+
+        Args:
+            ride_id: The ride's full id.
+
+        Raises:
+            RideNotFound: No ride has this id.
+        """
+        if self._db.execute("SELECT 1 FROM rides WHERE id = ?", (ride_id,)).fetchone() is None:
+            raise RideNotFound(ride_id)
 
     def _write_details(self, db: sqlite3.Connection, ride_id: str, s: RideSummary) -> None:
         """Write a summary's laps, location, best efforts and histograms.

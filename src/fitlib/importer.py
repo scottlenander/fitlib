@@ -256,7 +256,7 @@ class Importer:
         self._blobs.put(raw_key(sha), data)
         self._streams.put_bytes(ride.id, ride.summary.start, result.stream)
         try:
-            self._catalog.add_ride(ride)
+            self._catalog.add_ride(ride, route=result.route)
         except DuplicateRide:
             # Another import added the same file meanwhile; its blobs are identical.
             self._streams.delete(ride.id, ride.summary.start)
