@@ -102,9 +102,9 @@ uv run fitlib serve --open     # http://localhost:8000/ ; --port, --host
   existing rides (Preview, then Apply; bikes chosen by hand are never changed).
 - **Settings** (`/settings`): the theme, the **Metric units** switch and the athlete history
   (FTP, weight in your units, max HR from a date on).
-- **Light or dark**: a sun and a moon in the header (and in Settings), each named in a hint on
-  hover. The theme follows your system until you choose; units start from the config. Both
-  choices are remembered in this browser.
+- **Light or dark**: one button in the header (and in Settings) showing the mode in use, a sun
+  or a moon, named in a hint on hover; clicking switches mode. The theme follows your system
+  until you choose; units start from the config. Both choices are remembered in this browser.
 
 The server listens on this computer only (127.0.0.1) and has no login, so don't expose it.
 Without a build of `web/` it shows a page saying how to build one.
@@ -324,9 +324,9 @@ uv run python -m tests.fixtures.generate
     its default bike.
   - *Athlete*: save, carry forward, replace and remove values; weight in lb and kg; an empty
     entry refused.
-  - *Settings*: the theme following the system until the sun or moon is chosen, their hover
-    hints, remembered across reloads and pages, header and Settings in sync; metric units
-    switched in Settings only and applying everywhere.
+  - *Settings*: the theme button showing the system's mode until clicked, its hover hint,
+    switching and staying switched across reloads and pages, header and Settings in sync;
+    metric units switched in Settings only and applying everywhere.
   - *Accessibility*: axe WCAG 2.2 AA scans of every page (including Bikes, Settings and the
     ride's edit form) in light mode, dark mode from the system, and dark mode chosen in the
     app.

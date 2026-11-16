@@ -1,5 +1,5 @@
 import { expect, type Locator, type Page } from '@playwright/test'
-import { Header } from './components/header'
+import { Header, THEME_NAME } from './components/header'
 import { Stats } from './components/stats'
 
 export type AthleteValues = { from: string; ftp?: string; weight?: string; maxHr?: string }
@@ -12,8 +12,8 @@ export class SettingsPage {
   readonly header: Header
   readonly heading: Locator
   readonly display: Locator
-  readonly lightMode: Locator
-  readonly darkMode: Locator
+  // Named "Light mode" or "Dark mode", the mode in use; clicking switches mode.
+  readonly theme: Locator
   readonly metricUnits: Locator
   readonly today: Stats
   readonly history: Locator
@@ -32,8 +32,7 @@ export class SettingsPage {
     this.header = new Header(page)
     this.heading = page.getByRole('heading', { name: 'Settings', level: 1 })
     this.display = page.getByTestId('display-settings')
-    this.lightMode = this.display.getByRole('button', { name: 'Light mode' })
-    this.darkMode = this.display.getByRole('button', { name: 'Dark mode' })
+    this.theme = this.display.getByRole('button', { name: THEME_NAME })
     this.metricUnits = this.display.getByRole('switch', { name: 'Metric units' })
     this.today = new Stats(page, 'athlete-today')
     this.history = page.getByRole('table', { name: 'Athlete history' })

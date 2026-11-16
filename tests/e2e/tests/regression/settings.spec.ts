@@ -6,57 +6,54 @@ import { RIDES } from '../../libs/constants'
 // Read-only: shown in both units.
 const RIDE = RIDES.EXPORT_B
 
-test('the theme follows the system until a sun or moon is chosen', async ({ page }) => {
+test('the theme button shows the mode in use and switches it', async ({ page }) => {
   const settings = new SettingsPage(page)
   const { header } = settings
   // The theme is set on the page's root element as data-theme.
   const root = page.locator('html')
 
-  await test.step('A dark system starts in dark mode', async () => {
+  await test.step('A dark system starts in dark mode: the moon', async () => {
     await page.emulateMedia({ colorScheme: 'dark' })
     await settings.goto()
-    await expect(header.darkMode).toHaveAttribute('aria-pressed', 'true')
-    await expect(settings.darkMode, {
+    await expect(header.theme).toHaveAccessibleName('Dark mode')
+    await expect(settings.theme, {
       message: 'The Settings toggle should match the header',
-    }).toHaveAttribute('aria-pressed', 'true')
+    }).toHaveAccessibleName('Dark mode')
   })
 
-  await test.step('A light system starts in light mode', async () => {
+  await test.step('A light system starts in light mode: the sun', async () => {
     await page.emulateMedia({ colorScheme: 'light' })
-    await expect(header.lightMode).toHaveAttribute('aria-pressed', 'true')
-    await expect(header.darkMode).toHaveAttribute('aria-pressed', 'false')
+    await expect(header.theme).toHaveAccessibleName('Light mode')
   })
 
-  await test.step('Hovering the moon names it', async () => {
-    await expect(header.hint(header.darkMode), {
-      message: 'The hint should only show on hover',
-    }).toBeHidden()
-    await header.darkMode.hover()
-    await expect(header.hint(header.darkMode)).toHaveText('Dark mode')
-    await header.lightMode.hover()
-    await expect(header.hint(header.lightMode)).toHaveText('Light mode')
+  await test.step('Hovering names the mode', async () => {
+    await expect(header.themeHint, { message: 'The hint should only show on hover' }).toBeHidden()
+    await header.theme.hover()
+    await expect(header.themeHint).toHaveText('Light mode')
   })
 
-  await test.step('Choose the moon', async () => {
-    await header.darkMode.click()
-    await expect(settings.darkMode).toHaveAttribute('aria-pressed', 'true')
+  await test.step('Click: dark mode, and the moon replaces the sun', async () => {
+    await header.theme.click()
+    await expect(header.theme).toHaveAccessibleName('Dark mode')
+    await expect(header.themeHint).toHaveText('Dark mode')
     await expect(root).toHaveAttribute('data-theme', 'dark')
+    await expect(settings.theme).toHaveAccessibleName('Dark mode')
   })
 
   await test.step('Still dark after a reload and on other pages', async () => {
     await page.reload()
-    await expect(header.darkMode).toHaveAttribute('aria-pressed', 'true')
+    await expect(header.theme).toHaveAccessibleName('Dark mode')
     await header.libraryLink.click()
     await expect(root).toHaveAttribute('data-theme', 'dark')
   })
 
-  await test.step('Choose the sun: light even on a dark system', async () => {
-    await header.lightMode.click()
+  await test.step('Click again: light, even on a dark system', async () => {
+    await header.theme.click()
     await page.emulateMedia({ colorScheme: 'dark' })
     await expect(root).toHaveAttribute('data-theme', 'light')
-    await expect(header.lightMode, {
+    await expect(header.theme, {
       message: 'A choice made in the app should win over the system',
-    }).toHaveAttribute('aria-pressed', 'true')
+    }).toHaveAccessibleName('Light mode')
   })
 })
 

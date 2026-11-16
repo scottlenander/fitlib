@@ -67,7 +67,7 @@ The app side: React pages in `web/src/pages/`, components in `web/src/components
 - **A comment on the class** says which page or URL it covers and anything unusual (sections that only appear with some data). Comment fields whose text varies.
 - **Only page-level actions belong in page objects.** Assertions about what a test expects stay in the spec; a method may use `expect` only to wait for its own action to finish (as `SettingsPage.removeEntry()` does).
 - **Confirmations** (`window.confirm`): `this.page.once('dialog', (dialog) => void dialog.accept())` right before the click.
-- **The theme toggle** (a sun and a moon, `aria-pressed` on the mode in use) is in the header and on the Settings page; `Header` scopes its own to the banner. **Units** are switched on the Settings page only.
+- **The theme toggle** is one button showing the mode in use (a sun or a moon), named "Light mode" or "Dark mode"; clicking switches mode. Check it with `toHaveAccessibleName`. It's in the header and on the Settings page; `Header` scopes its own to the banner. **Units** are switched on the Settings page only.
 
 ## Finding elements (in this order)
 

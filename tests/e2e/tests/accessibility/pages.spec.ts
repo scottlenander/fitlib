@@ -42,7 +42,8 @@ for (const theme of THEMES) {
 
     await test.step('Library', async () => {
       await library.goto()
-      if (theme.choose) await library.header.darkMode.click()
+      // A light system starts light; one click switches to dark.
+      if (theme.choose) await library.header.theme.click()
       await expect(library.rows.first()).toBeVisible()
       await expectNoViolations(page)
     })

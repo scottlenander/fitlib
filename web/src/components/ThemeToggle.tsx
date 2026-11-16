@@ -1,32 +1,30 @@
-import { useTheme, type Theme } from '../theme'
+import { useId } from 'react'
+import { useTheme } from '../theme'
 
-// Light or dark, as a sun and a moon. The pressed one is the mode in use. Each shows its
-// name as a hint on hover or keyboard focus; the same name is what screen readers announce.
-const MODES: { theme: Theme; label: string; icon: React.JSX.Element }[] = [
-  { theme: 'light', label: 'Light mode', icon: <SunIcon /> },
-  { theme: 'dark', label: 'Dark mode', icon: <MoonIcon /> },
-]
-
+// Light or dark, as one button showing the mode in use: a sun in light mode, a moon in dark
+// mode. Its hint (on hover or keyboard focus) and its name say which mode that is; clicking
+// switches to the other mode, and the icon with it.
 export function ThemeToggle() {
   const { theme, setTheme } = useTheme()
+  const dark = theme === 'dark'
+  const label = dark ? 'Dark mode' : 'Light mode'
+  const hintId = useId()
   return (
-    <div role="group" aria-label="Theme" className="theme-toggle">
-      {MODES.map((mode) => (
-        <button
-          key={mode.theme}
-          type="button"
-          aria-label={mode.label}
-          aria-pressed={theme === mode.theme}
-          className="icon-button"
-          onClick={() => setTheme(mode.theme)}
-        >
-          {mode.icon}
-          <span className="tooltip" aria-hidden="true">
-            {mode.label}
-          </span>
-        </button>
-      ))}
-    </div>
+    <button
+      type="button"
+      aria-label={label}
+      aria-describedby={hintId}
+      className="icon-button theme-toggle"
+      onClick={() => setTheme(dark ? 'light' : 'dark')}
+    >
+      {dark ? <MoonIcon /> : <SunIcon />}
+      <span className="tooltip" aria-hidden="true">
+        {label}
+      </span>
+      <span id={hintId} className="visually-hidden">
+        Switch to {dark ? 'light' : 'dark'} mode
+      </span>
+    </button>
   )
 }
 

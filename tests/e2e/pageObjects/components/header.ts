@@ -1,8 +1,12 @@
 import type { Locator, Page } from '@playwright/test'
 
-// The header on every page: the app's name, the main navigation and the light/dark toggle
-// (a sun and a moon; the same toggle is on the Settings page, so these are scoped to the
-// header). Units are switched on the Settings page only.
+// The header on every page: the app's name, the main navigation and the light/dark toggle.
+// The toggle is one button showing the mode in use (a sun or a moon), named "Light mode" or
+// "Dark mode"; clicking switches mode. The same toggle is on the Settings page, so this one
+// is scoped to the header. Units are switched on the Settings page only.
+// The theme button's name and hint: the mode in use.
+export const THEME_NAME = /^(Light|Dark) mode$/
+
 export class Header {
   readonly root: Locator
   readonly nav: Locator
@@ -11,9 +15,8 @@ export class Header {
   readonly bikesLink: Locator
   readonly settingsLink: Locator
   readonly theme: Locator
-  // Pressed (aria-pressed) when it's the mode in use; each shows its name as a hover hint.
-  readonly lightMode: Locator
-  readonly darkMode: Locator
+  // The theme button's hint, shown on hover or keyboard focus: "Light mode" or "Dark mode".
+  readonly themeHint: Locator
 
   constructor(page: Page) {
     this.root = page.getByRole('banner')
@@ -22,13 +25,7 @@ export class Header {
     this.importLink = this.nav.getByRole('link', { name: 'Import', exact: true })
     this.bikesLink = this.nav.getByRole('link', { name: 'Bikes', exact: true })
     this.settingsLink = this.nav.getByRole('link', { name: 'Settings', exact: true })
-    this.theme = this.root.getByRole('group', { name: 'Theme' })
-    this.lightMode = this.theme.getByRole('button', { name: 'Light mode' })
-    this.darkMode = this.theme.getByRole('button', { name: 'Dark mode' })
-  }
-
-  // The hint shown on hover or keyboard focus, e.g. hint(header.darkMode) → "Dark mode".
-  hint(button: Locator): Locator {
-    return button.getByText(/mode$/)
+    this.theme = this.root.getByRole('button', { name: THEME_NAME })
+    this.themeHint = this.theme.getByText(THEME_NAME)
   }
 }
