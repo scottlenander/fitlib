@@ -18,7 +18,7 @@ All commands run from `tests/e2e/` unless noted.
 | `tests/accessibility/pages.spec.ts` | axe WCAG 2.2 AA scans of every page, in light and dark mode. Add a step here when you add a page. |
 | `pageObjects/*Page.ts` | One class per page, named `<Name>Page` in `<name>Page.ts` (`RidePage` in `ridePage.ts`). |
 | `pageObjects/components/` | Parts used on more than one page (`Header`, `Stats`). No `Page` suffix. |
-| `tests/regression/{rideEdits,bikes,athlete,settings}.spec.ts` | Editing, bikes and defaults, the athlete history, and the display switches. |
+| `tests/regression/{rideEdits,bikes,athlete,settings}.spec.ts` | Editing, bikes and defaults, the athlete history, and the theme and units. |
 | `libs/constants.ts` | `RIDES` (the fixture rides, with who uses them) and `UPLOADS` (fixture files that are never in the library). |
 | `libs/testData.ts` | `TestData`: ride ids and set-up shortcuts through the `/e2e/...` routes. |
 
@@ -67,7 +67,7 @@ The app side: React pages in `web/src/pages/`, components in `web/src/components
 - **A comment on the class** says which page or URL it covers and anything unusual (sections that only appear with some data). Comment fields whose text varies.
 - **Only page-level actions belong in page objects.** Assertions about what a test expects stay in the spec; a method may use `expect` only to wait for its own action to finish (as `SettingsPage.removeEntry()` does).
 - **Confirmations** (`window.confirm`): `this.page.once('dialog', (dialog) => void dialog.accept())` right before the click.
-- **The display switches** are in the header and on the Settings page; `Header` scopes its own to the banner.
+- **The theme toggle** (a sun and a moon, `aria-pressed` on the mode in use) is in the header and on the Settings page; `Header` scopes its own to the banner. **Units** are switched on the Settings page only.
 
 ## Finding elements (in this order)
 

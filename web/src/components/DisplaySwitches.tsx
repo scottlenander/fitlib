@@ -1,18 +1,16 @@
-import { useTheme } from '../theme'
 import { useUnits } from '../units'
 import { Switch } from './Switch'
+import { ThemeToggle } from './ThemeToggle'
 
-// Dark mode and metric units, in the header and on the Settings page; both stay in sync.
+// The display settings on the Settings page: light or dark (also in the header), and units.
 export function DisplaySwitches() {
-  const { theme, setTheme } = useTheme()
   const { units, setUnits } = useUnits()
   return (
     <>
-      <Switch
-        label="Dark mode"
-        checked={theme === 'dark'}
-        onChange={(on) => setTheme(on ? 'dark' : 'light')}
-      />
+      <div className="setting">
+        <span>Theme</span>
+        <ThemeToggle />
+      </div>
       <Switch
         label="Metric units"
         checked={units === 'metric'}

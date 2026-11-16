@@ -1,7 +1,7 @@
 import { NavLink, Outlet } from 'react-router'
-import { DisplaySwitches } from './DisplaySwitches'
+import { ThemeToggle } from './ThemeToggle'
 
-// Header with the app's name, the main navigation and the display switches, around each page.
+// Header with the app's name, the main navigation and the light/dark toggle, around each page.
 export function Layout() {
   return (
     <>
@@ -21,7 +21,7 @@ export function Layout() {
           <NavLink to="/settings">Settings</NavLink>
         </nav>
         <div className="header-switches">
-          <DisplaySwitches />
+          <ThemeToggle />
         </div>
       </header>
       <main id="main" tabIndex={-1}>

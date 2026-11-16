@@ -4,13 +4,15 @@ import { Stats } from './components/stats'
 
 export type AthleteValues = { from: string; ftp?: string; weight?: string; maxHr?: string }
 
-// Settings (/settings): the display switches (also in the header) and the athlete history.
+// Settings (/settings): the light/dark toggle (also in the header), the units switch (only
+// here) and the athlete history.
 // The history table only appears once there is an entry.
 export class SettingsPage {
   readonly page: Page
   readonly header: Header
   readonly heading: Locator
   readonly display: Locator
+  readonly lightMode: Locator
   readonly darkMode: Locator
   readonly metricUnits: Locator
   readonly today: Stats
@@ -30,7 +32,8 @@ export class SettingsPage {
     this.header = new Header(page)
     this.heading = page.getByRole('heading', { name: 'Settings', level: 1 })
     this.display = page.getByTestId('display-settings')
-    this.darkMode = this.display.getByRole('switch', { name: 'Dark mode' })
+    this.lightMode = this.display.getByRole('button', { name: 'Light mode' })
+    this.darkMode = this.display.getByRole('button', { name: 'Dark mode' })
     this.metricUnits = this.display.getByRole('switch', { name: 'Metric units' })
     this.today = new Stats(page, 'athlete-today')
     this.history = page.getByRole('table', { name: 'Athlete history' })

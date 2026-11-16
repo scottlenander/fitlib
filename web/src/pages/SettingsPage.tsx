@@ -17,8 +17,8 @@ export function SettingsPage() {
           <DisplaySwitches />
         </div>
         <p className="hint">
-          Also in the header. Remembered in this browser; dark mode follows your system until you
-          change it.
+          Remembered in this browser. The theme is also in the header, and follows your system until
+          you choose one.
         </p>
       </section>
       <AthleteSection />

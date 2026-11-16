@@ -447,3 +447,66 @@ textarea {
 .notes {
   white-space: pre-wrap;
 }
+
+/* Light/dark: a sun and a moon; the pressed one is the mode in use. */
+.theme-toggle {
+  display: inline-flex;
+  gap: 0.25rem;
+}
+.icon-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid transparent;
+  background: none;
+  color: var(--muted);
+}
+.icon-button:hover {
+  color: var(--text);
+  background: var(--surface);
+}
+.icon-button[aria-pressed='true'] {
+  color: var(--accent);
+  border-color: var(--border);
+  background: var(--surface);
+}
+
+/* A hint under a control, shown on hover and keyboard focus. */
+.tooltip {
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  background: var(--text);
+  color: var(--bg);
+  font-size: 0.8rem;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  z-index: 20;
+}
+.icon-button:hover .tooltip,
+.icon-button:focus-visible .tooltip {
+  opacity: 1;
+  visibility: visible;
+}
+
+.setting {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+/* The last button's hint lines up with its right edge, so it stays inside the window. */
+.theme-toggle .icon-button:last-child .tooltip {
+  left: auto;
+  right: 0;
+  transform: none;
+}
