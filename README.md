@@ -1,23 +1,26 @@
 # Fitlib
 
 A local library for cycling `.fit` files from Zwift and Garmin. It imports rides from folders,
-stores them compactly, and summarises each ride in readable numbers. Later phases add ride
-comparison, similar-ride matching, fitness trends and a browser UI.
+stores them compactly, and summarises each ride in readable numbers, on the command line or in
+a browser. Later phases add ride comparison, similar-ride matching and fitness trends.
 
 The project is built in phases. Phase 1a added the core: importing, storage, basic ride
 figures and a command line. Phase 1b added training figures (NP, IF, TSS, zones, best
 efforts, decoupling), the athlete's FTP/weight/max HR history, `recompute`, and imperial/metric
 units. Phase 1c added editing rides (name, notes, effort, bike, tags), bikes with dated
-default bikes, and tag/bike/effort filters. **Phase 2 (this)** adds a local web API
-(`fitlib serve`) covering everything the command line does, ready for the browser app.
+default bikes, and tag/bike/effort filters. Phase 2 added a local web API (`fitlib serve`).
+**Phase 3a (this)** adds the browser app (library, ride detail, import) and its Playwright
+tests; phase 3b will add editing rides, bikes and the athlete history in the browser.
 
 ## Setup
 
-Requires [uv](https://docs.astral.sh/uv/). Python 3.14 is pinned in `.python-version`; uv
-installs it if needed.
+Requires [uv](https://docs.astral.sh/uv/) and, for the browser app, [Node](https://nodejs.org/)
+26 (pinned in `.nvmrc`). Python 3.14 is pinned in `.python-version`; uv installs it if needed.
 
 ```bash
-uv sync          # create .venv and install dependencies from uv.lock
+uv sync                          # create .venv and install dependencies from uv.lock
+npm --prefix web ci              # the browser app's dependencies
+npm --prefix web run build       # build it into src/fitlib/web_dist/, where fitlib serve finds it
 ```
 
 ## Usage
@@ -78,16 +81,35 @@ uv run fitlib --help                        # every command and option
   fitlib's calculations change (`import` says so); by default it updates just the rides that
   need it, or give ride ids or `--all`.
 
-### Web API
+### Browser app
 
 ```bash
-uv run fitlib serve            # http://localhost:8000/ ; --port, --host, --open
+uv run fitlib serve --open     # http://localhost:8000/ ; --port, --host
 ```
 
+- **Library** (`/`): search (name, notes, tags, bike, device), filters (source, indoor/outdoor,
+  power, dates, minimum riding time), sortable columns and paging. All of it is kept in the
+  URL, so reloads, the back button and links keep the view. TSS from an estimated FTP is
+  marked with `*`.
+- **Ride** (`/rides/<id>`): summary and training figures; power, heart rate, cadence, speed and
+  altitude over the ride on one zoomable time axis; time in power and heart-rate zones; best
+  efforts; laps.
+- **Import** (`/import`): choose or drop `.fit` and `.zip` files; the results list what was
+  imported (with links), already in the library, skipped and failed.
+- **Units**: the header switch starts from the config's units and is remembered in the browser.
+
 The server listens on this computer only (127.0.0.1) and has no login, so don't expose it.
-It serves a placeholder page at `/` until the browser app lands, and interactive API docs at
-`/docs`. Everything is under `/api`, and every figure is in SI units (metres, seconds, m/s,
-kg); `GET /api/settings` gives the configured display units.
+Without a build of `web/` it shows a page saying how to build one.
+
+**Working on the app:** run `uv run fitlib serve` and, in `web/`, `npm run dev` (Vite on
+http://localhost:5173/, with `/api` sent to the server). After changing the API, run
+`npm run api:types` in `web/` to regenerate `web/src/api/schema.d.ts`; CI fails if it's out of
+date.
+
+### Web API
+
+Interactive docs are at `/docs`. Everything is under `/api`, and every figure is in SI units
+(metres, seconds, m/s, kg); `GET /api/settings` gives the configured display units.
 
 | Endpoint | What |
 |---|---|
@@ -156,15 +178,23 @@ are never written to logs.
 | `fitlib/recompute.py` | Rebuild rides from their raw files when calculations change |
 | `fitlib/api/` | FastAPI app: `app.py` builds it, `routers/` one per area, `schemas.py` request/response models, `errors.py` error responses, `static.py` the browser app's files |
 | `fitlib/cli/` | The `fitlib` command: `rides`, `bikes`, `athlete` and `serve` commands, shared `common` helpers and `output` printing |
+| `web/` | The browser app (React, Vite, TanStack Query, ECharts): `src/pages/`, `src/components/`, `src/api/` (typed client; `schema.d.ts` is generated), `src/format.ts` (units and figures, as `display.py`) |
+| `tests/e2e/` | Playwright tests for the browser app; conventions in `.claude/skills/playwright-tests/` |
 
 Only `store/factory.py` chooses a backend; everything else depends on the interfaces. The API
 opens the stores per request. `import-linter` enforces this and the layering
 (`models ← metrics ← ingest ← importer | recompute | analysis ← api ← cli`).
 
-**E2E mode** (for the browser tests in a later phase): with `FITLIB_E2E=1` and
-`FITLIB_E2E_FIXTURES` pointing at a fixtures folder, `fitlib serve` adds `/e2e` shortcuts that
-wipe the library and import the fixtures, undo a ride's edits or import one fixture. It only
-runs over a library inside the system temp folder, so a reset can't delete real rides.
+**E2E mode** (for the browser tests): with `FITLIB_E2E=1` and `FITLIB_E2E_FIXTURES` pointing
+at a fixtures folder, `fitlib serve` adds `/e2e` shortcuts. It only runs over a library inside
+the system temp folder, so they can't touch real rides:
+
+| Shortcut | `TestData` | Also tested through the UI by |
+|---|---|---|
+| `GET /e2e/rides` | `rideIds`, `rideId`, `findRideId` | (read-only) |
+| `POST /e2e/rides/{id}/reset-meta` | `resetMeta` | Editing rides (phase 3b) |
+| `POST /e2e/rides/{id}/delete` | `deleteRide` | Nothing yet: the app can't delete rides |
+| `POST /e2e/reset`, `POST /e2e/import/{file}` | (not used yet) | Importing (`import.spec.ts`) |
 
 ## Tests
 
@@ -172,14 +202,30 @@ runs over a library inside the system temp folder, so a reset can't delete real 
 uv run ruff check .            # lint
 uv run ruff format --check .   # formatting (`uv run ruff format .` fixes it)
 uv run lint-imports            # module boundaries
-uv run pytest                  # every test
+uv run pytest                  # every Python test
 uv run pytest tests/unit       # or one suite: tests/unit, tests/api
+
+cd web                          # the browser app
+npm run lint && npm run typecheck && npm run format:check
+npm test                        # unit tests (Vitest)
+
+cd tests/e2e                    # browser tests (first time: npm ci && npx playwright install chromium)
+npm run lint && npm run typecheck && npm run format:check
+npm test                        # Playwright; starts scripts/e2e-server on port 3200
+npm run report                  # the HTML report of the last run
 ```
 
-`tests/unit/` covers the Python modules; `tests/api/` drives the web API through FastAPI's
-test client. Both use the synthetic rides in `tests/fixtures/`.
+- `tests/unit/` covers the Python modules; `tests/api/` drives the web API through FastAPI's
+  test client. Both use the synthetic rides in `tests/fixtures/`.
+- `web/src/*.test.ts` are Vitest unit tests for the browser app's logic.
+- `tests/e2e/` drives the built app in Chromium. `scripts/e2e-server` builds `web/` if its
+  sources changed, imports the fixtures into a fresh temp library and serves it in e2e mode.
+  Locally Playwright reuses a server that's already running (without re-importing); stop it
+  after changing code: `lsof -ti tcp:3200 | xargs kill`.
 
-CI runs the same four checks on every pull request (`.github/workflows/ci.yml`).
+CI (`.github/workflows/ci.yml`, `e2e.yml`) runs the Python checks, the web app's checks, unit
+tests, API types check and build, and the Playwright suite ("Playwright (Chromium)", on pull
+requests; the report, traces and screenshots are kept for 7 days when it fails).
 
 Each test has a docstring saying what it checks, with **Given** (inputs) and **Expect**
 (outcome); assertions that aren't self-explanatory carry a short failure message.
@@ -248,7 +294,21 @@ uv run python -m tests.fixtures.generate
   backfill keeping hand-set bikes; athlete history; uploads (`.fit`, `.zip`, duplicates, bad
   and non-FIT files, unsafe file names, default bikes, no coordinates in logs); settings; the
   placeholder page, app-route fallback and 404s for unknown API paths and missing assets;
-  `/e2e` shortcuts only in e2e mode and never over a library outside the temp folder.
+  `/e2e` shortcuts (including deleting a ride so it can be imported again) only in e2e mode
+  and never over a library outside the temp folder; the built app served when present.
+- **Browser app unit tests** (`web/src/*.test.ts`): durations, distances, speeds, heights and
+  weights in both unit systems; local versus UTC start times; the library's URL state (reading,
+  writing, defaults, turning it into an API query).
+- **Browser tests** (`tests/e2e/`), each written as steps with page objects:
+  - *Smoke*: library → open a ride → back → import page.
+  - *Library*: search and an empty result; each filter and filters combined; sorting both ways;
+    paging, kept across a reload; the estimated-TSS mark.
+  - *Ride detail*: summary, training with an estimated FTP, zones, best efforts, laps and
+    charts; a ride without power; a start time without local time (UTC); switching units,
+    remembered across reloads and pages; an unknown ride.
+  - *Import*: a new ride imported and opened from the results; duplicates, a run, an
+    overlapping recording and a broken file reported.
+  - *Accessibility*: axe WCAG 2.2 AA scans of every page, in light and dark mode.
 
 ### Performance check
 
