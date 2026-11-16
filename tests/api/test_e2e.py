@@ -35,7 +35,12 @@ def e2e(config: Config) -> Generator[TestClient]:
 
 @pytest.mark.parametrize(
     ("method", "path"),
-    [("GET", "/e2e/rides"), ("POST", "/e2e/reset"), ("POST", f"/e2e/import/{PAUSE}")],
+    [
+        ("GET", "/e2e/rides"),
+        ("POST", "/e2e/reset"),
+        ("POST", f"/e2e/import/{PAUSE}"),
+        ("POST", "/e2e/rides/abcd/delete"),
+    ],
 )
 def test_shortcuts_are_absent_outside_e2e_mode(client: TestClient, method: str, path: str):
     """Without e2e mode the shortcuts don't exist at all.
@@ -108,6 +113,26 @@ def test_reset_meta_returns_a_ride_to_how_it_was_imported(e2e: TestClient):
         "bike_from_default": True,
         "tags": [],
     }
+
+
+def test_delete_ride_lets_it_be_imported_again(e2e: TestClient):
+    """A deleted ride is gone, with its files, so importing it again adds it afresh.
+
+    Given: the fixtures imported, then one ride deleted.
+    Expect: 204; the ride is a 404 and the count drops by one; importing the same file
+    again imports it (not "already in library") under a new id.
+    """
+    ids = e2e.post("/e2e/reset").json()
+
+    response = e2e.post(f"/e2e/rides/{ids[PAUSE]}/delete")
+    after = e2e.get("/api/health").json()["rides"]
+    again = e2e.post(f"/e2e/import/{PAUSE}").json()
+
+    assert response.status_code == 204
+    assert e2e.get(f"/api/rides/{ids[PAUSE]}").status_code == 404
+    assert after == IMPORTED_RIDES - 1
+    assert [o["file"] for o in again["imported"]] == [PAUSE], "should import, not dedupe"
+    assert again["imported"][0]["detail"] != ids[PAUSE]
 
 
 def test_import_one_fixture(e2e: TestClient):

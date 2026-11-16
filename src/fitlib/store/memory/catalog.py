@@ -390,6 +390,22 @@ class MemoryCatalog:
             self.get_bike(ride.meta.bike_id)
         self._rides[ride.id] = replace(ride, meta=_stored(ride.meta))
 
+    def delete_ride(self, ride_id: str) -> Ride:
+        """Remove a ride and its metadata.
+
+        Args:
+            ride_id: The ride's full id.
+
+        Returns:
+            The ride as it was.
+
+        Raises:
+            RideNotFound: No ride has this id.
+        """
+        ride = self.get_ride(ride_id)
+        del self._rides[ride_id]
+        return ride
+
     def get_ride(self, ride_id: str) -> Ride:
         """Load one ride.
 

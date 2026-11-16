@@ -12,10 +12,24 @@ from pathlib import Path
 from fastapi import APIRouter, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
 
-# Placeholder page until the React app is built (phase 3).
-PLACEHOLDER_DIR = Path(__file__).parent / "static"
+# The browser app, built by `npm run build` in web/ (not committed).
+WEB_DIST = Path(__file__).parents[1] / "web_dist"
+# Shown instead when the browser app hasn't been built.
+PLACEHOLDER_DIR = Path(__file__).parent / "placeholder"
 INDEX = "index.html"
 NOT_PAGES = ("api", "assets", "e2e")
+
+
+def default_static_dir(web_dist: Path = WEB_DIST) -> Path:
+    """Choose what to serve: the built browser app, or the placeholder page.
+
+    Args:
+        web_dist: Where the browser app is built.
+
+    Returns:
+        ``web_dist`` if it holds a built app, otherwise the placeholder folder.
+    """
+    return web_dist if (web_dist / INDEX).is_file() else PLACEHOLDER_DIR
 
 
 def mount_app(app: FastAPI, static_dir: Path) -> None:

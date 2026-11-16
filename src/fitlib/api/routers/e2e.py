@@ -1,7 +1,7 @@
 """Test-only shortcuts for the browser tests, mounted at ``/e2e`` in e2e mode only.
 
 They put the library into a known state quickly: wipe it and import the fixture rides,
-undo a ride's edits, or import one more fixture. Every shortcut also has a real path
+undo a ride's edits, delete a ride, or import one more fixture. Every shortcut also has a real path
 through the app, which the browser tests cover separately.
 
 Because ``reset`` deletes the library, e2e mode refuses any library outside the system
@@ -24,6 +24,7 @@ from fitlib.importer import Importer
 from fitlib.metadata import default_bike
 from fitlib.models import RideMeta
 from fitlib.store.factory import open_stores
+from fitlib.store.streams import raw_key
 
 
 class UnsafeLibrary(Exception):
@@ -118,6 +119,25 @@ def make_router(fixtures: Path) -> APIRouter:
         ride = find_ride(stores, ref)
         bike_id = default_bike(stores.catalog.bike_defaults(), ride.summary)
         stores.catalog.update_meta(ride.id, RideMeta(bike_id=bike_id, bike_from_default=True))
+        return Response(status_code=204)
+
+    @router.post("/rides/{ref}/delete", status_code=204)
+    def delete_ride(stores: StoresDep, ref: str) -> Response:
+        """Delete a ride with its stream and original file, so it can be imported again.
+
+        The app has no way to delete rides yet, so this shortcut is the one exception to
+        "every shortcut is also tested through the UI".
+
+        Args:
+            stores: The library's stores.
+            ref: The ride's id or a unique prefix.
+
+        Returns:
+            An empty response.
+        """
+        ride = stores.catalog.delete_ride(find_ride(stores, ref).id)
+        stores.streams.delete(ride.id, ride.summary.start)
+        stores.blobs.delete(raw_key(ride.sha256))
         return Response(status_code=204)
 
     @router.post("/import/{name}")

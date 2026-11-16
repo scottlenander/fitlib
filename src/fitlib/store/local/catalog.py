@@ -228,6 +228,26 @@ class SqliteCatalog:
             self._write_meta(db, ride.id, ride.meta)
             self._index(db, ride)
 
+    def delete_ride(self, ride_id: str) -> Ride:
+        """Remove a ride and everything the catalog holds for it, including its metadata.
+
+        Args:
+            ride_id: The ride's full id.
+
+        Returns:
+            The ride as it was.
+
+        Raises:
+            RideNotFound: No ride has this id.
+        """
+        ride = self.get_ride(ride_id)
+        with self._tx() as db:
+            # Laps, location, curves, histograms, metadata and tags go with it (ON DELETE
+            # CASCADE); the search index is maintained by hand.
+            db.execute("DELETE FROM rides_fts WHERE ride_id = ?", (ride_id,))
+            db.execute("DELETE FROM rides WHERE id = ?", (ride_id,))
+        return ride
+
     def replace_summary(self, ride_id: str, summary: RideSummary, metrics_version: int) -> None:
         """Replace a ride's computed figures, keeping its id, import details and metadata.
 

@@ -170,6 +170,22 @@ class CatalogStore(Protocol):
         """
         ...
 
+    def delete_ride(self, ride_id: str) -> Ride:
+        """Remove a ride and everything the catalog holds for it, including its metadata.
+
+        The ride's raw file and stream are blobs; deleting those is up to the caller.
+
+        Args:
+            ride_id: The ride's full id.
+
+        Returns:
+            The ride as it was, so the caller can find its blobs.
+
+        Raises:
+            RideNotFound: No ride has this id.
+        """
+        ...
+
     def update_meta(self, ride_id: str, meta: RideMeta) -> None:
         """Replace what the user added to a ride, and refresh its search entry.
 
