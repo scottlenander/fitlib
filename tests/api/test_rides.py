@@ -163,7 +163,7 @@ def test_detail_by_full_id_and_by_prefix(reader: Api):
 
     assert full == short
     assert full["id"] == ride_id
-    assert full["name"] == "Zwift ride, 2 Aug 2025"
+    assert full["name"] == "Zwift 2025-08-02 08:30"
     assert (full["moving_s"], full["source"], full["indoor"]) == (3600, "zwift", True)
 
 

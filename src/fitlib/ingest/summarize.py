@@ -14,7 +14,8 @@ from fitlib.models import RideSummary
 # 3: route fingerprints.
 # 4: local time ignored when it isn't real (Zwift writes 1989-12-31), fixing ride dates.
 # 5: distance added up from speed when the odometer is on few records (Zwift).
-# 6: time zone from the file name (Zwift) or the library's default time zone.
+# 6: time zone from the file name (Zwift) or the library's default time zone; default
+#    names with the start time (recompute re-indexes them for search).
 METRICS_VERSION = 6
 
 

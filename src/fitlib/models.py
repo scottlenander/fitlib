@@ -281,19 +281,26 @@ class Ride:
 
     @property
     def display_name(self) -> str:
-        """The user's name for the ride, or a default built from its source and date.
+        """The user's name for the ride, or a default built from its source and start.
+
+        The default has the local start time, so rides on the same day can be told apart.
+        Without a time zone the time is UTC, and the name says so.
 
         Returns:
-            For example ``"Zwift ride, 2 Aug 2025"``, ``"Garmin indoor ride, 19 Aug 2025"``
-            or ``"Ride, 1 Sep 2025"`` when the user hasn't named it.
+            For example ``"Zwift 2025-08-02 08:30"``, ``"Garmin indoor 2025-08-19 20:30"``
+            or ``"Ride 2025-08-11 02:00 UTC"`` when the user hasn't named it.
         """
         if self.meta.name:
             return self.meta.name
         s = self.summary
-        kind = "indoor ride" if s.indoor and s.source is not Source.ZWIFT else "ride"
-        prefix = kind.capitalize() if s.source is Source.OTHER else f"{s.source.label} {kind}"
-        day = s.local_start or s.start
-        return f"{prefix}, {day.day} {day:%b %Y}"
+        indoor = s.indoor and s.source is not Source.ZWIFT
+        if s.source is Source.OTHER:
+            prefix = "Indoor ride" if indoor else "Ride"
+        else:
+            prefix = f"{s.source.label} indoor" if indoor else s.source.label
+        local = s.local_start
+        when = f"{(local or s.start):%Y-%m-%d %H:%M}"
+        return f"{prefix} {when}" if local else f"{prefix} {when} UTC"
 
 
 class BikeKind(StrEnum):

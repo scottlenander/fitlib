@@ -92,7 +92,7 @@ def test_recompute_repairs_a_zwift_ride_dated_1989(imported: ImportedLibrary):
     assert outdated == [ride.id]
     assert after.summary.utc_offset_s == 2 * 3600
     assert after.summary.utc_offset_source == OffsetSource.FILE_NAME
-    assert after.display_name == "Zwift ride, 2 Aug 2025"
+    assert after.display_name == "Zwift 2025-08-02 08:30"
 
 
 def test_recompute_gives_a_zwift_ride_its_distance(imported: ImportedLibrary):

@@ -157,7 +157,7 @@ def test_imported_rides_are_summarised(library: Library):
 
     assert (zwift.summary.source, zwift.summary.indoor) == (Source.ZWIFT, True)
     assert (zwift.summary.moving_s, zwift.summary.avg_power) == (3600, 200)
-    assert zwift.display_name == "Zwift ride, 2 Aug 2025"
+    assert zwift.display_name == "Zwift 2025-08-02 08:30"
     assert zwift.imported_at == NOW
     assert paused.summary.device == "Garmin Edge 540"
     assert paused.summary.utc_offset_s == 7200, "Garmin rides record local time (CEST)"

@@ -26,7 +26,8 @@ def test_setting_the_default_updates_rides_without_their_own(writer: Api):
 
     Given: the Wahoo ride with no time zone; the Zwift ride with one from its file name.
     Expect: 1 ride updated; the Wahoo ride starts 22:00 on 10 Aug in New York (-4 h), and is
-        named for that day; the Zwift ride still at 08:30 (CEST); settings report the zone.
+        named for that time instead of 02:00 UTC; the Zwift ride still at 08:30 (CEST);
+        settings report the zone.
     """
     ride_id = writer.ids[NO_TIME_ZONE]
     before = writer.client.get(f"/api/rides/{ride_id}").json()
@@ -35,11 +36,11 @@ def test_setting_the_default_updates_rides_without_their_own(writer: Api):
     after = writer.client.get(f"/api/rides/{ride_id}").json()
     zwift = writer.client.get(f"/api/rides/{writer.ids[ZWIFT]}").json()
 
-    assert (before["local_start"], before["name"]) == (None, "Ride, 11 Aug 2025")
+    assert (before["local_start"], before["name"]) == (None, "Ride 2025-08-11 02:00 UTC")
     assert response.status_code == 200
     assert response.json() == {"timezone": "America/New_York", "updated": 1, "bikes_to_check": 0}
     assert (after["utc_offset_s"], after["local_start"]) == (-14400, "2025-08-10T22:00:00")
-    assert after["name"] == "Ride, 10 Aug 2025"
+    assert after["name"] == "Ride 2025-08-10 22:00"
     assert zwift["local_start"] == "2025-08-02T08:30:00"
     assert writer.client.get("/api/settings").json()["timezone"] == "America/New_York"
 

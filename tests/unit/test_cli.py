@@ -129,7 +129,7 @@ def test_list_shows_newest_first(imported: Path):
 
     assert len(lines) == 9
     assert "2025-08-24" in lines[0], "the newest ride should be first"
-    assert "Zwift ride, 2 Aug 2025" in lines[-1]
+    assert "Zwift 2025-08-02 08:30" in lines[-1]
     assert "Showing 1–9 of 9." in result.output
     assert result.exit_code == 0
 
@@ -183,7 +183,7 @@ def test_show_prints_a_readable_summary(imported: Path):
 
     result = run(imported, "show", prefix)
 
-    assert "Garmin ride, 5 Aug 2025" in result.output
+    assert "Garmin 2025-08-05 19:00" in result.output
     assert "Tue 05 Aug 2025, 19:00" in result.output, "start time should be local (CEST)"
     assert "Garmin Edge 540" in result.output
     assert "187 W avg, 300 W max" in result.output
@@ -718,7 +718,7 @@ def test_similar_lists_rides_on_the_same_route(imported: Path):
     result = run(imported, "similar", ride_id)
 
     assert result.exit_code == 0, result.output
-    assert "Rides on the route of Garmin ride, 5 Aug 2025" in result.output
+    assert "Rides on the route of Garmin 2025-08-05 19:00" in result.output
     assert len(ride_ids(result.output)) == 5
     assert result.output.count("100%") == 5 and result.output.count(" same ") == 5
 
@@ -734,16 +734,16 @@ def test_similar_efforts(imported: Path):
     result = run(imported, "similar", ride_id, "--effort", "--limit", "2")
 
     assert result.exit_code == 0, result.output
-    assert "Similar efforts to Garmin ride, 24 Aug 2025" in result.output
+    assert "Similar efforts to Garmin 2025-08-24 09:00" in result.output
     rows = [line for line in result.output.splitlines() if re.match(r"^\s*[0-9a-f]{8}\s", line)]
     assert len(rows) == 2
-    assert "Garmin ride, 12 Aug 2025" in rows[0], "the closest effort should come first"
+    assert "Garmin 2025-08-12 20:00" in rows[0], "the closest effort should come first"
 
 
 @pytest.mark.parametrize(
     ("day", "message"),
     [
-        ("2025-08-02", "No other rides share the route of Zwift ride, 2 Aug 2025"),
+        ("2025-08-02", "No other rides share the route of Zwift 2025-08-02 08:30"),
         ("2025-08-19", "has no GPS positions, so it has no route to match"),
     ],
     ids=["alone-on-route", "no-gps"],
@@ -792,8 +792,8 @@ def test_compare_prints_figures_side_by_side(imported: Path):
 
     assert result.exit_code == 0, result.output
     assert a in result.output and b in result.output
-    assert "Garmin ride, 23 Aug 2025" in result.output
-    assert "Garmin ride, 24 Aug 2025" in result.output
+    assert "Garmin 2025-08-23 09:00" in result.output
+    assert "Garmin 2025-08-24 09:00" in result.output
     for row in ("Distance", "NP", "TSS", "Best 20 min"):
         assert re.search(rf"^\s*{row}\s", result.output, re.MULTILINE), f"should have {row}"
     assert " km" in result.output, "should show distance in kilometres"

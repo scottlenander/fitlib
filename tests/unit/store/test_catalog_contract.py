@@ -938,14 +938,14 @@ def test_rides_are_found_by_where_their_time_zone_came_from(catalog: CatalogStor
 def test_changing_a_rides_time_zone_keeps_the_rest_and_moves_its_date(catalog: CatalogStore):
     """A new time zone changes only the offset, and the date its default name and search use.
 
-    Given: an unnamed ride starting 01:00 UTC on 2 Aug 2025, with no time zone.
-    Expect: after moving it to -5 h (the default), it is dated 1 Aug in its name and found by
-        searching "1 Aug" (it wasn't before); its other figures are unchanged. An unknown
-        ride refuses the change.
+    Given: an unnamed Garmin ride starting 03:00 UTC on 2 Aug 2025, with no time zone.
+    Expect: after moving it to -5 h (the default), it is named for 22:00 on 1 Aug and found
+        by searching "2025-08-01" (it wasn't before); its other figures are unchanged. An
+        unknown ride refuses the change.
     """
-    ride = make_ride(start=datetime(2025, 8, 2, 1, 0, tzinfo=UTC), utc_offset_s=None)
+    ride = make_ride(start=datetime(2025, 8, 2, 3, 0, tzinfo=UTC), utc_offset_s=None)
     catalog.add_ride(ride)
-    found_before = catalog.search(Filters(text="1 Aug")).items
+    found_before = catalog.search(Filters(text="2025-08-01")).items
 
     catalog.set_utc_offsets({ride.id: (-18000, OffsetSource.DEFAULT)})
     after = catalog.get_ride(ride.id)
@@ -957,9 +957,12 @@ def test_changing_a_rides_time_zone_keeps_the_rest_and_moves_its_date(catalog: C
     assert after.summary == replace(
         ride.summary, utc_offset_s=-18000, utc_offset_source=OffsetSource.DEFAULT
     )
-    assert after.display_name.endswith("1 Aug 2025")
+    assert (ride.display_name, after.display_name) == (
+        "Garmin 2025-08-02 03:00 UTC",
+        "Garmin 2025-08-01 22:00",
+    )
     assert found_before == (), "on 2 Aug in UTC, a search for 1 Aug shouldn't find it"
-    assert [r.id for r in catalog.search(Filters(text="1 Aug")).items] == [ride.id]
+    assert [r.id for r in catalog.search(Filters(text="2025-08-01")).items] == [ride.id]
     with pytest.raises(RideNotFound):
         catalog.set_utc_offsets({"no-such-ride": (0, OffsetSource.DEFAULT)})
 

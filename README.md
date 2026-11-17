@@ -185,6 +185,11 @@ Dates and times are shown on the rider's clock. A ride's time zone comes from th
 
 FTP, weight and default bikes apply by the ride's date on that clock.
 
+Rides you haven't named are named after their source and local start time, so rides on the
+same day can be told apart: `Zwift 2026-11-15 07:23`, `Garmin indoor 2025-08-19 20:30`, or
+`Ride 2025-08-11 02:00 UTC` for another device with no time zone. Searching finds rides by
+these names (e.g. `2026-11-15`).
+
 ### Training figures
 
 FTP-based figures (IF, TSS, W/kg, zone times) are **worked out when shown**, from figures
@@ -228,7 +233,8 @@ Zwift rides imported before the local-time fix showed the date 30 Dec 1989 (Zwif
 FIT epoch as its local time); recompute dates them correctly, falling back to UTC. Zwift
 rides imported before the distance fix had no distance (Zwift writes the odometer on only a
 few records); recompute adds it up from their speed. Recompute also gives rides imported
-before time zones came from file names (Zwift) or the default their local time.
+before time zones came from file names (Zwift) or the default their local time, and lets
+search find rides by their new names (with the start time).
 
 ## Code layout
 

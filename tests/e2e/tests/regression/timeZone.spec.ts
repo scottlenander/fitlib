@@ -23,7 +23,7 @@ test('the default time zone dates rides that carry none', async ({ page, request
 
   await test.step('The ride starts at 02:00 UTC on 11 Aug', async () => {
     await ride.goto(rideId)
-    await expect(ride.heading).toHaveText('Ride, 11 Aug 2025')
+    await expect(ride.heading).toHaveText('Ride 2025-08-11 02:00 UTC')
     await expect(ride.subtitle).toContainText('Mon 11 Aug 2025, 02:00 UTC')
   })
 
@@ -37,7 +37,7 @@ test('the default time zone dates rides that carry none', async ({ page, request
 
   await test.step('The ride is now the evening before, in New York time', async () => {
     await ride.goto(rideId)
-    await expect(ride.heading).toHaveText('Ride, 10 Aug 2025')
+    await expect(ride.heading).toHaveText('Ride 2025-08-10 22:00')
     await expect(ride.subtitle).toContainText('Sun 10 Aug 2025, 22:00 ·')
   })
 

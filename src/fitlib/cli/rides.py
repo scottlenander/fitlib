@@ -267,9 +267,10 @@ def similar(
             routes = similar_routes(catalog, found, limit)
             has_route = bool(catalog.route_cells(found.id))
 
-    title = (
-        f"{found.display_name} ({display.date(found.summary.local_start or found.summary.start)})"
-    )
+    # Default names have the date and time already; a name set by hand gets the date added.
+    title = found.display_name
+    if found.meta.name:
+        title += f" ({display.date(found.summary.local_start or found.summary.start)})"
     if effort:
         if not efforts:
             out.print(f"No rides with a similar effort to {title}.")

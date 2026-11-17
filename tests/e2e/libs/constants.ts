@@ -27,7 +27,7 @@ export type FixtureRide = {
 export const RIDES = {
   ZWIFT: {
     file: '2025-08-02-08-29-42.fit',
-    name: 'Zwift ride, 2 Aug 2025',
+    name: 'Zwift 2025-08-02 08:30',
     date: '2025-08-02',
     changes: false,
     usedBy: [
@@ -41,7 +41,7 @@ export const RIDES = {
   },
   INTERVALS: {
     file: 'garmin_nord_intervals_5x4.fit',
-    name: 'Garmin ride, 5 Aug 2025',
+    name: 'Garmin 2025-08-05 19:00',
     date: '2025-08-05',
     changes: false,
     usedBy: [
@@ -57,7 +57,7 @@ export const RIDES = {
   },
   PAUSE: {
     file: 'garmin_nord_pause_10min.fit',
-    name: 'Garmin ride, 9 Aug 2025',
+    name: 'Garmin 2025-08-09 10:00',
     date: '2025-08-09',
     // Deleted and imported again through the import page.
     changes: true,
@@ -65,7 +65,7 @@ export const RIDES = {
   },
   SMART: {
     file: 'garmin_nord_smart_recording.fit',
-    name: 'Garmin ride, 12 Aug 2025',
+    name: 'Garmin 2025-08-12 20:00',
     date: '2025-08-12',
     // Renamed, tagged, rated and given a bike; reset to no edits at the start.
     changes: true,
@@ -73,7 +73,7 @@ export const RIDES = {
   },
   HR_ONLY: {
     file: 'garmin_nord_hr_no_power.fit',
-    name: 'Garmin ride, 16 Aug 2025',
+    name: 'Garmin 2025-08-16 11:00',
     date: '2025-08-16',
     changes: false,
     usedBy: [
@@ -86,7 +86,7 @@ export const RIDES = {
   },
   INDOOR: {
     file: 'garmin_indoor_no_hr.fit',
-    name: 'Garmin indoor ride, 19 Aug 2025',
+    name: 'Garmin indoor 2025-08-19 20:30',
     date: '2025-08-19',
     // Gets the bike spec's default bike for indoor rides (the only ride that default affects).
     // The other specs only read figures the bike doesn't change.
@@ -100,7 +100,7 @@ export const RIDES = {
   },
   EXPORT_A: {
     file: 'garmin_export_ride_a.fit',
-    name: 'Garmin ride, 23 Aug 2025',
+    name: 'Garmin 2025-08-23 09:00',
     date: '2025-08-23',
     changes: false,
     usedBy: [
@@ -112,8 +112,8 @@ export const RIDES = {
   },
   NO_TIME_ZONE: {
     file: 'other_ride_no_time_zone.fit',
-    // Named for its UTC date; for its date in the default time zone once one is set.
-    name: 'Ride, 11 Aug 2025',
+    // Named for its start in UTC; in the default time zone once one is set.
+    name: 'Ride 2025-08-11 02:00 UTC',
     date: '2025-08-11',
     // Its date and time follow the default time zone, which the time zone spec changes.
     changes: true,
@@ -121,7 +121,7 @@ export const RIDES = {
   },
   EXPORT_B: {
     file: 'garmin_export_ride_b.fit',
-    name: 'Garmin ride, 24 Aug 2025',
+    name: 'Garmin 2025-08-24 09:00',
     date: '2025-08-24',
     changes: false,
     usedBy: [
