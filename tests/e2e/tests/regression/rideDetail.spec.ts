@@ -75,16 +75,17 @@ test('a ride without power leaves out power figures', async ({ page, request }) 
   })
 })
 
-// Zwift writes 1989-12-31 (the FIT epoch) as its local time, which must be ignored.
-test('a ride without a real local time shows its start in UTC', async ({ page, request }) => {
+// Zwift writes 1989-12-31 (the FIT epoch) as its local time, which must be ignored; it names
+// the file after the local start time instead (2025-08-02-08-29-42.fit, in CEST).
+test('a Zwift ride is dated by its file name', async ({ page, request }) => {
   const ride = new RidePage(page)
 
   await test.step('Open the Zwift ride', async () => {
     await ride.goto(await new TestData(request).rideId(ZWIFT.file))
   })
 
-  await test.step('The start is its real date, marked UTC (not 1989)', async () => {
-    await expect(ride.subtitle).toHaveText('Sat 02 Aug 2025, 06:30 UTC · Zwift · Zwift · Indoor')
+  await test.step('The start is the local time from its file name (not 1989, not UTC)', async () => {
+    await expect(ride.subtitle).toHaveText('Sat 02 Aug 2025, 08:30 · Zwift · Zwift · Indoor')
   })
 
   // Zwift writes the odometer on only a few records; distance is added up from speed.

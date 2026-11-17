@@ -8,8 +8,9 @@ import path from 'node:path'
 // through the library must leave out rides that another spec changes (use a date filter).
 //
 // Global settings are claimed the same way: the bikes spec owns the "indoor" default-bike
-// slot, and the athlete spec owns athlete entries dated 2026 (after every fixture ride, so
-// no ride's FTP changes). Bikes can't be deleted, so specs name theirs with a per-run suffix.
+// slot, the athlete spec owns athlete entries dated 2026 (after every fixture ride, so
+// no ride's FTP changes), and the time zone spec owns the default time zone (which only
+// moves the NO_TIME_ZONE ride). Bikes can't be deleted, so specs name theirs with a per-run suffix.
 //
 // - file: the ride's source file name, for looking up its id (ids are random each run).
 // - usedBy: spec files that use it. `changes: true` means a test modifies it.
@@ -108,6 +109,15 @@ export const RIDES = {
       'regression/similarRides.spec.ts',
       'regression/library.spec.ts',
     ],
+  },
+  NO_TIME_ZONE: {
+    file: 'other_ride_no_time_zone.fit',
+    // Named for its UTC date; for its date in the default time zone once one is set.
+    name: 'Ride, 11 Aug 2025',
+    date: '2025-08-11',
+    // Its date and time follow the default time zone, which the time zone spec changes.
+    changes: true,
+    usedBy: ['regression/timeZone.spec.ts'],
   },
   EXPORT_B: {
     file: 'garmin_export_ride_b.fit',
