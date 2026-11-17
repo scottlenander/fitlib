@@ -41,6 +41,7 @@ uv run fitlib compare 3f2a9c 7be1 c04d      # 2-4 rides' figures side by side
 uv run fitlib show 3f2a9c --units metric    # override the configured units once
 uv run fitlib athlete set --from 2025-01-01 --ftp 250 --weight 165 --max-hr 188
 uv run fitlib athlete show                  # history, and today's values
+uv run fitlib timezone America/New_York     # default time zone (or --clear; none shows it)
 uv run fitlib recompute                     # only needed after fitlib's calculations change
 uv run fitlib edit 3f2a9c --name "Arenberg" --note "Windy" --rpe 7 --tag z2 --tag cobbles
 uv run fitlib edit 3f2a9c 77b0e1 --bike "Giant Contend 1"    # several rides at once
@@ -74,6 +75,7 @@ uv run fitlib --help                        # every command and option
 - **athlete** records FTP, weight and max HR from a date on. Each value carries forward until
   changed, so `--ftp 260` alone keeps the earlier weight. Weight is entered and shown in your
   display units and stored in kg. `athlete remove DATE` deletes an entry.
+- **timezone** shows or sets the library's default time zone (see "Dates and time zones").
 - **edit** sets a ride's name, notes, effort (RPE 1-10), bike and tags; `--clear-…` removes a
   value, `--untag` removes a tag. Effort, bike and tags can be set on several rides at once;
   name and notes only on one. Tags are stored lower-case ("Z2" and "z2" are the same tag).
@@ -124,8 +126,9 @@ uv run fitlib serve --open     # http://localhost:8000/ ; --port, --host
 - **Bikes** (`/bikes`): bikes with their rides, distance and time; add, rename, change kind,
   retire and bring back. The dated default-bike timeline, and applying the defaults to
   existing rides (Preview, then Apply; bikes chosen by hand are never changed).
-- **Settings** (`/settings`): the theme, the **Metric units** switch and the athlete history
-  (FTP, weight in your units, max HR from a date on).
+- **Settings** (`/settings`): the theme, the **Metric units** switch, the default **time
+  zone** (a list, or **Use this computer's time zone**; saving says how many rides moved) and
+  the athlete history (FTP, weight in your units, max HR from a date on).
 - **Light or dark**: one button in the header (and in Settings) showing the mode in use, a sun
   or a moon, named in a hint on hover; clicking switches mode. The theme follows your system
   until you choose; units start from the config. Both choices are remembered in this browser.
@@ -158,10 +161,29 @@ Interactive docs are at `/docs`. Everything is under `/api`, and every figure is
 | `POST /api/bikes/backfill?dry_run=` | Re-apply default bikes, as `bikes backfill` |
 | `GET /api/athlete`, `PUT/DELETE /api/athlete/{date}` | Athlete history and today's values |
 | `POST /api/imports` | Upload `.fit`/`.zip` files (multipart `files`); returns what happened to each |
-| `GET /api/settings` | Default display units, library folder |
+| `GET /api/settings` | Default display units, library folder, default time zone |
+| `GET /api/settings/time-zones` | The time zones the default can be set to (IANA names) |
+| `PUT /api/settings/timezone` | Set (`{"timezone": "America/New_York"}`) or clear (`null`) the default time zone; returns how many rides changed and how many may need their default bike checked |
 
 Errors are JSON with a `detail` message: 404 for unknown rides or bikes, 409 for ambiguous id
 prefixes (with `candidates`) and duplicate bike names, 422 for invalid values.
+
+### Dates and time zones
+
+Dates and times are shown on the rider's clock. A ride's time zone comes from the first of:
+
+1. **The file's own local time** (Garmin devices).
+2. **The file's name**, when it is the local start time, as Zwift names files
+   (`2026-04-29-07-23-09.fit`). It's used only when it is within 5 minutes of a real time
+   zone's reading of the ride's start, so renamed files and wrong clocks are ignored.
+   Daylight saving comes out right, as each file has the clock it was ridden on.
+3. **The library's default time zone**, set on the Settings page or with `fitlib timezone`.
+   It follows daylight saving for each ride's date. Changing it updates the rides that use it
+   at once; if a ride moves to another day, its default bike may differ ("Apply defaults to
+   existing rides" on the Bikes page brings it in line).
+4. Otherwise UTC, marked "UTC".
+
+FTP, weight and default bikes apply by the ride's date on that clock.
 
 ### Training figures
 
@@ -205,7 +227,8 @@ the library page say when). Rides imported before phase 4a need it for route mat
 Zwift rides imported before the local-time fix showed the date 30 Dec 1989 (Zwift writes the
 FIT epoch as its local time); recompute dates them correctly, falling back to UTC. Zwift
 rides imported before the distance fix had no distance (Zwift writes the odometer on only a
-few records); recompute adds it up from their speed.
+few records); recompute adds it up from their speed. Recompute also gives rides imported
+before time zones came from file names (Zwift) or the default their local time.
 
 ## Code layout
 
@@ -278,12 +301,14 @@ Each test has a docstring saying what it checks, with **Given** (inputs) and **E
 All test rides are **synthetic**; no real ride data is committed. They are described in
 `tests/fixtures/specs.py` as blocks of constant power, so figures can be checked against values
 worked out from the spec. Outdoor rides loop around 50°23′48″N, 3°24′55″E, near Roubaix,
-France; Zwift rides loop around Watopia's coordinates.
+France (one rides its own loop near Ypres); Zwift rides loop around Watopia's coordinates.
 
-The fixtures cover: a steady Zwift ride, Garmin intervals with a lap per segment, a 10-minute
+The fixtures cover: a steady Zwift ride (written as Zwift writes: named after its local start
+time, a 1989 local time inside, the odometer on the first record only), Garmin intervals with a lap per segment, a 10-minute
 pause, smart recording (irregular samples), no power meter, an indoor ride without HR or GPS,
-a second recording of the Zwift ride, a run, two rides inside a `.zip`, an exact duplicate and
-a truncated file.
+a second recording of the Zwift ride, a ride from another maker (Wahoo) with no time zone and
+no power or heart rate, a run, two rides inside a `.zip`, an exact duplicate and a truncated
+file.
 
 The files in `tests/fixtures/fit/` are generated from the specs and committed. After changing
 the specs or the generator, rebuild them:
@@ -307,19 +332,27 @@ uv run python -m tests.fixtures.generate
   replacing summaries, best efforts in a window, athlete history, editing metadata, bikes
   (unique names ignoring case, name/prefix lookup, renames refreshing search, totals), tag
   counts, default-bike entries and the tag/bike/effort filters, invalid blob keys, Parquet
-  streams; plus upgrading a phase 1a database.
+  streams; library settings; listing rides by where their time zone came from, and changing
+  it (name and search follow the new date); plus upgrading a phase 1a database and marking
+  existing rides' time zones as from their file.
 - **Ingest** (`tests/unit/ingest/`): scanning folders, files and zips (skipping hidden files and
   macOS zip junk); decoding device, sport, local time, records and laps; local times used only
   when real (Zwift's 1989-12-31, seconds since power-on and impossible offsets ignored;
   zones from -12 h to +14 h, to the nearest 15 minutes); rejecting bad files; distance from
   the odometer, or added up from speed when few records carry it (as from Zwift), carrying on
-  from the first reading and not growing through pauses;
+  from the first reading and not growing through pauses; time zones from file names (real
+  Zwift names, winter and summer, +5:45, the -12 h and +14 h edges, copies; renamed files,
+  impossible dates and offsets no zone has ignored) and the default zone (daylight saving),
+  in order after the file's own;
   1 Hz normalization (short gaps filled, pauses kept, duplicate timestamps).
 - **Metrics** (`tests/unit/metrics/`): elapsed and moving time, distance, speed, climbing, power,
   heart rate, cadence, location box and laps; NP (against a step-by-step reference), kJ, VI,
   best efforts (incl. never across a pause), decoupling, histograms, zone boundaries, IF/TSS,
   estimated FTP and athlete values carrying forward. Expected values are worked out from the
   specs (e.g. 200 W for an hour at FTP 250 → IF 0.80, TSS 64).
+- **Default time zone** (`tests/unit/analysis/test_timezone.py`): only rides without their own
+  follow it, with daylight saving; changing and clearing it; an unknown zone changing
+  nothing; rides moved to another day with a default bike counted.
 - **Training** (`tests/unit/analysis/`): FTP, weight and max HR from the history; estimated FTP
   from the best ride in the window; FTP changes applying without a recompute.
 - **Routes and similar rides** (`tests/unit/metrics/test_route.py`,
@@ -337,14 +370,16 @@ uv run python -m tests.fixtures.generate
   normalization; ride kinds; dated default bikes by local date; backfill never overwriting a
   bike set by hand, dry runs, and repeat runs.
 - **Recompute** (`tests/unit/test_recompute.py`): outdated rides brought up to date with metadata
-  kept; streams rewritten; a Zwift ride dated 1989 repaired; a Zwift ride without distance
+  kept; streams rewritten; a Zwift ride dated 1989 repaired (its time zone from its name); a Zwift ride without distance
   given it; missing raw files reported.
 - **Importer** (`tests/unit/test_importer.py`): the whole fixture folder (imports, duplicates,
   skips, failures), re-import, stored files and streams, overlapping recordings, the process
-  pool, cleanup after a failed write, and no coordinates in logs.
+  pool, cleanup after a failed write, and no coordinates in logs; time zones from a Zwift
+  file's name (also inside a zip) and from the default for a renamed file.
 - **CLI** (`tests/unit/test_cli.py`, including `serve` in normal and e2e mode, and `similar`
   by route and effort, with nothing to match, and for rides needing a recompute, and `compare`
-side by side, with one ride or the same ride twice refused), **config** and
+side by side, with one ride or the same ride twice refused, and `timezone` shown, set,
+cleared and refused for an unknown zone or a zone with `--clear`), **config** and
   **display formatting** (both unit systems).
 - **API** (`tests/api/`): the fixture rides are imported once into a template library;
   read-only tests share it and tests that change anything get their own copy. Covered: every
@@ -360,7 +395,9 @@ side by side, with one ride or the same ride twice refused), **config** and
   similar rides (the loop's rides as the same route, a partly shared copy, rides without a
   route, effort ranking, bad requests) and the outdated-rides count; comparing (by distance
   by default, by time, four rides by prefix, smoothing, too few or many rides, the same ride
-  twice, unknown rides, a ride without distance).
+  twice, unknown rides, a ride without distance); the default time zone (zones listed, a ride
+  without one moving to the evening before in New York and back to UTC when cleared, rides
+  with their own untouched, unknown zones refused).
 - **Browser app unit tests** (`web/src/*.test.ts`): durations, distances, speeds, heights and
   weights in both unit systems, and weights typed in either; local versus UTC start times; the
   library's URL state (reading, writing, defaults, every filter, turning it into an API
@@ -386,6 +423,9 @@ side by side, with one ride or the same ride twice refused), **config** and
   - *Settings*: the theme button showing the system's mode until clicked, its hover hint,
     switching and staying switched across reloads and pages, header and Settings in sync;
     metric units switched in Settings only and applying everywhere.
+  - *Time zone*: choosing New York moves the ride without a time zone to the evening before;
+    clearing returns it to UTC; on a computer in Tokyo, one click picks Asia/Tokyo. The Zwift
+    ride is dated by its file name (in *Ride detail*).
   - *Similar rides*: the other rides on the loop listed as the same route, newest first, and
     opened; the effort tab reached with the arrow keys, closest first, no HR-only rides; the
     indoor ride (no GPS) and the Zwift ride (alone in Watopia) saying why there's nothing.
