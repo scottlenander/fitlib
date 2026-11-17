@@ -10,7 +10,7 @@ from fitlib.analysis.training import training
 from fitlib.models import AthleteEntry
 from tests.unit.conftest import ImportedLibrary
 
-ZWIFT = "zwift_watopia_steady_60min.fit"  # 2 Aug, 60 min at 200 W
+ZWIFT = "2025-08-02-08-29-42.fit"  # 2 Aug, 60 min at 200 W
 SMART = "garmin_nord_smart_recording.fit"  # 12 Aug, 30 min at 180 W
 NO_POWER = "garmin_nord_hr_no_power.fit"  # 16 Aug, no power meter
 INTERVALS = "garmin_nord_intervals_5x4.fit"  # 5 Aug

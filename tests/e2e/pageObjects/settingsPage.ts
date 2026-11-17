@@ -5,7 +5,7 @@ import { Stats } from './components/stats'
 export type AthleteValues = { from: string; ftp?: string; weight?: string; maxHr?: string }
 
 // Settings (/settings): the light/dark toggle (also in the header), the units switch (only
-// here) and the athlete history.
+// here), the default time zone and the athlete history.
 // The history table only appears once there is an entry.
 export class SettingsPage {
   readonly page: Page
@@ -15,6 +15,14 @@ export class SettingsPage {
   // Named "Light mode" or "Dark mode", the mode in use; clicking switches mode.
   readonly theme: Locator
   readonly metricUnits: Locator
+  readonly timeZoneForm: Locator
+  // The default time zone list: "None (show UTC)" or an IANA name such as America/New_York.
+  readonly timeZone: Locator
+  // "Use this computer's time zone (…)", naming the browser's zone.
+  readonly useComputersZone: Locator
+  readonly saveTimeZone: Locator
+  // "Saved: America/New York. 1 ride updated."
+  readonly timeZoneNotice: Locator
   readonly today: Stats
   readonly history: Locator
   readonly form: Locator
@@ -34,6 +42,13 @@ export class SettingsPage {
     this.display = page.getByTestId('display-settings')
     this.theme = this.display.getByRole('button', { name: THEME_NAME })
     this.metricUnits = this.display.getByRole('switch', { name: 'Metric units' })
+    this.timeZoneForm = page.getByTestId('timezone-form')
+    this.timeZone = this.timeZoneForm.getByLabel('Default time zone')
+    this.useComputersZone = this.timeZoneForm.getByRole('button', {
+      name: /^Use this computer's time zone/,
+    })
+    this.saveTimeZone = this.timeZoneForm.getByRole('button', { name: 'Save time zone' })
+    this.timeZoneNotice = this.timeZoneForm.getByTestId('form-notice')
     this.today = new Stats(page, 'athlete-today')
     this.history = page.getByRole('table', { name: 'Athlete history' })
     this.form = page.getByTestId('athlete-form')

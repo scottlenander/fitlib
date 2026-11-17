@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import shutil
+import zipfile
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -11,7 +12,8 @@ from pathlib import Path
 import pytest
 
 from fitlib.importer import Importer, ImportReport, overlap_fraction
-from fitlib.models import Bike, BikeDefault, BikeSlot, Ride, Source
+from fitlib.ingest.localtime import DEFAULT_ZONE_SETTING
+from fitlib.models import Bike, BikeDefault, BikeSlot, OffsetSource, Ride, Source
 from fitlib.store.interfaces import BlobStore, CatalogStore
 from fitlib.store.local import FsBlobStore, SqliteCatalog
 from fitlib.store.memory import MemoryBlobStore, MemoryCatalog
@@ -21,7 +23,7 @@ from tests.fixtures.specs import RIDES, ride
 from tests.unit.factories import make_summary
 
 IMPORTED = sorted(
-    f"{s.zip_name}.zip:{s.name}.fit" if s.zip_name else f"{s.name}.fit"
+    f"{s.zip_name}.zip:{s.fit_name}" if s.zip_name else s.fit_name
     for s in RIDES
     if s.sport == "cycling" and s.name != "zwift_watopia_steady_60min_head_unit"
 )
@@ -83,11 +85,11 @@ def test_importing_the_fixture_folder(library: Library):
 
     Given: the fixture folder (8 importable rides incl. two in a zip, a byte-identical copy,
     a run, a second recording of the Zwift ride, and a truncated file).
-    Expect: the 8 rides imported; the copy a duplicate; the run and the second recording
+    Expect: the 9 rides imported; the copy a duplicate; the run and the second recording
     skipped with reasons; the truncated file failed with a reason.
     """
     report = library.importer().run([FIT_DIR])
-    zwift_id = dict(report.imported)["zwift_watopia_steady_60min.fit"]
+    zwift_id = dict(report.imported)["2025-08-02-08-29-42.fit"]
 
     assert sorted(name for name, _ in report.imported) == IMPORTED
     assert report.duplicates == [
@@ -99,23 +101,23 @@ def test_importing_the_fixture_folder(library: Library):
     ], "the run and the second recording of the Zwift ride should be skipped"
     assert [name for name, _ in report.failed] == ["corrupt_truncated.fit"]
     assert "not a readable FIT file" in report.failed[0][1]
-    assert library.catalog.count() == 8
+    assert library.catalog.count() == 9
 
 
 def test_reimporting_imports_nothing(library: Library):
     """Running the same import again is safe: files already imported are duplicates.
 
     Given: the fixture folder imported once.
-    Expect: a second run imports 0 rides; the 8 rides and the copy are duplicates; the
-    catalog still holds 8 rides.
+    Expect: a second run imports 0 rides; the 9 rides and the copy are duplicates; the
+    catalog still holds 9 rides.
     """
     library.importer().run([FIT_DIR])
 
     again = library.importer().run([FIT_DIR])
 
     assert again.imported == [], "nothing should be imported twice"
-    assert len(again.duplicates) == 9, "8 imported rides plus the byte-identical copy"
-    assert library.catalog.count() == 8
+    assert len(again.duplicates) == 10, "9 imported rides plus the byte-identical copy"
+    assert library.catalog.count() == 9
 
 
 def test_raw_files_and_streams_are_stored(library: Library):
@@ -131,9 +133,9 @@ def test_raw_files_and_streams_are_stored(library: Library):
     raw = library.blobs.list("raw/")
     streams = library.blobs.list("streams/")
 
-    assert len(raw) == 9, "8 imported rides + the archived overlapping recording"
+    assert len(raw) == 10, "9 imported rides + the archived overlapping recording"
     assert all(library.blobs.exists(raw_key(r.sha256)) for r in rides)
-    assert len(streams) == 8
+    assert len(streams) == 9
     for r in rides:
         frame = library.streams.get(r.id, r.summary.start)
         assert frame.height == r.summary.elapsed_s, f"stream length for {r.source_name}"
@@ -149,13 +151,13 @@ def test_imported_rides_are_summarised(library: Library):
     """
     report = library.importer().run([FIT_DIR])
 
-    zwift = library.ride_from("zwift_watopia_steady_60min.fit", report)
+    zwift = library.ride_from("2025-08-02-08-29-42.fit", report)
     paused = library.ride_from("garmin_nord_pause_10min.fit", report)
     zipped = library.ride_from("garmin_export.zip:garmin_export_ride_a.fit", report)
 
     assert (zwift.summary.source, zwift.summary.indoor) == (Source.ZWIFT, True)
     assert (zwift.summary.moving_s, zwift.summary.avg_power) == (3600, 200)
-    assert zwift.display_name == "Zwift ride, 2 Aug 2025"
+    assert zwift.display_name == "Zwift 2025-08-02 08:30"
     assert zwift.imported_at == NOW
     assert paused.summary.device == "Garmin Edge 540"
     assert paused.summary.utc_offset_s == 7200, "Garmin rides record local time (CEST)"
@@ -179,7 +181,7 @@ def test_progress_is_reported_once_per_file(library: Library):
         + [n for n, _ in report.skipped]
         + [n for n, _ in report.failed]
     )
-    assert len(seen) == 12
+    assert len(seen) == 13
 
 
 def test_process_pool_gives_the_same_result(library: Library):
@@ -209,10 +211,10 @@ def test_first_recording_of_a_ride_is_kept(tmp_path: Path, library: Library):
     garmin = library.importer().run([FIT_DIR / "zwift_watopia_steady_60min_head_unit.fit"])
     garmin_id = garmin.imported[0][1]
 
-    zwift = library.importer().run([FIT_DIR / "zwift_watopia_steady_60min.fit"])
+    zwift = library.importer().run([FIT_DIR / "2025-08-02-08-29-42.fit"])
 
     assert zwift.imported == []
-    assert zwift.skipped == [("zwift_watopia_steady_60min.fit", f"overlaps ride {garmin_id[:8]}")]
+    assert zwift.skipped == [("2025-08-02-08-29-42.fit", f"overlaps ride {garmin_id[:8]}")]
 
 
 @pytest.mark.parametrize(
@@ -346,7 +348,7 @@ def test_new_rides_get_the_dated_default_bike(library: Library):
 
     assert bike_of("garmin_nord_intervals_5x4.fit") == "Giant"
     assert bike_of("garmin_nord_smart_recording.fit") == "Tarmac"
-    assert bike_of("zwift_watopia_steady_60min.fit") == "Kickr"
+    assert bike_of("2025-08-02-08-29-42.fit") == "Kickr"
     assert bike_of("garmin_indoor_no_hr.fit") is None, "there is no indoor default"
 
 
@@ -361,9 +363,63 @@ def test_imported_rides_get_route_fingerprints(library: Library):
     ids = dict(report.imported)
 
     nord = library.catalog.route_cells(ids["garmin_nord_intervals_5x4.fit"])
-    zwift = library.catalog.route_cells(ids["zwift_watopia_steady_60min.fit"])
+    zwift = library.catalog.route_cells(ids["2025-08-02-08-29-42.fit"])
     indoor = library.catalog.route_cells(ids["garmin_indoor_no_hr.fit"])
 
     assert nord and zwift, "rides with positions should have route cells"
     assert not nord & zwift, "the two loops are on opposite sides of the world"
     assert indoor == frozenset()
+
+
+# -- time zones -------------------------------------------------------------------------------
+
+ZWIFT_FILE = "2025-08-02-08-29-42.fit"
+
+
+def test_a_zwift_ride_takes_its_time_zone_from_its_file_name(library: Library):
+    """Zwift's 1989 local time is ignored and its file name, the local start, is used.
+
+    Given: the Zwift fixture, named 2025-08-02-08-29-42.fit and starting 06:30:00 UTC.
+    Expect: +2 h (CEST), from the file name; its file name stored as written.
+    """
+    report = library.importer().run([FIT_DIR / ZWIFT_FILE])
+    zwift = library.ride_from(ZWIFT_FILE, report)
+
+    assert zwift.summary.utc_offset_s == 2 * 3600
+    assert zwift.summary.utc_offset_source == OffsetSource.FILE_NAME
+    assert zwift.source_name == ZWIFT_FILE
+
+
+def test_a_renamed_file_uses_the_default_time_zone(library: Library, tmp_path: Path):
+    """Without a local time or a dated name, the library's default time zone is used.
+
+    Given: the Zwift fixture copied as "morning ride.fit", with the default set to New York.
+    Expect: New York's summer offset, -4 h, from the default.
+    """
+    renamed = tmp_path / "morning ride.fit"
+    shutil.copy(FIT_DIR / ZWIFT_FILE, renamed)
+    library.catalog.set_setting(DEFAULT_ZONE_SETTING, "America/New_York")
+
+    report = library.importer().run([renamed])
+    zwift = library.ride_from("morning ride.fit", report)
+
+    assert zwift.summary.utc_offset_s == -4 * 3600
+    assert zwift.summary.utc_offset_source == OffsetSource.DEFAULT
+
+
+def test_a_file_in_a_zip_is_named_without_the_zip(library: Library, tmp_path: Path):
+    """A dated file inside a zip is matched by its own name.
+
+    Given: the Zwift fixture inside "export.zip" under a "rides/" folder.
+    Expect: +2 h from its name; stored as just its file name.
+    """
+    archive = tmp_path / "export.zip"
+    with zipfile.ZipFile(archive, "w") as zipped:
+        zipped.write(FIT_DIR / ZWIFT_FILE, f"rides/{ZWIFT_FILE}")
+
+    report = library.importer().run([archive])
+    [(_, ride_id)] = report.imported
+    ride = library.catalog.get_ride(ride_id)
+
+    assert ride.summary.utc_offset_s == 2 * 3600
+    assert ride.source_name == ZWIFT_FILE

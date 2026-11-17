@@ -33,7 +33,7 @@ class ImportedLibrary:
         """Look up the ride imported from a fixture file.
 
         Args:
-            file_name: The fixture's file name, e.g. ``"zwift_watopia_steady_60min.fit"``.
+            file_name: The fixture's file name, e.g. ``"2025-08-02-08-29-42.fit"``.
 
         Returns:
             The ride, loaded from the catalog.

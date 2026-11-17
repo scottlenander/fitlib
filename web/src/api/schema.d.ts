@@ -514,16 +514,70 @@ export interface paths {
     }
     /**
      * Get Settings
-     * @description Return the settings from the config file.
+     * @description Return the settings the browser app needs.
      *
      *     Args:
      *         config: The app's config.
+     *         stores: The library's stores.
      *
      *     Returns:
-     *         The default units and the library folder.
+     *         The default units, the library folder and the default time zone.
      */
     get: operations['get_settings_api_settings_get']
     put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/settings/time-zones': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * List Time Zones
+     * @description List the time zones that can be the default.
+     *
+     *     Returns:
+     *         IANA names, sorted.
+     */
+    get: operations['list_time_zones_api_settings_time_zones_get']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/settings/timezone': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    /**
+     * Put Time Zone
+     * @description Set or clear the default time zone, updating the rides that follow it.
+     *
+     *     Args:
+     *         stores: The library's stores.
+     *         change: The new zone, or ``null``.
+     *
+     *     Returns:
+     *         How many rides changed, and how many may need their default bike checked.
+     *
+     *     Raises:
+     *         UnknownTimeZone: Not a known zone (a 422; nothing changes).
+     */
+    put: operations['put_time_zone_api_settings_timezone_put']
     post?: never
     delete?: never
     options?: never
@@ -1222,10 +1276,14 @@ export interface components {
      *     Attributes:
      *         units: The default units for showing figures. The app may let the viewer switch.
      *         library: The library folder, for display.
+     *         timezone: The library's default time zone (an IANA name such as
+     *             ``"America/New_York"``), for rides whose files don't say; ``null`` for none.
      */
     Settings: {
       /** Library */
       library: string
+      /** Timezone */
+      timezone: string | null
       units: components['schemas']['Units']
     }
     /**
@@ -1317,6 +1375,36 @@ export interface components {
       name: string
       /** Rides */
       rides: number
+    }
+    /**
+     * TimeZoneChange
+     * @description What changing the default time zone did.
+     *
+     *     Attributes:
+     *         timezone: The new default, or ``null``.
+     *         updated: Rides whose time zone changed (those without one of their own).
+     *         bikes_to_check: Of those, rides now on another day whose bike came from a default
+     *             bike: "Apply defaults" on the Bikes page brings their bike in line.
+     */
+    TimeZoneChange: {
+      /** Bikes To Check */
+      bikes_to_check: number
+      /** Timezone */
+      timezone: string | null
+      /** Updated */
+      updated: number
+    }
+    /**
+     * TimeZoneIn
+     * @description A new default time zone.
+     *
+     *     Attributes:
+     *         timezone: An IANA name such as ``"America/New_York"`` (one of
+     *             ``GET /api/settings/time-zones``), or ``null`` for none (UTC).
+     */
+    TimeZoneIn: {
+      /** Timezone */
+      timezone: string | null
     }
     /**
      * TrainingOut
@@ -1991,6 +2079,59 @@ export interface operations {
         }
         content: {
           'application/json': components['schemas']['Settings']
+        }
+      }
+    }
+  }
+  list_time_zones_api_settings_time_zones_get: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': string[]
+        }
+      }
+    }
+  }
+  put_time_zone_api_settings_timezone_put: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['TimeZoneIn']
+      }
+    }
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['TimeZoneChange']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
         }
       }
     }

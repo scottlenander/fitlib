@@ -78,12 +78,12 @@ def test_import_reports_counts_and_problem_files(config: Path):
 
     Given: the fixture folder, which includes a run, an overlapping recording and a
     truncated file.
-    Expect: "Imported 8, already in library 1, skipped 2, failed 1", the problem files named
+    Expect: "Imported 9, already in library 1, skipped 2, failed 1", the problem files named
     with reasons, and exit code 1 because a file failed.
     """
     result = run(config, "import", str(FIT_DIR), "--workers", "1")
 
-    assert "Imported 8, already in library 1, skipped 2, failed 1." in result.output
+    assert "Imported 9, already in library 1, skipped 2, failed 1." in result.output
     assert "not a ride (running)" in result.output
     assert "corrupt_truncated.fit" in result.output
     assert result.exit_code == EXIT_IMPORT_FAILURES, "a failed file should give exit code 1"
@@ -121,16 +121,16 @@ def test_list_shows_newest_first(imported: Path):
     """``fitlib list`` shows rides newest first with their figures and a count.
 
     Given: the imported fixture library.
-    Expect: 8 rows, the newest (24 Aug) first and the Zwift ride (2 Aug) last, and
-    "Showing 1–8 of 8."
+    Expect: 9 rows, the newest (24 Aug) first and the Zwift ride (2 Aug) last, and
+    "Showing 1–9 of 9."
     """
     result = run(imported, "list")
     lines = [line for line in result.output.splitlines() if re.match(r"^\s*[0-9a-f]{8}\s", line)]
 
-    assert len(lines) == 8
+    assert len(lines) == 9
     assert "2025-08-24" in lines[0], "the newest ride should be first"
-    assert "Zwift ride, 2 Aug 2025" in lines[-1]
-    assert "Showing 1–8 of 8." in result.output
+    assert "Zwift 2025-08-02 08:30" in lines[-1]
+    assert "Showing 1–9 of 9." in result.output
     assert result.exit_code == 0
 
 
@@ -142,7 +142,7 @@ def test_list_shows_newest_first(imported: Path):
         (["--outdoor", "--min-minutes", "40"], 2),
         (["--since", "2025-08-20"], 2),
         (["--text", "edge"], 7),
-        (["--limit", "3", "--offset", "6"], 2),
+        (["--limit", "3", "--offset", "7"], 2),
     ],
     ids=["source", "indoor", "outdoor-long", "since", "text", "page"],
 )
@@ -150,7 +150,7 @@ def test_list_filters(imported: Path, args: list[str], expected_rows: int):
     """Each ``list`` option narrows or pages the results.
 
     Given: the imported library: 1 Zwift ride, 7 Garmin rides (1 indoor; 2 outdoor rides of
-    40 min or more; 2 rides on or after 20 Aug).
+    40 min or more; 2 rides on or after 20 Aug) and 1 Wahoo ride (outdoor, 25 min).
     Expect: the stated number of rows for each option.
     """
     result = run(imported, "list", *args)
@@ -183,7 +183,7 @@ def test_show_prints_a_readable_summary(imported: Path):
 
     result = run(imported, "show", prefix)
 
-    assert "Garmin ride, 5 Aug 2025" in result.output
+    assert "Garmin 2025-08-05 19:00" in result.output
     assert "Tue 05 Aug 2025, 19:00" in result.output, "start time should be local (CEST)"
     assert "Garmin Edge 540" in result.output
     assert "187 W avg, 300 W max" in result.output
@@ -458,7 +458,7 @@ def test_default_bikes_on_import_and_backfill(config: Path):
 
     Given: the fixtures imported before any bikes exist; then Giant as outdoor default from
     1 Jan, Tarmac from 10 Aug, Kickr for Zwift; ``backfill --dry-run`` then ``backfill``.
-    Expect: the dry run reports Giant 2, Kickr 1, Tarmac 4 without changing anything;
+    Expect: the dry run reports Giant 2, Kickr 1, Tarmac 5 without changing anything;
     ``bikes list`` then shows those counts; ``bikes defaults`` lists the timeline.
     """
     run(config, "import", str(FIT_DIR), "--workers", "1")
@@ -476,7 +476,7 @@ def test_default_bikes_on_import_and_backfill(config: Path):
 
     assert "Would set Giant Contend 1 on 2 ride(s)." in dry.output
     assert re.search(r"Tarmac SL7\s+–\s+0\s", before.output), "a dry run changes nothing"
-    assert "Set Tarmac SL7 on 4 ride(s)." in done.output
+    assert "Set Tarmac SL7 on 5 ride(s)." in done.output
     assert re.search(r"Giant Contend 1\s+–\s+2\s", after.output)
     assert re.search(r"Kickr\s+–\s+1\s", after.output)
     assert re.search(r"outdoor\s+2025-08-10\s+Tarmac SL7", timeline.output)
@@ -536,10 +536,10 @@ def test_tags_and_list_filters(imported: Path):
 def test_editing_the_bike_protects_it_from_backfill(config: Path):
     """A bike set with ``fitlib edit`` is the user's and is kept when defaults change.
 
-    Given: Scott Addict as the outdoor default from 2000 when the fixtures are imported (6
+    Given: Scott Addict as the outdoor default from 2000 when the fixtures are imported (7
     outdoor rides); the 12 Aug ride then set by hand to the Giant; then the Giant made the
     outdoor default and a backfill run.
-    Expect: ``show`` marks Scott on the 9 Aug ride as "(default)"; the backfill moves the 5
+    Expect: ``show`` marks Scott on the 9 Aug ride as "(default)"; the backfill moves the 6
     other outdoor rides to the Giant; the hand-set ride shows its bike without "(default)".
     """
     run(config, "bikes", "add", "Scott Addict", "--default-for", "outdoor", "--from",
@@ -557,7 +557,7 @@ def test_editing_the_bike_protects_it_from_backfill(config: Path):
     bike_line = next(line for line in hand_set.output.splitlines() if line.startswith("Bike:"))
 
     assert "Bike: Scott Addict (default)" in before.output
-    assert "Set Giant Contend 1 on 5 ride(s)." in moved.output, "6 outdoor rides, 1 by hand"
+    assert "Set Giant Contend 1 on 6 ride(s)." in moved.output, "7 outdoor rides, 1 by hand"
     assert bike_line == "Bike: Giant Contend 1", "a hand-set bike has no (default) marker"
 
 
@@ -718,7 +718,7 @@ def test_similar_lists_rides_on_the_same_route(imported: Path):
     result = run(imported, "similar", ride_id)
 
     assert result.exit_code == 0, result.output
-    assert "Rides on the route of Garmin ride, 5 Aug 2025" in result.output
+    assert "Rides on the route of Garmin 2025-08-05 19:00" in result.output
     assert len(ride_ids(result.output)) == 5
     assert result.output.count("100%") == 5 and result.output.count(" same ") == 5
 
@@ -734,16 +734,16 @@ def test_similar_efforts(imported: Path):
     result = run(imported, "similar", ride_id, "--effort", "--limit", "2")
 
     assert result.exit_code == 0, result.output
-    assert "Similar efforts to Garmin ride, 24 Aug 2025" in result.output
+    assert "Similar efforts to Garmin 2025-08-24 09:00" in result.output
     rows = [line for line in result.output.splitlines() if re.match(r"^\s*[0-9a-f]{8}\s", line)]
     assert len(rows) == 2
-    assert "Garmin ride, 12 Aug 2025" in rows[0], "the closest effort should come first"
+    assert "Garmin 2025-08-12 20:00" in rows[0], "the closest effort should come first"
 
 
 @pytest.mark.parametrize(
     ("day", "message"),
     [
-        ("2025-08-02", "No other rides share the route of Zwift ride, 2 Aug 2025"),
+        ("2025-08-02", "No other rides share the route of Zwift 2025-08-02 08:30"),
         ("2025-08-19", "has no GPS positions, so it has no route to match"),
     ],
     ids=["alone-on-route", "no-gps"],
@@ -792,8 +792,8 @@ def test_compare_prints_figures_side_by_side(imported: Path):
 
     assert result.exit_code == 0, result.output
     assert a in result.output and b in result.output
-    assert "Garmin ride, 23 Aug 2025" in result.output
-    assert "Garmin ride, 24 Aug 2025" in result.output
+    assert "Garmin 2025-08-23 09:00" in result.output
+    assert "Garmin 2025-08-24 09:00" in result.output
     for row in ("Distance", "NP", "TSS", "Best 20 min"):
         assert re.search(rf"^\s*{row}\s", result.output, re.MULTILINE), f"should have {row}"
     assert " km" in result.output, "should show distance in kilometres"
@@ -816,6 +816,47 @@ def test_compare_needs_two_to_four_different_rides(imported: Path, days: list[st
     ids = [ride_id_on(imported, day) for day in days]
 
     result = run(imported, "compare", *ids)
+
+    assert result.exit_code == 2
+    assert message in result.output
+
+
+# -- timezone ---------------------------------------------------------------------------------
+
+
+def test_timezone_shows_sets_and_clears_the_default(imported: Path):
+    """``fitlib timezone`` shows the default, sets it, and clears it.
+
+    Given: the imported fixtures, where only the Wahoo ride has no time zone of its own.
+    Expect: "none (UTC)" at first; set to New York with 1 ride updated; shown afterwards;
+        cleared back to none, updating it again.
+    """
+    shown = run(imported, "timezone")
+    set_ = run(imported, "timezone", "America/New_York")
+    after = run(imported, "timezone")
+    cleared = run(imported, "timezone", "--clear")
+
+    assert shown.exit_code == 0 and "Default time zone: none (UTC)" in shown.output
+    assert "Default time zone: America/New_York. Updated 1 ride." in set_.output
+    assert "Default time zone: America/New_York" in after.output
+    assert "Default time zone: none (UTC). Updated 1 ride." in cleared.output
+
+
+@pytest.mark.parametrize(
+    ("args", "message"),
+    [
+        (["Mars/Olympus_Mons"], "Unknown time zone 'Mars/Olympus_Mons'"),
+        (["Europe/Paris", "--clear"], "Give a time zone or --clear, not both"),
+    ],
+    ids=["unknown-zone", "zone-and-clear"],
+)
+def test_timezone_refuses_bad_input(imported: Path, args: list[str], message: str):
+    """An unknown zone, or a zone with --clear, is an error.
+
+    Given: each bad combination.
+    Expect: exit code 2 and a message saying what's wrong.
+    """
+    result = run(imported, "timezone", *args)
 
     assert result.exit_code == 2
     assert message in result.output

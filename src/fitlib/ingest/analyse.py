@@ -54,13 +54,17 @@ class Failed:
     reason: str
 
 
-def analyse(data: bytes) -> Analysed | NotARide | Failed:
+def analyse(
+    data: bytes, name: str | None = None, default_zone: str | None = None
+) -> Analysed | NotARide | Failed:
     """Decode, normalize and summarize one file.
 
     Runs in a worker process, so it touches no stores and returns plain, picklable values.
 
     Args:
         data: The .fit file's bytes.
+        name: The file's name (no folders), for a time zone when the file has none.
+        default_zone: The library's default time zone, for when neither has one.
 
     Returns:
         The ride's summary, stream and route; or that it isn't a ride; or why it failed (unreadable,
@@ -75,4 +79,6 @@ def analyse(data: bytes) -> Analysed | NotARide | Failed:
     frame = to_frame(decoded.records)
     if frame.is_empty():
         return Failed("the file has no recorded data")
-    return Analysed(summarize(decoded, frame), to_parquet(frame), fingerprint(frame))
+    return Analysed(
+        summarize(decoded, frame, name, default_zone), to_parquet(frame), fingerprint(frame)
+    )

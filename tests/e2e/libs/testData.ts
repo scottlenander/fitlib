@@ -45,6 +45,14 @@ export class TestData {
     await this.post(`rides/${rideId}/delete`)
   }
 
+  // Removes the library's default time zone (the time zone spec owns this setting).
+  async clearTimeZone() {
+    const response = await this.request.put('/api/settings/timezone', {
+      data: { timezone: null },
+    })
+    this.check(response.ok(), 'PUT /api/settings/timezone', response.status())
+  }
+
   private async post(path: string) {
     const response = await this.request.post(`/e2e/${path}`)
     this.check(response.ok(), `POST /e2e/${path}`, response.status())

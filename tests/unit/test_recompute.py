@@ -5,12 +5,12 @@ from __future__ import annotations
 from dataclasses import replace
 
 from fitlib.ingest.summarize import METRICS_VERSION
-from fitlib.models import RideMeta
+from fitlib.models import OffsetSource, RideMeta
 from fitlib.recompute import Recomputer
 from fitlib.store.streams import raw_key
 from tests.unit.conftest import ImportedLibrary
 
-ZWIFT = "zwift_watopia_steady_60min.fit"
+ZWIFT = "2025-08-02-08-29-42.fit"
 
 
 def downgrade(lib: ImportedLibrary, file_name: str) -> str:
@@ -76,7 +76,8 @@ def test_recompute_repairs_a_zwift_ride_dated_1989(imported: ImportedLibrary):
 
     Given: the Zwift ride stored at version 3 with the offset older versions worked out from
         its 1989-12-31 local time (about -35 years), so it showed as 30 Dec 1989.
-    Expect: it is outdated; after recompute it has no offset and is dated 2 Aug 2025.
+    Expect: it is outdated; after recompute its time zone comes from its file name
+        (2025-08-02-08-29-42, CEST: +2 h) and it is dated 2 Aug 2025.
     """
     ride = imported.ride(ZWIFT)
     broken = replace(ride.summary, utc_offset_s=-1_123_054_200)
@@ -89,8 +90,9 @@ def test_recompute_repairs_a_zwift_ride_dated_1989(imported: ImportedLibrary):
 
     assert broken.local_start is not None and broken.local_start.year == 1989
     assert outdated == [ride.id]
-    assert after.summary.utc_offset_s is None
-    assert after.display_name == "Zwift ride, 2 Aug 2025"
+    assert after.summary.utc_offset_s == 2 * 3600
+    assert after.summary.utc_offset_source == OffsetSource.FILE_NAME
+    assert after.display_name == "Zwift 2025-08-02 08:30"
 
 
 def test_recompute_gives_a_zwift_ride_its_distance(imported: ImportedLibrary):

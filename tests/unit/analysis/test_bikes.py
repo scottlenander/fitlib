@@ -29,15 +29,15 @@ def set_up_bikes(lib: ImportedLibrary) -> None:
 def test_backfill_follows_the_dated_defaults(imported: ImportedLibrary):
     """Rides without a bike get the default for their kind and date.
 
-    Given: the imported fixtures (no bikes yet): outdoor rides on 5 and 9 Aug and on 12, 16,
-    23 and 24 Aug; a Zwift ride on 2 Aug; a Garmin indoor ride with no indoor default.
-    Expect: Giant on 2 rides, Tarmac on 4, Kickr on 1; the indoor ride stays without a bike.
+    Given: the imported fixtures (no bikes yet): outdoor rides on 5 and 9 Aug and on 11, 12,
+    16, 23 and 24 Aug; a Zwift ride on 2 Aug; a Garmin indoor ride with no indoor default.
+    Expect: Giant on 2 rides, Tarmac on 5, Kickr on 1; the indoor ride stays without a bike.
     """
     set_up_bikes(imported)
 
     assigned = backfill_bikes(imported.catalog)
 
-    assert dict(assigned) == {GIANT.id: 2, TARMAC.id: 4, KICKR.id: 1}
+    assert dict(assigned) == {GIANT.id: 2, TARMAC.id: 5, KICKR.id: 1}
     without = imported.catalog.search(Filters(has_bike=False)).items
     assert [r.source_name for r in without] == ["garmin_indoor_no_hr.fit"], (
         "only the indoor ride, which has no default, should be left without a bike"
@@ -65,7 +65,7 @@ def test_dry_run_changes_nothing_and_repeat_finds_nothing(imported: ImportedLibr
     """A dry run only counts; running twice changes nothing the second time.
 
     Given: the defaults; a dry run, then a real run, then another real run.
-    Expect: the dry run reports 7 rides and leaves 8 without a bike; the second real run
+    Expect: the dry run reports 8 rides and leaves 9 without a bike; the second real run
     assigns nothing.
     """
     set_up_bikes(imported)
@@ -75,8 +75,8 @@ def test_dry_run_changes_nothing_and_repeat_finds_nothing(imported: ImportedLibr
     backfill_bikes(imported.catalog)
     again = backfill_bikes(imported.catalog)
 
-    assert sum(planned.values()) == 7
-    assert untouched == 8, "a dry run should not change any ride"
+    assert sum(planned.values()) == 8
+    assert untouched == 9, "a dry run should not change any ride"
     assert not again, "nothing should be left to backfill"
 
 
@@ -128,4 +128,4 @@ def test_backfill_clears_default_bikes_no_default_covers(imported: ImportedLibra
     changed = backfill_bikes(imported.catalog)
 
     assert dict(changed) == {NO_BIKE: 1}
-    assert imported.ride("zwift_watopia_steady_60min.fit").meta.bike_id is None
+    assert imported.ride("2025-08-02-08-29-42.fit").meta.bike_id is None

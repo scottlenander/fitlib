@@ -16,7 +16,7 @@ from tests.fixtures.generate import FIT_DIR
 from tests.fixtures.specs import ride
 
 PAUSE = "garmin_nord_pause_10min.fit"
-ZWIFT = "zwift_watopia_steady_60min.fit"
+ZWIFT = "2025-08-02-08-29-42.fit"
 
 
 def upload(client: TestClient, *files: tuple[str, bytes]) -> dict:
@@ -195,12 +195,16 @@ def test_import_logs_never_contain_coordinates(
 def test_settings_report_the_configured_units(tmp_path: Path, units: Units):
     """The browser app learns the default units and library folder from the config.
 
-    Given: a config with imperial or metric units.
-    Expect: those units and the library folder.
+    Given: a config with imperial or metric units, and a new library.
+    Expect: those units, the library folder, and no default time zone.
     """
     config = Config(library=tmp_path / "library", units=units)
 
     with TestClient(create_app(config, workers=1)) as client:
         response = client.get("/api/settings")
 
-    assert response.json() == {"units": units.value, "library": str(tmp_path / "library")}
+    assert response.json() == {
+        "units": units.value,
+        "library": str(tmp_path / "library"),
+        "timezone": None,
+    }

@@ -10,10 +10,11 @@ from fitlib.ingest.normalize import VALUE_COLUMNS
 from fitlib.store.factory import open_stores
 from tests.api.conftest import Api
 
-ZWIFT = "zwift_watopia_steady_60min.fit"
+ZWIFT = "2025-08-02-08-29-42.fit"
 INTERVALS = "garmin_nord_intervals_5x4.fit"
 HR_ONLY = "garmin_nord_hr_no_power.fit"
 INDOOR = "garmin_indoor_no_hr.fit"
+NO_TIME_ZONE = "other_ride_no_time_zone.fit"  # no power or heart rate
 RIDE_B = "garmin_export.zip:garmin_export_ride_b.fit"
 
 
@@ -37,15 +38,15 @@ def names(api: Api, items: list[dict]) -> set[str]:
 def test_list_returns_every_ride_newest_first(reader: Api):
     """With no filters, every ride comes back, newest first.
 
-    Given: the 8 imported fixture rides.
-    Expect: all 8, sorted by start time descending, starting with the latest export ride.
+    Given: the 9 imported fixture rides.
+    Expect: all 9, sorted by start time descending, starting with the latest export ride.
     """
     response = reader.client.get("/api/rides")
 
     body = response.json()
     starts = [item["start"] for item in body["items"]]
     assert response.status_code == 200
-    assert body["total"] == 8
+    assert body["total"] == 9
     assert starts == sorted(starts, reverse=True), "rides should be newest first"
     assert body["items"][0]["id"] == reader.ids[RIDE_B]
 
@@ -61,7 +62,7 @@ def test_list_pages_through_the_same_order(reader: Api):
     page = reader.client.get("/api/rides", params={"offset": 3, "limit": 3}).json()
 
     assert [i["id"] for i in page["items"]] == [i["id"] for i in everything[3:6]]
-    assert (page["total"], page["offset"], page["limit"]) == (8, 3, 3)
+    assert (page["total"], page["offset"], page["limit"]) == (9, 3, 3)
 
 
 def test_list_sorts_by_duration_ascending(reader: Api):
@@ -81,7 +82,7 @@ def test_list_sorts_by_duration_ascending(reader: Api):
     [
         ({"source": "zwift"}, {ZWIFT}),
         ({"indoor": True}, {ZWIFT, INDOOR}),
-        ({"has_power": False}, {HR_ONLY}),
+        ({"has_power": False}, {HR_ONLY, NO_TIME_ZONE}),
         ({"min_duration_s": 3600}, {ZWIFT, INTERVALS}),
         ({"since": "2025-08-16", "until": "2025-08-20"}, {HR_ONLY, INDOOR}),
         ({"source": "garmin", "indoor": True, "has_power": True}, {INDOOR}),
@@ -134,13 +135,13 @@ def test_list_items_carry_estimated_tss(reader: Api):
     """Without an FTP set, rides with power get TSS from an estimated FTP.
 
     Given: the fixture library, which has no athlete history.
-    Expect: every ride with power has a TSS marked estimated; the HR-only ride has none.
+    Expect: every ride with power has a TSS marked estimated; the two without power have none.
     """
     response = reader.client.get("/api/rides")
 
     items = {item["id"]: item for item in response.json()["items"]}
-    hr_only = items.pop(reader.ids[HR_ONLY])
-    assert hr_only["tss"] is None
+    without_power = [items.pop(reader.ids[name]) for name in (HR_ONLY, NO_TIME_ZONE)]
+    assert [i["tss"] for i in without_power] == [None, None]
     assert all(i["tss"] is not None and i["ftp_estimated"] for i in items.values()), (
         "every ride with power should have an estimated TSS"
     )
@@ -162,7 +163,7 @@ def test_detail_by_full_id_and_by_prefix(reader: Api):
 
     assert full == short
     assert full["id"] == ride_id
-    assert full["name"] == "Zwift ride, 2 Aug 2025"
+    assert full["name"] == "Zwift 2025-08-02 08:30"
     assert (full["moving_s"], full["source"], full["indoor"]) == (3600, "zwift", True)
 
 

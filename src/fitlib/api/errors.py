@@ -9,6 +9,7 @@ from __future__ import annotations
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
+from fitlib.ingest.localtime import UnknownTimeZone
 from fitlib.metadata import InvalidTag
 from fitlib.store.interfaces import (
     AmbiguousBike,
@@ -27,6 +28,7 @@ STATUS: dict[type[Exception], int] = {
     AmbiguousBike: 409,
     DuplicateBike: 409,
     InvalidTag: 422,
+    UnknownTimeZone: 422,
 }
 
 

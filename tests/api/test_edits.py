@@ -6,7 +6,7 @@ import pytest
 
 from tests.api.conftest import Api
 
-ZWIFT = "zwift_watopia_steady_60min.fit"
+ZWIFT = "2025-08-02-08-29-42.fit"
 INTERVALS = "garmin_nord_intervals_5x4.fit"
 
 

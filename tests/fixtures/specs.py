@@ -20,6 +20,8 @@ class Source(StrEnum):
 
     ZWIFT = "zwift"
     GARMIN = "garmin"
+    # Another maker's computer (written as Wahoo).
+    OTHER = "other"
 
 
 @dataclass(frozen=True)
@@ -66,6 +68,12 @@ WATOPIA_LON = 166.95
 
 NORD_LOOP = Loop(
     NORD_LAT, NORD_LON, lap_length_m=5_000, base_altitude_m=30, altitude_amplitude_m=10
+)
+# Near Ypres, about 45 km from the Nord loop: no other ride shares its route.
+YPRES_LAT = 50.85
+YPRES_LON = 2.88
+YPRES_LOOP = Loop(
+    YPRES_LAT, YPRES_LON, lap_length_m=6_000, base_altitude_m=20, altitude_amplitude_m=5
 )
 WATOPIA_LOOP = Loop(
     WATOPIA_LAT, WATOPIA_LON, lap_length_m=9_000, base_altitude_m=10, altitude_amplitude_m=20
@@ -123,6 +131,7 @@ class RideSpec:
             epoch), for devices that write one that isn't a real time.
         zwift_records: Write records as Zwift does: speed only as ``enhanced_speed`` and the
             odometer (``distance``) only on the first record.
+        file_name: The file's name, if not ``<name>.fit``.
     """
 
     name: str
@@ -153,6 +162,17 @@ class RideSpec:
     # Zwift fills in speed every second (as enhanced_speed) but the odometer almost never, so
     # distance has to come from adding up the speed.
     zwift_records: bool = False
+    # Zwift names each file after the PC's local clock when the ride started.
+    file_name: str | None = None
+
+    @property
+    def fit_name(self) -> str:
+        """The file's name as written to the fixture folder (or inside its zip).
+
+        Returns:
+            ``file_name``, or ``<name>.fit``.
+        """
+        return self.file_name or f"{self.name}.fit"
 
     @property
     def duration_s(self) -> int:
@@ -276,6 +296,8 @@ RIDES: tuple[RideSpec, ...] = (
         source=Source.ZWIFT,
         raw_local_timestamp=0,
         zwift_records=True,
+        # Started 06:30:00 UTC; named 18 s earlier on a PC in CEST, as Zwift does.
+        file_name="2025-08-02-08-29-42.fit",
         start=ZWIFT_STEADY_START,
         segments=(Segment(seconds=3600, power=200),),
         loop=WATOPIA_LOOP,
@@ -337,6 +359,20 @@ RIDES: tuple[RideSpec, ...] = (
         indoor=True,
         has_hr=False,
         serial_number=0x0F17_0006,
+    ),
+    # A ride from another maker's computer with no local time and a plain name, so its time
+    # zone comes from the library's default (UTC until one is set). It starts 02:00 UTC, the
+    # evening before in the Americas. No power or heart rate and its own loop, so it is never
+    # a similar effort or on another ride's route.
+    RideSpec(
+        name="other_ride_no_time_zone",
+        source=Source.OTHER,
+        start=datetime(2025, 8, 11, 2, 0, tzinfo=UTC),
+        segments=(Segment(seconds=1500, power=180),),
+        loop=YPRES_LOOP,
+        has_power=False,
+        has_hr=False,
+        serial_number=0x0F17_000B,
     ),
     # The Zwift steady ride recorded a second time by a Garmin on the trainer, 30 s later.
     # Its name sorts after the Zwift file's, so the Zwift ride is imported first and kept.

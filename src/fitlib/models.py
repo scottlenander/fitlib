@@ -33,6 +33,19 @@ class Units(StrEnum):
     METRIC = "metric"
 
 
+class OffsetSource(StrEnum):
+    """Where a ride's time zone (its offset from UTC) came from."""
+
+    # The file's own local time (Garmin devices).
+    DEVICE = "device"
+    # The file's name, e.g. Zwift's ``2026-04-29-07-23-09.fit`` (local start time).
+    FILE_NAME = "file_name"
+    # The library's default time zone, set by the user.
+    DEFAULT = "default"
+    # None found: times are shown in UTC.
+    NONE = "none"
+
+
 class Source(StrEnum):
     """Where a ride was recorded, from the FIT file's manufacturer field."""
 
@@ -104,7 +117,7 @@ class RideSummary:
 
     Attributes:
         start: Time of the first record, in UTC (timezone-aware).
-        utc_offset_s: Local time minus UTC in seconds, when the device recorded local time.
+        utc_offset_s: Local time minus UTC in seconds, when known (see ``utc_offset_source``).
         source: Who recorded the ride.
         device: Readable device name, e.g. ``"Garmin Edge 540"``, if known.
         sport: FIT sport, normally ``"cycling"``.
@@ -135,6 +148,7 @@ class RideSummary:
         hr_curve: Best average heart rate for the same durations.
         power_histogram: Riding seconds at each whole watt.
         hr_histogram: Riding seconds at each whole beat per minute.
+        utc_offset_source: Where ``utc_offset_s`` came from; ``NONE`` when it is ``None``.
     """
 
     start: datetime
@@ -168,6 +182,7 @@ class RideSummary:
     hr_curve: Curve = ()
     power_histogram: Histogram = ()
     hr_histogram: Histogram = ()
+    utc_offset_source: OffsetSource = OffsetSource.NONE
 
     @property
     def end(self) -> datetime:
@@ -184,7 +199,7 @@ class RideSummary:
 
         Returns:
             The start shifted by ``utc_offset_s`` (still labelled UTC), or ``None`` if the
-            device didn't record local time.
+            ride's time zone isn't known.
         """
         if self.utc_offset_s is None:
             return None
@@ -266,19 +281,26 @@ class Ride:
 
     @property
     def display_name(self) -> str:
-        """The user's name for the ride, or a default built from its source and date.
+        """The user's name for the ride, or a default built from its source and start.
+
+        The default has the local start time, so rides on the same day can be told apart.
+        Without a time zone the time is UTC, and the name says so.
 
         Returns:
-            For example ``"Zwift ride, 2 Aug 2025"``, ``"Garmin indoor ride, 19 Aug 2025"``
-            or ``"Ride, 1 Sep 2025"`` when the user hasn't named it.
+            For example ``"Zwift 2025-08-02 08:30"``, ``"Garmin indoor 2025-08-19 20:30"``
+            or ``"Ride 2025-08-11 02:00 UTC"`` when the user hasn't named it.
         """
         if self.meta.name:
             return self.meta.name
         s = self.summary
-        kind = "indoor ride" if s.indoor and s.source is not Source.ZWIFT else "ride"
-        prefix = kind.capitalize() if s.source is Source.OTHER else f"{s.source.label} {kind}"
-        day = s.local_start or s.start
-        return f"{prefix}, {day.day} {day:%b %Y}"
+        indoor = s.indoor and s.source is not Source.ZWIFT
+        if s.source is Source.OTHER:
+            prefix = "Indoor ride" if indoor else "Ride"
+        else:
+            prefix = f"{s.source.label} indoor" if indoor else s.source.label
+        local = s.local_start
+        when = f"{(local or s.start):%Y-%m-%d %H:%M}"
+        return f"{prefix} {when}" if local else f"{prefix} {when} UTC"
 
 
 class BikeKind(StrEnum):

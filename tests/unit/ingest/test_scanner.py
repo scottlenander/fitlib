@@ -26,12 +26,12 @@ def names(paths: list[Path]) -> list[str]:
 def test_scans_the_fixture_folder_including_zip_members():
     """Every .fit file in a folder is found, and .zip archives are opened.
 
-    Given: the fixture folder: 10 standalone .fit files and a .zip holding two rides.
-    Expect: 12 sources in path order, the zipped ones named ``<zip>:<member>``.
+    Given: the fixture folder: 11 standalone .fit files and a .zip holding two rides.
+    Expect: 13 sources in path order, the zipped ones named ``<zip>:<member>``.
     """
     found = names([FIT_DIR])
 
-    assert len(found) == 12
+    assert len(found) == 13
     assert found == sorted(found), "sources should come in a stable, sorted order"
     assert "garmin_export.zip:garmin_export_ride_a.fit" in found
     assert "garmin_export.zip:garmin_export_ride_b.fit" in found
@@ -46,10 +46,10 @@ def test_reads_return_the_file_bytes():
     """
     sources = {s.name: s for s in scan([FIT_DIR])}
 
-    standalone = sources["zwift_watopia_steady_60min.fit"].read()
+    standalone = sources["2025-08-02-08-29-42.fit"].read()
     zipped = sources["garmin_export.zip:garmin_export_ride_a.fit"].read()
 
-    assert standalone == (FIT_DIR / "zwift_watopia_steady_60min.fit").read_bytes()
+    assert standalone == (FIT_DIR / "2025-08-02-08-29-42.fit").read_bytes()
     assert zipped[8:12] == b".FIT", "a zip member should read as a FIT file"
 
 

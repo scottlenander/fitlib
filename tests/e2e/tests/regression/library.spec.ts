@@ -47,9 +47,11 @@ test('each filter narrows the list to the matching rides', async ({ page }) => {
     await expect(library.rideNames()).toHaveText([INDOOR.name, ZWIFT.name])
   })
 
-  await test.step('Power: without power', async () => {
+  // From 13 Aug, leaving out the 11 Aug ride without power, whose date the time zone spec moves.
+  await test.step('Power: without power, from 13 Aug', async () => {
     await library.clearFilters.click()
     await library.power.selectOption({ label: 'Without power' })
+    await library.from.fill(SINCE_13_AUG.since)
     await expect(library.rideNames()).toHaveText([HR_ONLY.name])
   })
 
