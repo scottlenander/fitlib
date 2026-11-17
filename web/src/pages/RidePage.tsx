@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react'
 import { Link, useParams } from 'react-router'
 import { ApiError, useRide, type RideDetail } from '../api/client'
 import { RideDetails } from '../components/RideDetails'
+import { ScrollBox } from '../components/ScrollBox'
 import { SimilarRides } from '../components/SimilarRides'
 import { Stats, type Stat } from '../components/Stats'
 import { ZoneTable } from '../components/ZoneTable'
@@ -118,13 +119,14 @@ function Ride({ ride }: { ride: RideDetail }) {
       <RideDetails ride={ride} />
 
       <section aria-labelledby="traces-heading">
-        <h2 id="traces-heading">Over the ride</h2>
+        <h2 id="traces-heading">Ride Stats</h2>
         <Suspense fallback={<p>Loading chart…</p>}>
           <TraceChart
             rideId={ride.id}
             elapsedS={ride.elapsed_s}
             hasPower={ride.has_power}
             hasHr={ride.has_hr}
+            hasDistance={ride.distance_m !== null && ride.distance_m > 0}
           />
         </Suspense>
       </section>
@@ -149,7 +151,7 @@ function Ride({ ride }: { ride: RideDetail }) {
       {ride.laps.length > 1 && (
         <section aria-labelledby="laps-heading">
           <h2 id="laps-heading">Laps</h2>
-          <div className="table-scroll">
+          <ScrollBox label="Laps">
             <table data-testid="laps-table">
               <caption className="visually-hidden">Laps</caption>
               <thead>
@@ -193,7 +195,7 @@ function Ride({ ride }: { ride: RideDetail }) {
                 ))}
               </tbody>
             </table>
-          </div>
+          </ScrollBox>
         </section>
       )}
 

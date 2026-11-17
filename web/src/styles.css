@@ -209,6 +209,9 @@ input:not([type='radio']):not([type='checkbox']):not([type='file']) {
 
 .table-scroll {
   overflow-x: auto;
+  /* Positioned, so visually hidden labels in its tables (absolutely positioned) are
+     scrolled with it rather than widening the page. */
+  position: relative;
 }
 table {
   border-collapse: collapse;
@@ -292,21 +295,42 @@ caption {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
   gap: 0 2rem;
+  /* Each table keeps its own size: stretched, the shorter one's rows grew taller and the
+     extra width went to the Share column. */
+  align-items: start;
+  justify-items: start;
+}
+.zones-section .table-scroll {
+  /* Without min-width: 0 the grid column grows to the table's width instead of letting
+     it scroll, and the page scrolls sideways on a phone. */
+  max-width: 100%;
+  min-width: 0;
 }
 .zones-section h2 {
   grid-column: 1 / -1;
 }
-.zones .share {
+/* The share cell stays a table cell (so it lines up with its row); inside, a fixed-width
+   track holds the bar, so every bar is measured against the same length, and the
+   percentages after them line up. */
+.zones .share-cell {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  min-width: 9rem;
+}
+.zones .track {
+  flex: 0 0 6rem;
+  height: 0.7rem;
+  background: var(--surface);
+  border-radius: 2px;
 }
 .zones .bar {
-  display: inline-block;
-  height: 0.7rem;
+  display: block;
+  height: 100%;
   background: var(--bar);
   border-radius: 2px;
+}
+.zones .share .num {
+  min-width: 3.5ch;
 }
 
 .dropzone {
@@ -590,4 +614,17 @@ textarea {
   flex-direction: row;
   align-items: center;
   gap: 0.25rem;
+}
+
+/* Under a zoomable chart: what the zoom bar does, and a button back to the whole ride. */
+.zoom-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+  margin-top: 0.25rem;
+}
+.zoom-controls p {
+  margin: 0;
+  flex: 1 1 18rem;
 }

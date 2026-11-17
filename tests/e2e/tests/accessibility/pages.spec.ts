@@ -1,30 +1,17 @@
-import { test, expect, type Page } from '@playwright/test'
-import { AxeBuilder } from '@axe-core/playwright'
+import { test, expect } from '@playwright/test'
 import { ComparePage } from '../../pageObjects/comparePage'
 import { ImportPage } from '../../pageObjects/importPage'
 import { LibraryPage } from '../../pageObjects/libraryPage'
 import { RidePage } from '../../pageObjects/ridePage'
+import { expectNoViolations } from '../../libs/accessibility'
 import { RIDES, UPLOADS } from '../../libs/constants'
 import { TestData } from '../../libs/testData'
 
-// Automated WCAG 2.2 AA checks (axe-core) on every page. These catch about a third of
-// accessibility problems, such as missing labels, low contrast and broken ARIA. Keyboard
-// and screen reader checks still need a person.
-const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']
+// Every page scanned with axe (see libs/accessibility.ts), in light and dark mode.
 
 // Read-only: a ride with every section, and one without power.
 const FULL_RIDE = RIDES.INTERVALS
 const NO_POWER = RIDES.HR_ONLY
-
-// Scans the page as it is now. On failure, lists each problem and where it is.
-async function expectNoViolations(page: Page) {
-  const { violations } = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze()
-  const summary = violations.map(
-    (v) =>
-      `${v.id} (${v.impact}): ${v.help} at ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`,
-  )
-  expect(summary, `accessibility problems on ${page.url()}`).toEqual([])
-}
 
 // Light and dark from the system, and dark chosen in the app on a light system.
 const THEMES = [

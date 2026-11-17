@@ -1,4 +1,5 @@
 import type { Locator, Page } from '@playwright/test'
+import { ChartZoom } from './components/chartZoom'
 import { Header } from './components/header'
 
 // The compare page (/compare?ids=a,b[,c,d]): the rides with a Remove button each, how they're
@@ -16,6 +17,7 @@ export class ComparePage {
   readonly smoothing: Locator
   readonly table: Locator
   readonly traces: Locator
+  readonly zoom: ChartZoom
   readonly gapChart: Locator
   readonly curves: Locator
   // "Pick at least 2 rides to compare: …" when fewer than 2 rides are in the URL.
@@ -33,6 +35,7 @@ export class ComparePage {
     this.smoothing = this.view.getByLabel('Smoothing')
     this.table = page.getByRole('table', { name: 'Compared figures' })
     this.traces = page.getByTestId('compare-traces')
+    this.zoom = new ChartZoom(page)
     this.gapChart = page.getByTestId('gap-chart')
     this.curves = page.getByTestId('compare-curves')
     this.empty = page.getByTestId('compare-empty')

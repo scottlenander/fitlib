@@ -1,6 +1,7 @@
 import { lazy, Suspense, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { useCompare, type Align, type ComparedRide, type Comparison } from '../api/client'
+import { ScrollBox } from '../components/ScrollBox'
 import { Swatch } from '../components/Swatch'
 import { DEFAULT_SMOOTH, MAX_RIDES, MIN_RIDES, SMOOTHING, parseIds } from '../compare'
 import * as f from '../format'
@@ -199,7 +200,7 @@ function CompareTable({ rides }: { rides: ComparedRide[] }) {
   ]
   return (
     <>
-      <div className="table-scroll">
+      <ScrollBox label="Compared figures">
         <table className="wide" data-testid="compare-table">
           <caption className="visually-hidden">Compared figures</caption>
           <thead>
@@ -225,7 +226,7 @@ function CompareTable({ rides }: { rides: ComparedRide[] }) {
             ))}
           </tbody>
         </table>
-      </div>
+      </ScrollBox>
       {anyEstimated && (
         <p className="footnote">* TSS from an estimated FTP (no FTP set for that date).</p>
       )}
