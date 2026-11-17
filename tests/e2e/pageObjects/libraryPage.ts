@@ -30,6 +30,11 @@ export class LibraryPage {
   readonly previous: Locator
   readonly next: Locator
   readonly perPage: Locator
+  // Above the table: what's picked to compare ("Selected: …" or how many to tick).
+  readonly selectionStatus: Locator
+  // "Compare (n)": disabled until 2 rides are picked.
+  readonly compareButton: Locator
+  readonly clearSelection: Locator
 
   constructor(page: Page) {
     this.page = page
@@ -57,6 +62,9 @@ export class LibraryPage {
     this.previous = this.pager.getByRole('button', { name: 'Previous' })
     this.next = this.pager.getByRole('button', { name: 'Next' })
     this.perPage = this.pager.getByLabel('Rides per page')
+    this.selectionStatus = page.getByTestId('selection-status')
+    this.compareButton = page.getByRole('button', { name: /^Compare \(\d\)$/ })
+    this.clearSelection = page.getByRole('button', { name: 'Clear selection' })
   }
 
   // Opens the library, optionally with URL parameters: { since: '2025-08-10', limit: '2' }.
@@ -73,6 +81,11 @@ export class LibraryPage {
   // A table row, found by the ride's name.
   row(name: string): Locator {
     return this.rows.filter({ has: this.page.getByRole('link', { name, exact: true }) })
+  }
+
+  // The checkbox that picks a ride to compare.
+  pick(name: string): Locator {
+    return this.table.getByRole('checkbox', { name: `Select ${name}`, exact: true })
   }
 
   rideLink(name: string): Locator {

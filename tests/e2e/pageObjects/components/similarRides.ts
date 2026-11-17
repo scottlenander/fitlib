@@ -29,6 +29,16 @@ export class SimilarRides {
     return this.rows.filter({ has: this.page.getByRole('link', { name, exact: true }) })
   }
 
+  // A listed ride's Compare link: opens this ride next to it.
+  compareWith(name: string): Locator {
+    return this.root.getByRole('link', { name: `Compare with ${name}`, exact: true })
+  }
+
+  // Above the same-route table: opens this ride with its closest matches (up to 3).
+  compareClosest(count: number): Locator {
+    return this.root.getByRole('link', { name: `Compare with the ${count} closest rides` })
+  }
+
   rideLink(name: string): Locator {
     return this.root.getByRole('link', { name, exact: true })
   }

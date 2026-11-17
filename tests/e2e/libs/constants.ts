@@ -30,6 +30,7 @@ export const RIDES = {
     date: '2025-08-02',
     changes: false,
     usedBy: [
+      'regression/compare.spec.ts',
       'smoke/libraryToRide.spec.ts',
       'regression/library.spec.ts',
       'regression/rideDetail.spec.ts',
@@ -43,6 +44,7 @@ export const RIDES = {
     date: '2025-08-05',
     changes: false,
     usedBy: [
+      'regression/compare.spec.ts',
       'regression/similarRides.spec.ts',
       'smoke/libraryToRide.spec.ts',
       'regression/library.spec.ts',
@@ -72,6 +74,7 @@ export const RIDES = {
     date: '2025-08-16',
     changes: false,
     usedBy: [
+      'regression/compare.spec.ts',
       'regression/similarRides.spec.ts',
       'regression/library.spec.ts',
       'regression/rideDetail.spec.ts',
@@ -97,7 +100,11 @@ export const RIDES = {
     name: 'Garmin ride, 23 Aug 2025',
     date: '2025-08-23',
     changes: false,
-    usedBy: ['regression/similarRides.spec.ts', 'regression/library.spec.ts'],
+    usedBy: [
+      'regression/compare.spec.ts',
+      'regression/similarRides.spec.ts',
+      'regression/library.spec.ts',
+    ],
   },
   EXPORT_B: {
     file: 'garmin_export_ride_b.fit',
@@ -105,6 +112,7 @@ export const RIDES = {
     date: '2025-08-24',
     changes: false,
     usedBy: [
+      'regression/compare.spec.ts',
       'regression/similarRides.spec.ts',
       'smoke/libraryToRide.spec.ts',
       'regression/library.spec.ts',

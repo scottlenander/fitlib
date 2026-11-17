@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test'
 import { AxeBuilder } from '@axe-core/playwright'
+import { ComparePage } from '../../pageObjects/comparePage'
 import { ImportPage } from '../../pageObjects/importPage'
 import { LibraryPage } from '../../pageObjects/libraryPage'
 import { RidePage } from '../../pageObjects/ridePage'
@@ -37,6 +38,7 @@ for (const theme of THEMES) {
     const library = new LibraryPage(page)
     const ride = new RidePage(page)
     const importPage = new ImportPage(page)
+    const compare = new ComparePage(page)
     const testData = new TestData(request)
     await page.emulateMedia({ colorScheme: theme.system })
 
@@ -77,6 +79,25 @@ for (const theme of THEMES) {
     await test.step('Ride without power', async () => {
       await ride.goto(await testData.rideId(NO_POWER.file))
       await expect(ride.traceChart).toBeVisible()
+      await expectNoViolations(page)
+    })
+
+    await test.step('Compare, by distance and by time', async () => {
+      await compare.goto([
+        await testData.rideId(FULL_RIDE.file),
+        await testData.rideId(NO_POWER.file),
+      ])
+      await expect(compare.gapChart).toBeVisible()
+      await expect(compare.curves).toBeVisible()
+      await expectNoViolations(page)
+      await compare.alignTime.check()
+      await expect(compare.gapChart).toBeHidden()
+      await expectNoViolations(page)
+    })
+
+    await test.step('Compare with too few rides', async () => {
+      await compare.goto([])
+      await expect(compare.empty).toBeVisible()
       await expectNoViolations(page)
     })
 

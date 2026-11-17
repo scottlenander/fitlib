@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { useCompare, type Align, type ComparedRide, type Comparison } from '../api/client'
 import { Swatch } from '../components/Swatch'
@@ -24,6 +24,10 @@ export function ComparePage() {
   const smooth = (SMOOTHING as readonly number[]).includes(smoothParam)
     ? smoothParam
     : DEFAULT_SMOOTH
+  // The choice just clicked: the URL updates in a transition, and the radio button should
+  // follow the click at once. It only counts until the URL changes (to it, or by going back).
+  const [clicked, setClicked] = useState<{ from: string | null; by: Align }>()
+  const pending = clicked?.from === alignParam ? clicked.by : undefined
   const enough = ids.length >= MIN_RIDES && ids.length <= MAX_RIDES
   const comparison = useCompare(ids, align, smooth, enough)
 
@@ -65,8 +69,12 @@ export function ComparePage() {
       {comparison.data && (
         <Compared
           comparison={comparison.data}
+          align={pending ?? align ?? comparison.data.align}
           onRemove={remove}
-          onAlign={(by) => change({ align: by })}
+          onAlign={(by) => {
+            setClicked({ from: alignParam, by })
+            change({ align: by })
+          }}
           smooth={smooth}
           onSmooth={(seconds) => change({ smooth: String(seconds) })}
         />
@@ -77,13 +85,15 @@ export function ComparePage() {
 
 type ComparedProps = {
   comparison: Comparison
+  // The choice shown: the one asked for, before the rides lined up that way arrive.
+  align: Align
   onRemove: (index: number) => void
   onAlign: (by: Align) => void
   smooth: number
   onSmooth: (seconds: number) => void
 }
 
-function Compared({ comparison, onRemove, onAlign, smooth, onSmooth }: ComparedProps) {
+function Compared({ comparison, align, onRemove, onAlign, smooth, onSmooth }: ComparedProps) {
   const rides = comparison.rides
   const first = rides[0]!.ride
   return (
@@ -115,7 +125,7 @@ function Compared({ comparison, onRemove, onAlign, smooth, onSmooth }: ComparedP
                 type="radio"
                 name="align"
                 value={by}
-                checked={comparison.align === by}
+                checked={align === by}
                 disabled={by === 'distance' && !comparison.can_align_distance}
                 onChange={() => onAlign(by)}
               />
