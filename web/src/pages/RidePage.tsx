@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react'
 import { Link, useParams } from 'react-router'
 import { ApiError, useRide, type RideDetail } from '../api/client'
 import { RideDetails } from '../components/RideDetails'
+import { ScrollBox } from '../components/ScrollBox'
 import { SimilarRides } from '../components/SimilarRides'
 import { Stats, type Stat } from '../components/Stats'
 import { ZoneTable } from '../components/ZoneTable'
@@ -150,7 +151,7 @@ function Ride({ ride }: { ride: RideDetail }) {
       {ride.laps.length > 1 && (
         <section aria-labelledby="laps-heading">
           <h2 id="laps-heading">Laps</h2>
-          <div className="table-scroll">
+          <ScrollBox label="Laps">
             <table data-testid="laps-table">
               <caption className="visually-hidden">Laps</caption>
               <thead>
@@ -194,7 +195,7 @@ function Ride({ ride }: { ride: RideDetail }) {
                 ))}
               </tbody>
             </table>
-          </div>
+          </ScrollBox>
         </section>
       )}
 

@@ -382,6 +382,9 @@ side by side, with one ride or the same ride twice refused), **config** and
     indoor ride (no GPS) and the Zwift ride (alone in Watopia) saying why there's nothing.
   - *Ride stats*: switching the charts between time and distance; the zoom bar's label, and
     Show whole ride enabled once zoomed in and resetting it.
+  - *Phone width*: the library, ride and compare pages don't scroll sideways on a 390 px
+    screen, and pass the accessibility scan there (wide tables scroll in boxes a keyboard
+    can reach).
   - *Compare*: two rides picked in the library and compared (figures side by side, lined
     up by distance with a time gap, zoomed in and back out), picks kept back in the library; four at most, kept while
     filtering, cleared; lining up by time, smoothing off and removing rides down to one;
