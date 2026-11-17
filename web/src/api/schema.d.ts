@@ -250,6 +250,41 @@ export interface paths {
     patch: operations['update_bike_api_bikes__bike_id__patch']
     trace?: never
   }
+  '/api/compare': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * Compare
+     * @description Line rides up on one axis, for overlaid charts and a side-by-side table.
+     *
+     *     Args:
+     *         stores: The library's stores.
+     *         ids: The rides, the first being the one time gaps are measured against.
+     *         align_by: ``time`` or ``distance``; chosen for the rides when not given.
+     *         smooth: Rolling-average window for power and heart rate, in seconds.
+     *         points: Roughly how many points to return.
+     *
+     *     Returns:
+     *         The shared axis and each ride's figures, samples and (by distance) time gap.
+     *
+     *     Raises:
+     *         HTTPException: 422 for too few or too many rides, the same ride twice, a smoothing
+     *             window not in ``SMOOTHING_S``, or lining up by distance when a ride has none.
+     *             Unknown rides are a 404.
+     */
+    get: operations['compare_api_compare_get']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/health': {
     parameters: {
       query?: never
@@ -709,6 +744,53 @@ export interface components {
        * @description .fit files and .zip archives.
        */
       files: string[]
+    }
+    /**
+     * ComparedRide
+     * @description One ride in a comparison: its figures and its samples on the shared axis.
+     *
+     *     Attributes:
+     *         ride: Everything about the ride, for the side-by-side table.
+     *         series: Each channel the ride recorded (of power, heart_rate, cadence, speed and
+     *             altitude), one value per point of ``Comparison.x``; ``null`` where it has none.
+     *         gap: Lined up by distance only: seconds the ride took to reach each point, minus
+     *             the first ride's. Positive means behind the first ride.
+     */
+    ComparedRide: {
+      /** Gap */
+      gap: (number | null)[] | null
+      ride: components['schemas']['RideDetail']
+      /** Series */
+      series: {
+        [key: string]: (number | null)[]
+      }
+    }
+    /**
+     * Comparison
+     * @description Rides lined up on one axis, for overlaid charts.
+     *
+     *     Attributes:
+     *         align: ``time`` (x in seconds from the start) or ``distance`` (x in metres).
+     *         smooth: Seconds power and heart rate were averaged over; 0 for raw samples.
+     *         can_align_distance: Whether every ride recorded distance, so they can be lined up
+     *             by it.
+     *         x: The shared axis.
+     *         rides: The rides, in the order asked for; gaps are measured against the first.
+     */
+    Comparison: {
+      /**
+       * Align
+       * @enum {string}
+       */
+      align: 'time' | 'distance'
+      /** Can Align Distance */
+      can_align_distance: boolean
+      /** Rides */
+      rides: components['schemas']['ComparedRide'][]
+      /** Smooth */
+      smooth: number
+      /** X */
+      x: number[]
     }
     /**
      * CurvePoint
@@ -1600,6 +1682,44 @@ export interface operations {
         }
         content: {
           'application/json': components['schemas']['BikeOut']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  compare_api_compare_get: {
+    parameters: {
+      query?: {
+        /** @description 2 to 4 ride ids or unique prefixes. */
+        ids?: string[]
+        /** @description Line rides up by time or distance. Default: distance when every ride recorded it, otherwise time. */
+        align?: ('time' | 'distance') | null
+        /** @description Seconds to average power and heart rate over: 0, 10, 30. */
+        smooth?: number
+        /** @description Points along the axis. */
+        points?: number
+      }
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Comparison']
         }
       }
       /** @description Validation Error */

@@ -774,3 +774,48 @@ def test_similar_points_older_rides_to_recompute(imported: Path, tmp_path: Path)
     result = run(imported, "similar", ride_id)
 
     assert "run `fitlib recompute`" in result.output
+
+
+# -- compare ----------------------------------------------------------------------------------
+
+
+def test_compare_prints_figures_side_by_side(imported: Path):
+    """``fitlib compare`` prints one column per ride and one row per figure.
+
+    Given: the two exported rides, in metric.
+    Expect: both ids as column heads, both names, and rows for distance, NP, TSS and the
+    best 20 minutes.
+    """
+    a, b = ride_id_on(imported, "2025-08-23"), ride_id_on(imported, "2025-08-24")
+
+    result = run(imported, "compare", a, b, "--units", "metric")
+
+    assert result.exit_code == 0, result.output
+    assert a in result.output and b in result.output
+    assert "Garmin ride, 23 Aug 2025" in result.output
+    assert "Garmin ride, 24 Aug 2025" in result.output
+    for row in ("Distance", "NP", "TSS", "Best 20 min"):
+        assert re.search(rf"^\s*{row}\s", result.output, re.MULTILINE), f"should have {row}"
+    assert " km" in result.output, "should show distance in kilometres"
+
+
+@pytest.mark.parametrize(
+    ("days", "message"),
+    [
+        (["2025-08-23"], "Compare 2 to 4 rides; got 1"),
+        (["2025-08-23", "2025-08-23"], "same ride is given more than once"),
+    ],
+    ids=["one-ride", "same-ride-twice"],
+)
+def test_compare_needs_two_to_four_different_rides(imported: Path, days: list[str], message):
+    """One ride, or the same ride twice, is an error.
+
+    Given: one ride id, or one id given twice.
+    Expect: exit code 2 and a message saying what's wrong.
+    """
+    ids = [ride_id_on(imported, day) for day in days]
+
+    result = run(imported, "compare", *ids)
+
+    assert result.exit_code == 2
+    assert message in result.output

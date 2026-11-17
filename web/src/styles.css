@@ -10,6 +10,11 @@
   --bar: #3b82f6;
   --error: #b91c1c;
   --focus: #f59e0b;
+  /* Compared rides' line colours (validated for colour-blind separation). */
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
   color-scheme: light;
   font-family:
     system-ui,
@@ -31,10 +36,18 @@
     --accent-text: #0b1220;
     --bar: #60a5fa;
     --error: #fca5a5;
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --series-4: #c98500;
     color-scheme: dark;
   }
 }
 :root[data-theme='dark'] {
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
   --bg: #111418;
   --surface: #1b2027;
   --text: #e8ebef;
@@ -528,4 +541,53 @@ textarea {
   border-left: 4px solid var(--accent);
   padding: 0.5rem 0.75rem;
   border-radius: 4px;
+}
+
+/* Compare: picking rides in the library, and the compare page. */
+.selection-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin: 0.5rem 0;
+}
+.selection-bar p {
+  margin: 0;
+  flex: 1 1 16rem;
+}
+.swatch {
+  display: inline-block;
+  width: 0.8rem;
+  height: 0.8rem;
+  border-radius: 2px;
+  vertical-align: -0.05rem;
+  margin-right: 0.3rem;
+}
+.compare-rides {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.5rem;
+}
+.compare-rides li {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.muted {
+  color: var(--muted);
+}
+.radios {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.radios {
+  min-height: 2rem;
+}
+.filters .radios label {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.25rem;
 }

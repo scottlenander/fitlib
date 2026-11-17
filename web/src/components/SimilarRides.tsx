@@ -1,6 +1,7 @@
 import { useRef, useState, type KeyboardEvent } from 'react'
 import { Link } from 'react-router'
 import { useSimilar, type RideDetail, type SimilarRide } from '../api/client'
+import { MAX_RIDES, compareUrl } from '../compare'
 import * as f from '../format'
 import { useUnits } from '../units'
 
@@ -73,8 +74,17 @@ function RouteMatches({ ride }: { ride: RideDetail }) {
 
   // Newest first, so progress on the route reads down the table.
   const items = [...similar.data.items].sort((a, b) => b.ride.start.localeCompare(a.ride.start))
+  // The API lists the closest matches first: same route, then most overlap.
+  const closest = similar.data.items.slice(0, MAX_RIDES - 1).map((item) => item.ride.id)
   return (
     <>
+      <p>
+        <Link to={compareUrl([ride.id, ...closest])}>
+          {closest.length === 1
+            ? 'Compare with this ride'
+            : `Compare with the ${closest.length} closest rides`}
+        </Link>
+      </p>
       <div className="table-scroll">
         <table className="wide">
           <caption className="visually-hidden">Rides on the same route</caption>
@@ -98,11 +108,14 @@ function RouteMatches({ ride }: { ride: RideDetail }) {
                 Overlap
               </th>
               <th scope="col">Route</th>
+              <th scope="col">
+                <span className="visually-hidden">Compare</span>
+              </th>
             </tr>
           </thead>
           <tbody>
             {items.map((item) => (
-              <RouteRow key={item.ride.id} item={item} units={units} />
+              <RouteRow key={item.ride.id} rideId={ride.id} item={item} units={units} />
             ))}
           </tbody>
         </table>
@@ -115,7 +128,9 @@ function RouteMatches({ ride }: { ride: RideDetail }) {
   )
 }
 
-function RouteRow({ item, units }: { item: SimilarRide; units: f.Units }) {
+type RouteRowProps = { rideId: string; item: SimilarRide; units: f.Units }
+
+function RouteRow({ rideId, item, units }: RouteRowProps) {
   const r = item.ride
   const speed = r.distance_m !== null && r.moving_s > 0 ? r.distance_m / r.moving_s : null
   return (
@@ -130,6 +145,9 @@ function RouteRow({ item, units }: { item: SimilarRide; units: f.Units }) {
       <td className="num">{f.watts(r.avg_power)}</td>
       <td className="num">{Math.round((item.overlap ?? 0) * 100)}%</td>
       <td>{item.same_route ? 'Same' : 'Partly'}</td>
+      <td>
+        <CompareLink rideId={rideId} other={r} />
+      </td>
     </tr>
   )
 }
@@ -167,6 +185,9 @@ function EffortMatches({ ride }: { ride: RideDetail }) {
               <th scope="col" className="num">
                 TSS
               </th>
+              <th scope="col">
+                <span className="visually-hidden">Compare</span>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -180,6 +201,9 @@ function EffortMatches({ ride }: { ride: RideDetail }) {
                 <td className="num">{f.duration(item.ride.moving_s)}</td>
                 <td className="num">{f.watts(item.ride.np ?? item.ride.avg_power)}</td>
                 <td className="num">{f.tss(item.ride.tss)}</td>
+                <td>
+                  <CompareLink rideId={ride.id} other={item.ride} />
+                </td>
               </tr>
             ))}
           </tbody>
@@ -190,5 +214,14 @@ function EffortMatches({ ride }: { ride: RideDetail }) {
         the {ride.has_power ? 'power' : 'heart-rate'} curve.
       </p>
     </>
+  )
+}
+
+// Opens this ride next to another on the compare page.
+function CompareLink({ rideId, other }: { rideId: string; other: SimilarRide['ride'] }) {
+  return (
+    <Link to={compareUrl([rideId, other.id])} aria-label={`Compare with ${other.name}`}>
+      Compare
+    </Link>
   )
 }

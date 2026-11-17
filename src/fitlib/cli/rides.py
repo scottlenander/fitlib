@@ -1,4 +1,4 @@
-"""Commands for rides: import, list, show, edit, tags and recompute."""
+"""Commands for rides: import, list, show, similar, compare, edit, tags and recompute."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn
 from rich.table import Table
 
 from fitlib import display
+from fitlib.analysis.compare import MAX_RIDES, MIN_RIDES
 from fitlib.analysis.similar import similar_efforts, similar_routes
 from fitlib.analysis.training import training
 from fitlib.cli.common import (
@@ -31,6 +32,7 @@ from fitlib.cli.output import print_report, print_ride, section
 from fitlib.importer import Importer
 from fitlib.ingest.scanner import scan
 from fitlib.ingest.summarize import METRICS_VERSION
+from fitlib.metrics.curves import best_at
 from fitlib.models import (
     Filters,
     RideMeta,
@@ -318,6 +320,84 @@ def similar(
         )
     out.print(table)
     out.print("Overlap: how much of this ride's route the other ride covered.")
+
+
+@app.command(help=f"Compare {MIN_RIDES} to {MAX_RIDES} rides' figures side by side.")
+def compare(
+    ctx: typer.Context,
+    rides: Annotated[
+        list[str],
+        typer.Argument(help="Ride ids or unique prefixes (4+ characters).", metavar="RIDE"),
+    ],
+    units: UnitsOption = None,
+) -> None:
+    """Print a table with one column per ride and one row per figure.
+
+    Args:
+        ctx: Typer context holding the config path.
+        rides: The rides' ids, or prefixes of at least 4 characters.
+        units: Units to show distance, speed and climbing in; the config's by default.
+
+    Raises:
+        typer.Exit: Too few or too many rides, the same ride twice, or a ride that can't be
+            found (code 2).
+    """
+    if not MIN_RIDES <= len(rides) <= MAX_RIDES:
+        raise fail(f"Compare {MIN_RIDES} to {MAX_RIDES} rides; got {len(rides)}.")
+    with library(ctx) as lib:
+        catalog = lib.stores.catalog
+        found = [find_ride(catalog, ref) for ref in rides]
+        if len({r.id for r in found}) < len(found):
+            raise fail("The same ride is given more than once.")
+        chosen = lib.units(units)
+        history = catalog.athlete_history()
+        figures = [training(catalog, r, history) for r in found]
+
+    estimated = any(f.ftp_estimated and f.tss is not None for f in figures)
+
+    def tss(index: int) -> str:
+        """Show a ride's TSS, starred when its FTP is estimated.
+
+        Args:
+            index: The ride's position.
+
+        Returns:
+            The TSS.
+        """
+        f = figures[index]
+        star = "*" if f.ftp_estimated and f.tss is not None else ""
+        return f"{display.tss(f.tss)}{star}"
+
+    rows = {
+        "Name": [r.display_name for r in found],
+        "Date": [display.date(r.summary.local_start or r.summary.start) for r in found],
+        "Moving time": [display.duration(r.summary.moving_s) for r in found],
+        "Distance": [display.distance(r.summary.distance_m, chosen) for r in found],
+        "Climbing": [display.elevation(r.summary.ascent_m, chosen) for r in found],
+        "Avg speed": [display.speed(r.summary.avg_speed_mps, chosen) for r in found],
+        "Avg power": [display.watts(r.summary.avg_power) for r in found],
+        "NP": [display.watts(r.summary.np) for r in found],
+        "IF": [display.ratio(f.intensity_factor) for f in figures],
+        "TSS": [tss(i) for i in range(len(found))],
+        "Avg HR": [display.bpm(r.summary.avg_hr) for r in found],
+        "Decoupling": [display.signed_percent(r.summary.decoupling_pct) for r in found],
+        **{
+            f"Best {minutes} min": [
+                display.watts(best_at(r.summary.power_curve, minutes * 60)) for r in found
+            ]
+            for minutes in (1, 5, 20)
+        },
+    }
+    table = Table(box=None)
+    table.add_column("")
+    for ride in found:
+        table.add_column(ride.short_id, justify="right")
+    for label, values in rows.items():
+        table.add_row(label, *values)
+    section("Compared rides")
+    out.print(table)
+    if estimated:
+        out.print("* TSS from an estimated FTP (no FTP set for that date).")
 
 
 @app.command(

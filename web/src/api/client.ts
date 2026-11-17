@@ -28,6 +28,9 @@ export type TagCount = Schemas['TagCount']
 export type SimilarRides = Schemas['SimilarRides']
 export type SimilarRide = Schemas['SimilarRide']
 export type Health = Schemas['Health']
+export type Comparison = Schemas['Comparison']
+export type ComparedRide = Schemas['ComparedRide']
+export type Align = Comparison['align']
 export type RideQuery = NonNullable<operations['list_rides_api_rides_get']['parameters']['query']>
 
 // An error from the API, with its status and message.
@@ -113,6 +116,22 @@ export function useSimilar(rideId: string, kind: 'route' | 'effort') {
       request<SimilarRides>(
         `/api/rides/${encodeURIComponent(rideId)}/similar${queryString({ kind })}`,
       ),
+  })
+}
+
+// Rides lined up for the compare page. `align` undefined lets the API choose.
+export function useCompare(
+  ids: string[],
+  align: Align | undefined,
+  smooth: number,
+  enabled: boolean,
+) {
+  return useQuery({
+    queryKey: ['compare', ids, align, smooth],
+    queryFn: () => request<Comparison>(`/api/compare${queryString({ ids, align, smooth })}`),
+    enabled,
+    placeholderData: (previous) => previous,
+    retry: (count, error) => !(error instanceof ApiError && error.status < 500) && count < 2,
   })
 }
 

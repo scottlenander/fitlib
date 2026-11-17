@@ -71,6 +71,11 @@ export function elevationValue(metres: number, units: Units): number {
   return units === 'imperial' ? metres * FEET_PER_METRE : metres
 }
 
+export function distanceValue(metres: number, units: Units): number {
+  return units === 'imperial' ? metres / METRES_PER_MILE : metres / 1000
+}
+
+export const distanceUnit = (units: Units) => (units === 'imperial' ? 'mi' : 'km')
 export const speedUnit = (units: Units) => (units === 'imperial' ? 'mph' : 'km/h')
 export const elevationUnit = (units: Units) => (units === 'imperial' ? 'ft' : 'm')
 

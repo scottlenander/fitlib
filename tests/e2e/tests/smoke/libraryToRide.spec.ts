@@ -2,17 +2,22 @@ import { test, expect } from '@playwright/test'
 import { LibraryPage } from '../../pageObjects/libraryPage'
 import { RidePage } from '../../pageObjects/ridePage'
 import { ImportPage } from '../../pageObjects/importPage'
+import { ComparePage } from '../../pageObjects/comparePage'
 import { RIDES } from '../../libs/constants'
 
-// Read-only: the newest and oldest rides are listed; the interval ride is opened.
+// Read-only: the newest and oldest rides are listed; the interval ride is opened, then
+// compared with the newest.
 const NEWEST = RIDES.EXPORT_B.name
 const OLDEST = RIDES.ZWIFT.name
 const RIDE = RIDES.INTERVALS
 
-test('a rider browses the library, opens a ride and finds the import page', async ({ page }) => {
+test('a rider browses the library, opens a ride, finds the import page and compares rides', async ({
+  page,
+}) => {
   const library = new LibraryPage(page)
   const ride = new RidePage(page)
   const importPage = new ImportPage(page)
+  const compare = new ComparePage(page)
 
   await test.step('Open the library', async () => {
     await library.goto()
@@ -42,5 +47,16 @@ test('a rider browses the library, opens a ride and finds the import page', asyn
     await expect(importPage.importButton, {
       message: 'Import should wait until files are chosen',
     }).toBeDisabled()
+  })
+
+  await test.step('Compare the ride with the newest one', async () => {
+    await importPage.header.libraryLink.click()
+    await library.pick(RIDE.name).check()
+    await library.pick(NEWEST).check()
+    await library.compareButton.click()
+    await expect(compare.rides).toHaveCount(2)
+    await expect(compare.traces, {
+      message: 'The overlaid charts should be drawn',
+    }).toBeVisible()
   })
 })

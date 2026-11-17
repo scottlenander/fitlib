@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { Link, useSearchParams } from 'react-router'
+import { Link, useNavigate, useSearchParams } from 'react-router'
 import { useBikes, useHealth, useRides, useTags, type RideItem, type SortKey } from '../api/client'
+import { MAX_RIDES, MIN_RIDES, compareUrl, usePicked, type Picked } from '../compare'
 import * as f from '../format'
 import { useUnits } from '../units'
 import { usePageTitle } from '../usePageTitle'
@@ -34,6 +35,7 @@ export function LibraryPage() {
   const health = useHealth()
   const { units } = useUnits()
   const outdated = health.data?.outdated_rides ?? 0
+  const selection = usePicked()
 
   // The URL state as last set, which may be ahead of this render: two quick changes (such
   // as "Clear filters" then a new filter) must build on each other, not on the same render.
@@ -91,12 +93,16 @@ export function LibraryPage() {
               Your library is empty. <Link to="/import">Import some rides</Link>.
             </p>
           )}
+          {page.total > 0 && <SelectionBar picked={selection.picked} onClear={selection.clear} />}
           {page.items.length > 0 && (
             <div className="table-scroll">
               <table className="wide" data-testid="ride-table">
                 <caption className="visually-hidden">Rides</caption>
                 <thead>
                   <tr>
+                    <th scope="col">
+                      <span className="visually-hidden">Compare</span>
+                    </th>
                     {[
                       'Date',
                       'Name',
@@ -123,7 +129,13 @@ export function LibraryPage() {
                 </thead>
                 <tbody>
                   {page.items.map((ride) => (
-                    <RideRow key={ride.id} ride={ride} units={units} />
+                    <RideRow
+                      key={ride.id}
+                      ride={ride}
+                      units={units}
+                      picked={selection.picked}
+                      onPick={selection.toggle}
+                    />
                   ))}
                 </tbody>
               </table>
@@ -171,6 +183,34 @@ export function LibraryPage() {
         </>
       )}
     </>
+  )
+}
+
+// What's picked for comparing (from any page of the library), and the button to compare.
+function SelectionBar({ picked, onClear }: { picked: Picked[]; onClear: () => void }) {
+  const navigate = useNavigate()
+  const count = picked.length
+  let hint = `Tick ${MIN_RIDES} to ${MAX_RIDES} rides to compare them.`
+  if (count >= MAX_RIDES) hint = `${MAX_RIDES} rides is the most you can compare at once.`
+  else if (count > 0) hint = `Selected: ${picked.map((p) => p.name).join(', ')}.`
+  return (
+    <div className="selection-bar" data-testid="selection-bar">
+      <p aria-live="polite" data-testid="selection-status">
+        {count >= MAX_RIDES ? `Selected: ${picked.map((p) => p.name).join(', ')}. ${hint}` : hint}
+      </p>
+      <button
+        type="button"
+        disabled={count < MIN_RIDES}
+        onClick={() => void navigate(compareUrl(picked.map((p) => p.id)))}
+      >
+        Compare ({count})
+      </button>
+      {count > 0 && (
+        <button type="button" onClick={onClear}>
+          Clear selection
+        </button>
+      )}
+    </div>
   )
 }
 
@@ -348,10 +388,27 @@ function ColumnHeader({ name, sortKey, state, onSort }: HeaderProps) {
   )
 }
 
-function RideRow({ ride, units }: { ride: RideItem; units: f.Units }) {
+type RowProps = {
+  ride: RideItem
+  units: f.Units
+  picked: Picked[]
+  onPick: (ride: Picked) => void
+}
+
+function RideRow({ ride, units, picked, onPick }: RowProps) {
   const estimated = ride.ftp_estimated && ride.tss !== null
+  const checked = picked.some((p) => p.id === ride.id)
   return (
     <tr data-testid="ride-row">
+      <td>
+        <input
+          type="checkbox"
+          aria-label={`Select ${ride.name}`}
+          checked={checked}
+          disabled={!checked && picked.length >= MAX_RIDES}
+          onChange={() => onPick({ id: ride.id, name: ride.name })}
+        />
+      </td>
       <td>{f.date(ride.start, ride.local_start)}</td>
       <td>
         <Link to={`/rides/${ride.id}`}>{ride.name}</Link>

@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
+import polars as pl
 import pytest
 
 from fitlib.analysis.similar import (
@@ -12,10 +13,14 @@ from fitlib.analysis.similar import (
     similar_efforts,
     similar_routes,
 )
+from fitlib.ingest.normalize import to_frame
+from fitlib.metrics import basic
+from fitlib.metrics.curves import best_averages
+from fitlib.metrics.power import normalized_power, variability_index
 from fitlib.metrics.route import encode
 from fitlib.models import Ride, Route
 from fitlib.store.memory import MemoryCatalog
-from tests.unit.factories import DEFAULT_START, make_ride
+from tests.unit.factories import DEFAULT_START, make_ride, make_summary
 
 # One cell is about 150 m north to south; this steps exactly one cell.
 CELL_LAT = 180 / (1 << 17)
@@ -219,3 +224,57 @@ def test_similar_efforts_for_a_ride_without_data():
     add(catalog, 1)
 
     assert similar_efforts(catalog, blank) == []
+
+
+def summary_of(frame: pl.DataFrame) -> dict:
+    """Work out the summary figures effort matching uses, from a ride's samples.
+
+    Args:
+        frame: The ride's 1 Hz frame.
+
+    Returns:
+        ``RideSummary`` fields: moving time, NP, VI and the power curve.
+    """
+    np = normalized_power(frame)
+    return {
+        "moving_s": basic.moving_s(frame),
+        "np": np,
+        "vi": variability_index(np, basic.avg_power(frame)),
+        "power_curve": best_averages(frame, "power"),
+    }
+
+
+def test_a_one_minute_stop_still_counts_as_a_similar_effort():
+    """Standing still for a minute, with the timer running, barely changes the score.
+
+    Given: an hour at 10 m/s alternating 180 W and 220 W each minute, and the same hour with
+        a 60 s stop at 0 W after 25 minutes (before its best 20 minutes).
+    Expect: a similarity of at least 95.
+    """
+    start = datetime(2025, 8, 2, 6, 30, tzinfo=UTC)
+
+    def sample(i: int, moving: bool) -> dict:
+        """One second of riding (or standing still).
+
+        Args:
+            i: Seconds from the start.
+            moving: Whether the rider is moving.
+
+        Returns:
+            The record.
+        """
+        watts = 180 if (i // 60) % 2 else 220
+        return {
+            "timestamp": start + timedelta(seconds=i),
+            "speed": 10.0 if moving else 0.0,
+            "power": watts if moving else 0,
+        }
+
+    steady = to_frame([sample(i, True) for i in range(3600)])
+    stopped = to_frame([sample(i, not 1500 <= i < 1560) for i in range(3660)])
+
+    a = effort_features(make_summary(**summary_of(steady)))
+    b = effort_features(make_summary(**summary_of(stopped)))
+
+    assert a is not None and b is not None
+    assert effort_similarity(a, b) >= 95
