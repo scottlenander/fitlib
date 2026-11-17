@@ -86,6 +86,11 @@ test('a ride without a real local time shows its start in UTC', async ({ page, r
   await test.step('The start is its real date, marked UTC (not 1989)', async () => {
     await expect(ride.subtitle).toHaveText('Sat 02 Aug 2025, 06:30 UTC · Zwift · Zwift · Indoor')
   })
+
+  // Zwift writes the odometer on only a few records; distance is added up from speed.
+  await test.step('Its distance is shown, worked out from its speed', async () => {
+    await expect(ride.summary.value('Distance')).toHaveText('20.8 mi')
+  })
 })
 
 test('switching units changes the figures everywhere and is remembered', async ({

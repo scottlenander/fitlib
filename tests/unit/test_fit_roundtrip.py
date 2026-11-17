@@ -153,18 +153,24 @@ def test_positions_follow_the_loop(ride):
 def test_distance_speed_and_altitude_round_trip(ride):
     """Distance, speed and altitude decode to the generated values within FIT's precision.
 
-    Given: each synthetic ride (speed derived from power, altitude a sine wave per lap).
+    Given: each synthetic ride (speed derived from power, altitude a sine wave per lap). The
+        Zwift ride is written as Zwift writes: speed as enhanced_speed and the odometer on the
+        first record only.
     Expect: distance within 1 cm, speed within 1 mm/s, altitude within 0.2 m (FIT's 1/5 m
-    resolution) for every record.
+    resolution) for every record; no odometer after the first Zwift record.
     """
     spec, messages = ride
+    speed_field = "enhanced_speed" if spec.zwift_records else "speed"
 
     for record, sample in zip(messages["record"], written_samples(spec), strict=True):
         second = sample.second
-        assert record["distance"] == pytest.approx(sample.distance, abs=0.01), (
-            f"distance at {second} s"
-        )
-        assert record["speed"] == pytest.approx(sample.speed, abs=0.001), f"speed at {second} s"
+        if spec.zwift_records and second > 0:
+            assert record.get("distance") is None, f"no odometer at {second} s, as from Zwift"
+        else:
+            assert record["distance"] == pytest.approx(sample.distance, abs=0.01), (
+                f"distance at {second} s"
+            )
+        assert record[speed_field] == pytest.approx(sample.speed, abs=0.001), f"speed at {second} s"
         assert record["altitude"] == pytest.approx(sample.altitude, abs=0.2), (
             f"altitude at {second} s"
         )

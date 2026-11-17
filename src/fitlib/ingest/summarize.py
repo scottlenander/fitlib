@@ -12,7 +12,8 @@ from fitlib.models import RideSummary
 # Bump when any computed figure changes, so `recompute` knows which rides are out of date.
 # 3: route fingerprints.
 # 4: local time ignored when it isn't real (Zwift writes 1989-12-31), fixing ride dates.
-METRICS_VERSION = 4
+# 5: distance added up from speed when the odometer is on few records (Zwift).
+METRICS_VERSION = 5
 
 
 def summarize(decoded: DecodedActivity, frame: pl.DataFrame) -> RideSummary:

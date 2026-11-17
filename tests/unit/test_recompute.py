@@ -93,6 +93,33 @@ def test_recompute_repairs_a_zwift_ride_dated_1989(imported: ImportedLibrary):
     assert after.display_name == "Zwift ride, 2 Aug 2025"
 
 
+def test_recompute_gives_a_zwift_ride_its_distance(imported: ImportedLibrary):
+    """A Zwift ride imported before version 5 had no distance; recompute adds it from speed.
+
+    Given: the Zwift ride stored at version 4 with no distance (as Zwift's rare odometer
+        readings left it) and a stream without distance.
+    Expect: it is outdated; after recompute its distance is about 33.4 km and its stream has
+        a distance every riding second.
+    """
+    ride = imported.ride(ZWIFT)
+    imported.catalog.replace_summary(
+        ride.id, replace(ride.summary, distance_m=None, avg_speed_mps=None), metrics_version=4
+    )
+    stream = imported.streams.get(ride.id, ride.summary.start)
+    imported.streams.put(ride.id, ride.summary.start, stream.with_columns(distance=None))
+    rc = recomputer(imported)
+
+    outdated = rc.outdated()
+    rc.run(outdated)
+    after = imported.catalog.get_ride(ride.id)
+    distance = imported.streams.get(ride.id, ride.summary.start)["distance"]
+
+    assert outdated == [ride.id]
+    assert after.summary.distance_m is not None
+    assert round(after.summary.distance_m / 1000, 1) == 33.4
+    assert distance.null_count() == 0, "every riding second should have a distance"
+
+
 def test_recompute_replaces_the_stream(imported: ImportedLibrary):
     """A recomputed ride's stream is rewritten too.
 
