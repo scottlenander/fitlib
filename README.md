@@ -106,14 +106,16 @@ uv run fitlib serve --open     # http://localhost:8000/ ; --port, --host
   URL, so reloads, the back button and links keep the view. TSS from an estimated FTP is
   marked with `*`. Tick 2 to 4 rides (from any page or filter; the picks last for the browser
   tab) and press **Compare**.
-- **Ride** (`/rides/<id>`): summary and training figures; power, heart rate, cadence, speed and
-  altitude over the ride on one zoomable time axis; time in power and heart-rate zones; best
+- **Ride** (`/rides/<id>`): summary and training figures; **Ride Stats**: power, heart rate,
+  cadence, speed and altitude stacked on one axis, shown over **time** or **distance**, zoomed
+  by dragging the bar's ends or scrolling, and **Show whole ride** to zoom back out; time in
+  power and heart-rate zones; best
   efforts; laps. **Edit details** sets the name, notes, effort, bike and tags. **Similar
   rides** lists rides on the same route (newest first, to see progress) and with a similar
   effort, each with a **Compare** link, plus a link comparing the ride with its 3 closest.
 - **Compare** (`/compare?ids=a,b,c`): the rides with colour keys (Remove takes one out); their
-  figures side by side; power, heart rate, cadence, speed and altitude overlaid on one zoomable
-  axis; best efforts overlaid. Rides are lined up by **distance** when they all recorded it, so
+  figures side by side; Ride Stats (power, heart rate, cadence, speed and altitude overlaid,
+  zoomable, with Show whole ride); best efforts overlaid. Rides are lined up by **distance** when they all recorded it, so
   the same point on a route lines up, with a **time gap** chart (how far behind or ahead of
   the first ride each was, stops included), or by **time**. Power and heart rate are smoothed
   over 10 s by default (off or 30 s to choose).
@@ -354,7 +356,8 @@ side by side, with one ride or the same ride twice refused), **config** and
   weights in both unit systems, and weights typed in either; local versus UTC start times; the
   library's URL state (reading, writing, defaults, every filter, turning it into an API
   query); tag parsing; which theme applies (remembered choice, else the system); picking
-  rides to compare (at most four, stored picks read safely) and the compare page's address.
+  rides to compare (at most four, stored picks read safely) and the compare page's address;
+  the stacked charts' spacing and their time (minutes, shown as a clock) and distance axes.
 - **Browser tests** (`tests/e2e/`), each written as steps with page objects:
   - *Smoke*: library → open a ride → back → import page → pick two rides and compare them.
   - *Library*: search and an empty result; each filter and filters combined; sorting both ways;
@@ -377,8 +380,10 @@ side by side, with one ride or the same ride twice refused), **config** and
   - *Similar rides*: the other rides on the loop listed as the same route, newest first, and
     opened; the effort tab reached with the arrow keys, closest first, no HR-only rides; the
     indoor ride (no GPS) and the Zwift ride (alone in Watopia) saying why there's nothing.
+  - *Ride stats*: switching the charts between time and distance; the zoom bar's label, and
+    Show whole ride enabled once zoomed in and resetting it.
   - *Compare*: two rides picked in the library and compared (figures side by side, lined
-    up by distance with a time gap), picks kept back in the library; four at most, kept while
+    up by distance with a time gap, zoomed in and back out), picks kept back in the library; four at most, kept while
     filtering, cleared; lining up by time, smoothing off and removing rides down to one;
     comparing from Similar rides, with one ride and with the 3 closest.
   - *Accessibility*: axe WCAG 2.2 AA scans of every page (including Bikes, Settings, the
