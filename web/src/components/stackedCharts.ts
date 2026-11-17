@@ -9,6 +9,8 @@ import type { ZoomControls } from './EChart'
 export const PLOT_HEIGHT = 80
 // Plot plus the space above it for its title and the gap after the chart before.
 export const ROW_HEIGHT = 135
+// How far the zoom bar sits in from each side (its label under it is indented to match).
+export const ZOOM_INSET = 70
 // Room under the last chart for its axis labels and the zoom bar.
 const BOTTOM = 75
 
@@ -52,8 +54,8 @@ export function stackedZoom(count: number, over: Over, units: f.Units) {
       xAxisIndex: axes,
       bottom: 10,
       height: 20,
-      left: 70,
-      right: 70,
+      left: ZOOM_INSET,
+      right: ZOOM_INSET,
       labelFormatter: (value: number) => xLabel(value, over, units),
     },
   ]
@@ -79,6 +81,7 @@ export function xLabel(value: number, over: Over, units: f.Units): string {
 export const ZOOM: ZoomControls = {
   hint: 'Zoom: drag the ends of the bar under the charts, or scroll on a chart, to look at part of the ride.',
   reset: 'Show whole ride',
+  inset: ZOOM_INSET,
 }
 
 // One pointer across all the stacked charts, labelled (and the tooltip headed) in the axis's

@@ -24,8 +24,9 @@ echarts.use([
 
 export type ChartOption = echarts.EChartsCoreOption
 
-// A zoom bar's label and reset button, shown under the chart.
-export type ZoomControls = { hint: string; reset: string }
+// A zoom bar's label and reset button, shown under the chart, indented by `inset` pixels to
+// line up with the bar.
+export type ZoomControls = { hint: string; reset: string; inset: number }
 
 type Props = {
   option: ChartOption
@@ -92,7 +93,7 @@ export function EChart({ option, label, height, testId, zoom }: Props) {
   return (
     <>
       {canvas}
-      <div className="zoom-controls">
+      <div className="zoom-controls" style={{ paddingInline: zoom.inset }}>
         <p id={hintId} className="hint">
           {zoom.hint}
         </p>
