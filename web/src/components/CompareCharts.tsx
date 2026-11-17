@@ -4,6 +4,16 @@ import * as f from '../format'
 import { useTheme } from '../theme'
 import { useUnits } from '../units'
 import { EChart, type ChartOption } from './EChart'
+import {
+  ZOOM,
+  linkedPointer,
+  stackedGrids,
+  stackedHeight,
+  stackedZoom,
+  titledAxis,
+  xLabel,
+  xValue,
+} from './stackedCharts'
 import { seriesColours } from './Swatch'
 
 // The channels overlaid, in the order they're stacked.
@@ -16,7 +26,6 @@ const CHANNELS = [
 ] as const
 type Channel = (typeof CHANNELS)[number]
 
-const ROW_HEIGHT = 120
 const LEGEND_HEIGHT = 30
 
 // Overlaid traces, the time gap (lined up by distance) and best efforts of compared rides.
@@ -32,22 +41,14 @@ export function CompareCharts({ comparison }: { comparison: Comparison }) {
     comparison.rides.some((r) => r.series[c.field]?.some((v) => v !== null)),
   )
   const x = useMemo(
-    () =>
-      comparison.align === 'distance'
-        ? comparison.x.map((m) => f.distanceValue(m, units))
-        : comparison.x,
+    () => comparison.x.map((v) => xValue(v, comparison.align, units)),
     [comparison, units],
   )
   const xAxis = {
     type: 'value' as const,
     min: 0,
     max: x[x.length - 1],
-    axisLabel: {
-      formatter: (v: number) =>
-        comparison.align === 'distance'
-          ? `${v.toFixed(1)} ${f.distanceUnit(units)}`
-          : f.duration(v),
-    },
+    axisLabel: { formatter: (v: number) => xLabel(v, comparison.align, units) },
   }
 
   const traces = useMemo(
@@ -57,9 +58,11 @@ export function CompareCharts({ comparison }: { comparison: Comparison }) {
   )
   const gap = useMemo(
     () =>
-      comparison.align === 'distance' ? gapOption(comparison, x, xAxis, names, colours) : null,
+      comparison.align === 'distance'
+        ? gapOption(comparison, x, xAxis, names, colours, units)
+        : null,
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [comparison, x, colours],
+    [comparison, x, colours, units],
   )
   const anyPower = comparison.rides.some((r) => r.ride.power_curve.length > 0)
   const curves = useMemo(
@@ -78,15 +81,16 @@ export function CompareCharts({ comparison }: { comparison: Comparison }) {
   return (
     <>
       <section aria-labelledby="traces-heading">
-        <h2 id="traces-heading">Over the ride</h2>
+        <h2 id="traces-heading">Ride Stats</h2>
         {channels.length === 0 ? (
           <p>These rides recorded nothing to chart.</p>
         ) : (
           <EChart
             option={traces}
             label={`${channels.map((c) => c.label).join(', ')} of each ride, lined up ${along}`}
-            height={channels.length * ROW_HEIGHT + LEGEND_HEIGHT + 60}
+            height={stackedHeight(channels.length, LEGEND_HEIGHT)}
             testId="compare-traces"
+            zoom={ZOOM}
           />
         )}
       </section>
@@ -118,7 +122,12 @@ export function CompareCharts({ comparison }: { comparison: Comparison }) {
   )
 }
 
-type XAxis = { type: 'value'; min: number; max: number | undefined; axisLabel: object }
+type XAxis = {
+  type: 'value'
+  min: number
+  max: number | undefined
+  axisLabel: object
+}
 
 function tracesOption(
   comparison: Comparison,
@@ -133,34 +142,21 @@ function tracesOption(
     animation: false,
     color: colours,
     legend: { top: 0, data: names },
-    grid: channels.map((_, i) => ({
-      left: 60,
-      right: 20,
-      top: LEGEND_HEIGHT + 20 + i * ROW_HEIGHT,
-      height: ROW_HEIGHT - 30,
-    })),
+    grid: stackedGrids(channels.length, LEGEND_HEIGHT),
     tooltip: {
       trigger: 'axis',
       valueFormatter: (v: unknown) => (typeof v === 'number' ? v.toFixed(0) : ''),
     },
-    axisPointer: { link: [{ xAxisIndex: 'all' }] },
-    dataZoom: [
-      { type: 'inside', xAxisIndex: channels.map((_, i) => i) },
-      { type: 'slider', xAxisIndex: channels.map((_, i) => i), bottom: 10, height: 20 },
-    ],
+    axisPointer: linkedPointer(comparison.align, units),
+    dataZoom: stackedZoom(channels.length, comparison.align, units),
     xAxis: channels.map((_, i) => ({
       ...xAxis,
       gridIndex: i,
       axisLabel: { ...xAxis.axisLabel, show: i === channels.length - 1 },
     })),
-    yAxis: channels.map((c, i) => ({
-      type: 'value',
-      gridIndex: i,
-      name: `${c.label} (${c.unit(units)})`,
-      nameTextStyle: { align: 'left' },
-      splitNumber: 2,
-      scale: c.field !== 'power',
-    })),
+    yAxis: channels.map((c, i) =>
+      titledAxis(`${c.label} (${c.unit(units)})`, i, c.field !== 'power'),
+    ),
     series: channels.flatMap((c, i) =>
       comparison.rides.map((ride, r) => ({
         name: names[r],
@@ -189,11 +185,13 @@ function gapOption(
   xAxis: XAxis,
   names: string[],
   colours: string[],
+  units: f.Units,
 ): ChartOption {
   return {
     animation: false,
     color: colours,
     legend: { top: 0, data: names },
+    axisPointer: linkedPointer(comparison.align, units),
     grid: { left: 60, right: 20, top: 40, bottom: 40 },
     tooltip: {
       trigger: 'axis',

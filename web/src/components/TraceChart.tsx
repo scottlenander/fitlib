@@ -1,8 +1,19 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useStreams, type Streams } from '../api/client'
 import * as f from '../format'
 import { useUnits } from '../units'
 import { EChart, type ChartOption } from './EChart'
+import {
+  ZOOM,
+  linkedPointer,
+  stackedGrids,
+  stackedHeight,
+  stackedZoom,
+  titledAxis,
+  xLabel,
+  xValue,
+  type Over,
+} from './stackedCharts'
 
 // The channels a ride can have, in the order they're stacked.
 const CHANNELS = [
@@ -12,19 +23,31 @@ const CHANNELS = [
   { field: 'speed', label: 'Speed', unit: f.speedUnit, convert: f.speedValue },
   { field: 'altitude', label: 'Altitude', unit: f.elevationUnit, convert: f.elevationValue },
 ] as const
+type Channel = (typeof CHANNELS)[number]
 
 const POINTS = 1500 // about one point per pixel on a wide screen
-const ROW_HEIGHT = 110
 
-type Props = { rideId: string; elapsedS: number; hasPower: boolean; hasHr: boolean }
+type Props = {
+  rideId: string
+  elapsedS: number
+  hasPower: boolean
+  hasHr: boolean
+  hasDistance: boolean
+}
 
-// One line per recorded channel, stacked, sharing a time axis that can be zoomed together.
-export function TraceChart({ rideId, elapsedS, hasPower, hasHr }: Props) {
+// One line per recorded channel, stacked, sharing a time or distance axis that zooms
+// together.
+export function TraceChart({ rideId, elapsedS, hasPower, hasHr, hasDistance }: Props) {
   const { units } = useUnits()
+  const [chosen, setOver] = useState<Over>('time')
+  const over = hasDistance ? chosen : 'time'
   const step = Math.max(1, Math.ceil(elapsedS / POINTS))
-  const fields = CHANNELS.map((c) => c.field).filter(
-    (field) => (field !== 'power' || hasPower) && (field !== 'heart_rate' || hasHr),
-  )
+  const fields = [
+    ...CHANNELS.map((c) => c.field).filter(
+      (field) => (field !== 'power' || hasPower) && (field !== 'heart_rate' || hasHr),
+    ),
+    ...(hasDistance ? ['distance'] : []),
+  ]
   const streams = useStreams(rideId, fields, step, true)
 
   const shown = useMemo(
@@ -35,62 +58,76 @@ export function TraceChart({ rideId, elapsedS, hasPower, hasHr }: Props) {
     [streams.data],
   )
   const option = useMemo(
-    () => (streams.data ? chartOption(streams.data, shown, units) : null),
-    [streams.data, shown, units],
+    () => (streams.data ? chartOption(streams.data, shown, over, units) : null),
+    [streams.data, shown, over, units],
   )
 
-  if (streams.isError) return <p role="alert">Couldn't load the ride's samples.</p>
-  if (!option) return <p>Loading samples…</p>
-  const label = `${shown.map((c) => c.label).join(', ')} over the ride`
   return (
-    <EChart
-      option={option}
-      label={label}
-      height={shown.length * ROW_HEIGHT + 70}
-      testId="trace-chart"
-    />
+    <>
+      <div role="radiogroup" aria-label="Show over" className="radios">
+        <span aria-hidden="true">Show over</span>
+        {(['time', 'distance'] as const).map((value) => (
+          <label key={value}>
+            <input
+              type="radio"
+              name="trace-over"
+              value={value}
+              checked={over === value}
+              disabled={value === 'distance' && !hasDistance}
+              onChange={() => setOver(value)}
+            />
+            {value === 'time' ? 'Time' : 'Distance'}
+          </label>
+        ))}
+        {!hasDistance && <span className="hint">(this ride recorded no distance)</span>}
+      </div>
+      {streams.isError && <p role="alert">Couldn't load the ride's samples.</p>}
+      {!streams.isError && !option && <p>Loading samples…</p>}
+      {option && (
+        <EChart
+          option={option}
+          label={`${shown.map((c) => c.label).join(', ')} over the ride, by ${over}`}
+          height={stackedHeight(shown.length, 0)}
+          testId="trace-chart"
+          zoom={ZOOM}
+        />
+      )}
+    </>
   )
 }
 
 function chartOption(
   streams: Streams,
-  channels: (typeof CHANNELS)[number][],
+  channels: Channel[],
+  over: Over,
   units: f.Units,
 ): ChartOption {
-  const time = streams.t
-  const grids = channels.map((_, i) => ({
-    left: 60,
-    right: 20,
-    top: 20 + i * ROW_HEIGHT,
-    height: ROW_HEIGHT - 30,
-  }))
+  const distance = streams.columns.distance ?? []
+  const raw: (number | null | boolean)[] = over === 'distance' ? distance : streams.t
+  const x = raw.map((v) => (typeof v === 'number' ? xValue(v, over, units) : null))
+  const last = x.reduce<number>((top, v) => (v !== null && v > top ? v : top), 0)
   return {
     animation: false,
-    grid: grids,
+    grid: stackedGrids(channels.length, 0),
     tooltip: {
       trigger: 'axis',
       valueFormatter: (v: unknown) => (typeof v === 'number' ? v.toFixed(0) : ''),
     },
-    axisPointer: { link: [{ xAxisIndex: 'all' }] },
-    dataZoom: [
-      { type: 'inside', xAxisIndex: channels.map((_, i) => i) },
-      { type: 'slider', xAxisIndex: channels.map((_, i) => i), bottom: 10, height: 20 },
-    ],
+    axisPointer: linkedPointer(over, units),
+    dataZoom: stackedZoom(channels.length, over, units),
     xAxis: channels.map((_, i) => ({
-      type: 'category',
-      gridIndex: i,
-      data: time.map((t) => f.duration(t)),
-      axisLabel: { show: i === channels.length - 1 },
-      boundaryGap: false,
-    })),
-    yAxis: channels.map((c, i) => ({
       type: 'value',
       gridIndex: i,
-      name: `${c.label} (${c.unit(units)})`,
-      nameTextStyle: { align: 'left' },
-      splitNumber: 2,
-      scale: c.field !== 'power',
+      min: 0,
+      max: last,
+      axisLabel: {
+        show: i === channels.length - 1,
+        formatter: (v: number) => xLabel(v, over, units),
+      },
     })),
+    yAxis: channels.map((c, i) =>
+      titledAxis(`${c.label} (${c.unit(units)})`, i, c.field !== 'power'),
+    ),
     series: channels.map((c, i) => ({
       name: c.label,
       type: 'line',
@@ -98,8 +135,11 @@ function chartOption(
       yAxisIndex: i,
       showSymbol: false,
       lineStyle: { width: 1 },
-      data: (streams.columns[c.field] ?? []).map((v) =>
-        typeof v === 'number' ? Number(c.convert(v, units).toFixed(1)) : null,
+      // Seconds without a distance (pauses) have no place on a distance axis.
+      data: (streams.columns[c.field] ?? []).flatMap((v, k) =>
+        x[k] === null || x[k] === undefined
+          ? []
+          : [[x[k], typeof v === 'number' ? Number(c.convert(v, units).toFixed(1)) : null]],
       ),
     })),
   }

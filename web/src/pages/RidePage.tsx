@@ -118,13 +118,14 @@ function Ride({ ride }: { ride: RideDetail }) {
       <RideDetails ride={ride} />
 
       <section aria-labelledby="traces-heading">
-        <h2 id="traces-heading">Over the ride</h2>
+        <h2 id="traces-heading">Ride Stats</h2>
         <Suspense fallback={<p>Loading chart…</p>}>
           <TraceChart
             rideId={ride.id}
             elapsedS={ride.elapsed_s}
             hasPower={ride.has_power}
             hasHr={ride.has_hr}
+            hasDistance={ride.distance_m !== null && ride.distance_m > 0}
           />
         </Suspense>
       </section>

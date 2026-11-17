@@ -591,3 +591,16 @@ textarea {
   align-items: center;
   gap: 0.25rem;
 }
+
+/* Under a zoomable chart: what the zoom bar does, and a button back to the whole ride. */
+.zoom-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+  margin-top: 0.25rem;
+}
+.zoom-controls p {
+  margin: 0;
+  flex: 1 1 18rem;
+}
