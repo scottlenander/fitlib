@@ -2,28 +2,11 @@
 
 from __future__ import annotations
 
-from fitlib.models import OffsetSource
-from fitlib.store.factory import open_stores
 from tests.api.conftest import Api
 
-INDOOR = "garmin_indoor_no_hr.fit"  # 19 Aug 2025, starts 18:30 UTC
+# A Wahoo ride with no local time and an undated name: 02:00 UTC on 11 Aug 2025.
+NO_TIME_ZONE = "other_ride_no_time_zone.fit"
 ZWIFT = "2025-08-02-08-29-42.fit"
-
-
-def without_time_zone(api: Api, file_name: str) -> str:
-    """Make a ride look as if its file had no time zone.
-
-    Args:
-        api: The client and its ride ids.
-        file_name: The fixture file the ride came from.
-
-    Returns:
-        The ride's id.
-    """
-    ride_id = api.ids[file_name]
-    with open_stores(api.config) as stores:
-        stores.catalog.set_utc_offsets({ride_id: (None, OffsetSource.NONE)})
-    return ride_id
 
 
 def test_time_zones_are_listed(reader: Api):
@@ -41,19 +24,22 @@ def test_time_zones_are_listed(reader: Api):
 def test_setting_the_default_updates_rides_without_their_own(writer: Api):
     """Rides without a time zone take the default at once; others keep theirs.
 
-    Given: the indoor ride with no time zone; the Zwift ride with one from its file name.
-    Expect: 1 ride updated; the indoor ride starts 14:30 New York time (-4 h); the Zwift ride
-        still at 08:30 (CEST); settings report the zone.
+    Given: the Wahoo ride with no time zone; the Zwift ride with one from its file name.
+    Expect: 1 ride updated; the Wahoo ride starts 22:00 on 10 Aug in New York (-4 h), and is
+        named for that day; the Zwift ride still at 08:30 (CEST); settings report the zone.
     """
-    indoor = without_time_zone(writer, INDOOR)
+    ride_id = writer.ids[NO_TIME_ZONE]
+    before = writer.client.get(f"/api/rides/{ride_id}").json()
 
     response = writer.client.put("/api/settings/timezone", json={"timezone": "America/New_York"})
-    ride = writer.client.get(f"/api/rides/{indoor}").json()
+    after = writer.client.get(f"/api/rides/{ride_id}").json()
     zwift = writer.client.get(f"/api/rides/{writer.ids[ZWIFT]}").json()
 
+    assert (before["local_start"], before["name"]) == (None, "Ride, 11 Aug 2025")
     assert response.status_code == 200
     assert response.json() == {"timezone": "America/New_York", "updated": 1, "bikes_to_check": 0}
-    assert (ride["utc_offset_s"], ride["local_start"]) == (-14400, "2025-08-19T14:30:00")
+    assert (after["utc_offset_s"], after["local_start"]) == (-14400, "2025-08-10T22:00:00")
+    assert after["name"] == "Ride, 10 Aug 2025"
     assert zwift["local_start"] == "2025-08-02T08:30:00"
     assert writer.client.get("/api/settings").json()["timezone"] == "America/New_York"
 
@@ -61,14 +47,13 @@ def test_setting_the_default_updates_rides_without_their_own(writer: Api):
 def test_clearing_the_default_goes_back_to_utc(writer: Api):
     """Clearing the default leaves rides that used it with no time zone.
 
-    Given: the indoor ride on the New York default.
+    Given: the Wahoo ride on the New York default.
     Expect: 1 ride updated; no local start; no zone in settings.
     """
-    indoor = without_time_zone(writer, INDOOR)
     writer.client.put("/api/settings/timezone", json={"timezone": "America/New_York"})
 
     response = writer.client.put("/api/settings/timezone", json={"timezone": None})
-    ride = writer.client.get(f"/api/rides/{indoor}").json()
+    ride = writer.client.get(f"/api/rides/{writer.ids[NO_TIME_ZONE]}").json()
 
     assert response.json()["updated"] == 1
     assert ride["local_start"] is None

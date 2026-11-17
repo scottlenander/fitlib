@@ -16,7 +16,7 @@ from tests.fixtures.generate import FIT_DIR
 
 PAUSE = "garmin_nord_pause_10min.fit"
 ZWIFT = "2025-08-02-08-29-42.fit"
-IMPORTED_RIDES = 8
+IMPORTED_RIDES = 9
 
 
 @pytest.fixture
@@ -73,7 +73,7 @@ def test_reset_throws_away_edits_and_added_rides(e2e: TestClient):
     """A second reset starts again from just the fixtures.
 
     Given: a reset library with a bike added and a ride tagged, then another reset.
-    Expect: no bikes, no tags, and 8 rides with new ids.
+    Expect: no bikes, no tags, and 9 rides with new ids.
     """
     first = e2e.post("/e2e/reset").json()
     e2e.post("/api/bikes", json={"name": "Giant Contend 1"})

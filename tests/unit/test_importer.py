@@ -85,7 +85,7 @@ def test_importing_the_fixture_folder(library: Library):
 
     Given: the fixture folder (8 importable rides incl. two in a zip, a byte-identical copy,
     a run, a second recording of the Zwift ride, and a truncated file).
-    Expect: the 8 rides imported; the copy a duplicate; the run and the second recording
+    Expect: the 9 rides imported; the copy a duplicate; the run and the second recording
     skipped with reasons; the truncated file failed with a reason.
     """
     report = library.importer().run([FIT_DIR])
@@ -101,23 +101,23 @@ def test_importing_the_fixture_folder(library: Library):
     ], "the run and the second recording of the Zwift ride should be skipped"
     assert [name for name, _ in report.failed] == ["corrupt_truncated.fit"]
     assert "not a readable FIT file" in report.failed[0][1]
-    assert library.catalog.count() == 8
+    assert library.catalog.count() == 9
 
 
 def test_reimporting_imports_nothing(library: Library):
     """Running the same import again is safe: files already imported are duplicates.
 
     Given: the fixture folder imported once.
-    Expect: a second run imports 0 rides; the 8 rides and the copy are duplicates; the
-    catalog still holds 8 rides.
+    Expect: a second run imports 0 rides; the 9 rides and the copy are duplicates; the
+    catalog still holds 9 rides.
     """
     library.importer().run([FIT_DIR])
 
     again = library.importer().run([FIT_DIR])
 
     assert again.imported == [], "nothing should be imported twice"
-    assert len(again.duplicates) == 9, "8 imported rides plus the byte-identical copy"
-    assert library.catalog.count() == 8
+    assert len(again.duplicates) == 10, "9 imported rides plus the byte-identical copy"
+    assert library.catalog.count() == 9
 
 
 def test_raw_files_and_streams_are_stored(library: Library):
@@ -133,9 +133,9 @@ def test_raw_files_and_streams_are_stored(library: Library):
     raw = library.blobs.list("raw/")
     streams = library.blobs.list("streams/")
 
-    assert len(raw) == 9, "8 imported rides + the archived overlapping recording"
+    assert len(raw) == 10, "9 imported rides + the archived overlapping recording"
     assert all(library.blobs.exists(raw_key(r.sha256)) for r in rides)
-    assert len(streams) == 8
+    assert len(streams) == 9
     for r in rides:
         frame = library.streams.get(r.id, r.summary.start)
         assert frame.height == r.summary.elapsed_s, f"stream length for {r.source_name}"
@@ -181,7 +181,7 @@ def test_progress_is_reported_once_per_file(library: Library):
         + [n for n, _ in report.skipped]
         + [n for n, _ in report.failed]
     )
-    assert len(seen) == 12
+    assert len(seen) == 13
 
 
 def test_process_pool_gives_the_same_result(library: Library):

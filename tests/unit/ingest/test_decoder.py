@@ -11,6 +11,14 @@ from fitlib.ingest.source import detect_source, device_name, is_cycling, is_indo
 from fitlib.models import Source
 from tests.fixtures.generate import FIT_DIR, committed_bytes, written_samples
 from tests.fixtures.specs import RIDES, RideSpec
+from tests.fixtures.specs import Source as SpecSource
+
+# The manufacturer each kind of synthetic ride is written with.
+MANUFACTURERS = {
+    SpecSource.ZWIFT: "zwift",
+    SpecSource.GARMIN: "garmin",
+    SpecSource.OTHER: "wahoo_fitness",
+}
 
 
 @pytest.mark.parametrize("spec", RIDES, ids=lambda s: s.name)
@@ -25,7 +33,7 @@ def test_decodes_every_fixture(spec: RideSpec):
     written = written_samples(spec)
     expected_laps = len(spec.segments) if spec.lap_per_segment else 1
 
-    assert decoded.manufacturer == spec.source.value
+    assert decoded.manufacturer == MANUFACTURERS[spec.source]
     assert decoded.sport == spec.sport
     assert decoded.sub_sport == spec.sub_sport
     assert decoded.utc_offset_s == spec.utc_offset_s, (

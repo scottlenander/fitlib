@@ -26,12 +26,12 @@ def names(paths: list[Path]) -> list[str]:
 def test_scans_the_fixture_folder_including_zip_members():
     """Every .fit file in a folder is found, and .zip archives are opened.
 
-    Given: the fixture folder: 10 standalone .fit files and a .zip holding two rides.
-    Expect: 12 sources in path order, the zipped ones named ``<zip>:<member>``.
+    Given: the fixture folder: 11 standalone .fit files and a .zip holding two rides.
+    Expect: 13 sources in path order, the zipped ones named ``<zip>:<member>``.
     """
     found = names([FIT_DIR])
 
-    assert len(found) == 12
+    assert len(found) == 13
     assert found == sorted(found), "sources should come in a stable, sorted order"
     assert "garmin_export.zip:garmin_export_ride_a.fit" in found
     assert "garmin_export.zip:garmin_export_ride_b.fit" in found

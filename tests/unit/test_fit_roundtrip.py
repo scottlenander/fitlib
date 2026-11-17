@@ -61,7 +61,8 @@ def ride(
 def test_file_id_identifies_the_source(ride):
     """The file_id message says who recorded the ride.
 
-    Given: each synthetic ride (Zwift, and Garmin Edge 540), encoded with fit-tool.
+    Given: each synthetic ride (Zwift, Garmin Edge 540, and a Wahoo computer for "other"),
+        encoded with fit-tool.
     Expect: an activity file whose manufacturer, Garmin product, serial number and creation time
     match the spec.
     """
@@ -72,6 +73,8 @@ def test_file_id_identifies_the_source(ride):
     assert file_id["type"] == "activity"
     if spec.source is Source.ZWIFT:
         assert file_id["manufacturer"] == "zwift"
+    elif spec.source is Source.OTHER:
+        assert file_id["manufacturer"] == "wahoo_fitness"
     else:
         assert file_id["manufacturer"] == "garmin"
         assert file_id["garmin_product"] == "edge_540"
