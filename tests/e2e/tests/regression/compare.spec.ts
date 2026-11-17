@@ -58,6 +58,15 @@ test('pick two rides in the library and compare them', async ({ page }) => {
     await expect(compare.curves).toBeVisible()
   })
 
+  await test.step('Zoom in on the charts and back out', async () => {
+    await compare.zoom.zoomIn(compare.traces)
+    await expect(compare.zoom.showWholeRide).toBeEnabled()
+    await compare.zoom.showWholeRide.click()
+    await expect(compare.zoom.showWholeRide, {
+      message: 'Once the whole ride shows there should be nothing to reset',
+    }).toBeDisabled()
+  })
+
   await test.step('The picks are still there back in the library', async () => {
     await compare.header.libraryLink.click()
     await expect(library.pick(EXPORT_A.name)).toBeChecked()

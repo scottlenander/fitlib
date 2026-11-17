@@ -44,6 +44,7 @@ export const RIDES = {
     date: '2025-08-05',
     changes: false,
     usedBy: [
+      'regression/rideStats.spec.ts',
       'regression/compare.spec.ts',
       'regression/similarRides.spec.ts',
       'smoke/libraryToRide.spec.ts',

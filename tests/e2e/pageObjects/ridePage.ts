@@ -1,9 +1,11 @@
 import type { Locator, Page } from '@playwright/test'
+import { ChartZoom } from './components/chartZoom'
 import { Header } from './components/header'
 import { SimilarRides } from './components/similarRides'
 import { Stats } from './components/stats'
 
-// One ride (/rides/:id): summary and training cards, charts, zones, best efforts, laps.
+// One ride (/rides/:id): summary and training cards, Ride Stats charts (over time or
+// distance, zoomable), zones, best efforts, laps.
 // Sections only appear when the ride has the data (no power → no zones or power figures).
 export class RidePage {
   readonly page: Page
@@ -14,7 +16,12 @@ export class RidePage {
   readonly summary: Stats
   readonly training: Stats
   readonly details: Stats
+  readonly statsHeading: Locator
   readonly traceChart: Locator
+  // The trace chart's x axis: time from the start or distance ridden.
+  readonly overTime: Locator
+  readonly overDistance: Locator
+  readonly zoom: ChartZoom
   readonly powerZones: Locator
   readonly hrZones: Locator
   readonly curveChart: Locator
@@ -47,7 +54,12 @@ export class RidePage {
     this.summary = new Stats(page, 'summary-stats')
     this.training = new Stats(page, 'training-stats')
     this.details = new Stats(page, 'detail-stats')
+    this.statsHeading = page.getByRole('heading', { name: 'Ride Stats', level: 2 })
     this.traceChart = page.getByTestId('trace-chart')
+    const over = page.getByRole('radiogroup', { name: 'Show over' })
+    this.overTime = over.getByRole('radio', { name: 'Time' })
+    this.overDistance = over.getByRole('radio', { name: 'Distance' })
+    this.zoom = new ChartZoom(page)
     this.powerZones = page.getByRole('table', { name: 'Power zones' })
     this.hrZones = page.getByRole('table', { name: 'Heart-rate zones' })
     this.curveChart = page.getByTestId('curve-chart')
