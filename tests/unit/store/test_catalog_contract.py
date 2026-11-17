@@ -22,6 +22,7 @@ from fitlib.models import (
     BikeKind,
     BikeSlot,
     Filters,
+    OffsetSource,
     RideMeta,
     SortKey,
     Source,
@@ -823,7 +824,7 @@ def test_sqlite_catalog_persists_and_is_migrated(tmp_path: Path):
     reopened.close()
 
     assert loaded == ride, "the ride should survive closing and reopening the catalog"
-    assert version == 4
+    assert version == 5
 
 
 def test_phase_1a_database_is_upgraded(tmp_path: Path):
@@ -854,7 +855,7 @@ def test_phase_1a_database_is_upgraded(tmp_path: Path):
     version = catalog.schema_version
     catalog.close()
 
-    assert version == 4
+    assert version == 5
     assert ride.metrics_version == 1, "the old ride should be marked for recompute"
     assert ride.summary.np is None and ride.summary.power_curve == ()
 
@@ -876,3 +877,133 @@ def test_bike_from_default_round_trips(catalog: CatalogStore):
 
     assert with_bike.bike_from_default
     assert not without_bike.bike_from_default, "no bike means nothing came from a default"
+
+
+# -- settings and time zones ------------------------------------------------------------------
+
+
+def test_settings_are_set_read_and_cleared(catalog: CatalogStore):
+    """A library setting holds one value per key until cleared.
+
+    Given: an empty catalog.
+    Expect: nothing at first; the latest value after setting twice; nothing after clearing.
+    """
+    before = catalog.get_setting("default_time_zone")
+    catalog.set_setting("default_time_zone", "Europe/Paris")
+    catalog.set_setting("default_time_zone", "Asia/Tokyo")
+    after_set = catalog.get_setting("default_time_zone")
+    catalog.set_setting("default_time_zone", None)
+
+    assert before is None
+    assert after_set == "Asia/Tokyo"
+    assert catalog.get_setting("default_time_zone") is None
+
+
+def test_rides_are_found_by_where_their_time_zone_came_from(catalog: CatalogStore):
+    """Rides can be listed by the source of their time zone, oldest first.
+
+    Given: rides whose time zones came from the device, the file name, the default and none.
+    Expect: asking for default and none lists those two, with start and offset; the source
+        survives being stored.
+    """
+    rides = {}
+    for day, (offset, source) in enumerate(
+        [
+            (7200, OffsetSource.DEVICE),
+            (-14400, OffsetSource.FILE_NAME),
+            (-18000, OffsetSource.DEFAULT),
+            (None, OffsetSource.NONE),
+        ]
+    ):
+        ride = make_ride(
+            start=DEFAULT_START + timedelta(days=day),
+            utc_offset_s=offset,
+            utc_offset_source=source,
+        )
+        catalog.add_ride(ride)
+        rides[source] = ride
+
+    found = catalog.rides_by_offset_source([OffsetSource.NONE, OffsetSource.DEFAULT])
+
+    default, none = rides[OffsetSource.DEFAULT], rides[OffsetSource.NONE]
+    assert found == [
+        (default.id, default.summary.start, -18000),
+        (none.id, none.summary.start, None),
+    ]
+    assert catalog.get_ride(rides[OffsetSource.FILE_NAME].id).summary.utc_offset_source == (
+        OffsetSource.FILE_NAME
+    )
+
+
+def test_changing_a_rides_time_zone_keeps_the_rest_and_moves_its_date(catalog: CatalogStore):
+    """A new time zone changes only the offset, and the date its default name and search use.
+
+    Given: an unnamed ride starting 01:00 UTC on 2 Aug 2025, with no time zone.
+    Expect: after moving it to -5 h (the default), it is dated 1 Aug in its name and found by
+        searching "1 Aug" (it wasn't before); its other figures are unchanged. An unknown
+        ride refuses the change.
+    """
+    ride = make_ride(start=datetime(2025, 8, 2, 1, 0, tzinfo=UTC), utc_offset_s=None)
+    catalog.add_ride(ride)
+    found_before = catalog.search(Filters(text="1 Aug")).items
+
+    catalog.set_utc_offsets({ride.id: (-18000, OffsetSource.DEFAULT)})
+    after = catalog.get_ride(ride.id)
+
+    assert (after.summary.utc_offset_s, after.summary.utc_offset_source) == (
+        -18000,
+        OffsetSource.DEFAULT,
+    )
+    assert after.summary == replace(
+        ride.summary, utc_offset_s=-18000, utc_offset_source=OffsetSource.DEFAULT
+    )
+    assert after.display_name.endswith("1 Aug 2025")
+    assert found_before == (), "on 2 Aug in UTC, a search for 1 Aug shouldn't find it"
+    assert [r.id for r in catalog.search(Filters(text="1 Aug")).items] == [ride.id]
+    with pytest.raises(RideNotFound):
+        catalog.set_utc_offsets({"no-such-ride": (0, OffsetSource.DEFAULT)})
+
+
+def test_existing_rides_keep_their_time_zone_as_from_their_file(tmp_path: Path):
+    """Upgrading marks where each existing ride's time zone came from.
+
+    Given: a catalog at schema version 4 with one ride that has an offset (only ever from its
+        file then) and one without.
+    Expect: after opening it, the first is marked as from its file and the second as none,
+        and there's no default time zone yet.
+    """
+    path = tmp_path / "catalog.sqlite3"
+    folder = resources.files("fitlib.store.local") / "migrations"
+    scripts = sorted(
+        (entry.name, entry.read_text()) for entry in folder.iterdir() if entry.name < "0005"
+    )
+    db = sqlite3.connect(path)
+    for _, script in scripts:
+        db.executescript(script)
+    db.execute("PRAGMA user_version = 4")
+    for ride_id, offset in (
+        ("abcd1111-0000-4000-8000-000000000001", 7200),
+        ("abcd2222-0000-4000-8000-000000000002", None),
+    ):
+        db.execute(
+            "INSERT INTO rides (id, sha256, source_name, imported_at, metrics_version, start_ts, "
+            "utc_offset_s, source, sport, indoor, elapsed_s, moving_s, has_power, has_hr, "
+            "has_gps) VALUES (?, ?, 'a.fit', 0, 5, 0, ?, 'garmin', 'cycling', 0, 60, 60, 1, 1, 0)",
+            (ride_id, ride_id, offset),
+        )
+    db.commit()
+    db.close()
+
+    catalog = SqliteCatalog(path)
+    sources = [
+        catalog.get_ride(ride_id).summary.utc_offset_source
+        for ride_id in (
+            "abcd1111-0000-4000-8000-000000000001",
+            "abcd2222-0000-4000-8000-000000000002",
+        )
+    ]
+    zone = catalog.get_setting("default_time_zone")
+    catalog.close()
+
+    assert sources == [OffsetSource.DEVICE, OffsetSource.NONE]
+    assert zone is None

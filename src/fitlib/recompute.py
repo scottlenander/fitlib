@@ -13,6 +13,7 @@ from concurrent.futures import Future
 from dataclasses import dataclass, field
 
 from fitlib.ingest.analyse import Analysed, Failed, NotARide, analyse
+from fitlib.ingest.localtime import DEFAULT_ZONE_SETTING
 from fitlib.ingest.summarize import METRICS_VERSION
 from fitlib.models import Ride
 from fitlib.parallel import default_workers, make_executor
@@ -80,6 +81,7 @@ class Recomputer:
             Which rides were updated and which failed, with reasons.
         """
         report = RecomputeReport()
+        default_zone = self._catalog.get_setting(DEFAULT_ZONE_SETTING)
         # Bounded, like the importer, so memory stays flat when recomputing every ride.
         in_flight: deque[tuple[Ride, Future]] = deque()
 
@@ -100,7 +102,8 @@ class Recomputer:
                     if on_progress:
                         on_progress(ride_id)
                     continue
-                in_flight.append((ride, executor.submit(analyse, data)))
+                future = executor.submit(analyse, data, ride.source_name, default_zone)
+                in_flight.append((ride, future))
                 if len(in_flight) >= self._workers * 4:
                     finish_oldest()
             while in_flight:

@@ -5,6 +5,7 @@ from __future__ import annotations
 import polars as pl
 
 from fitlib.ingest.decoder import DecodedActivity
+from fitlib.ingest.localtime import choose_offset
 from fitlib.ingest.source import detect_source, device_name, is_indoor
 from fitlib.metrics import basic, curves, hr, power, zones
 from fitlib.models import RideSummary
@@ -13,25 +14,36 @@ from fitlib.models import RideSummary
 # 3: route fingerprints.
 # 4: local time ignored when it isn't real (Zwift writes 1989-12-31), fixing ride dates.
 # 5: distance added up from speed when the odometer is on few records (Zwift).
-METRICS_VERSION = 5
+# 6: time zone from the file name (Zwift) or the library's default time zone.
+METRICS_VERSION = 6
 
 
-def summarize(decoded: DecodedActivity, frame: pl.DataFrame) -> RideSummary:
+def summarize(
+    decoded: DecodedActivity,
+    frame: pl.DataFrame,
+    name: str | None = None,
+    default_zone: str | None = None,
+) -> RideSummary:
     """Combine what the file says with figures computed from its samples.
 
     Args:
         decoded: The decoded file.
         frame: The ride's 1 Hz frame from ``to_frame``. Must have at least one row.
+        name: The file's name (no folders), for a time zone when the file has none.
+        default_zone: The library's default time zone, for when neither has one.
 
     Returns:
         The ride's summary.
     """
+    start = frame["timestamp"][0]
+    utc_offset_s, utc_offset_source = choose_offset(decoded.utc_offset_s, name, start, default_zone)
     has_gps = basic.has_data(frame, "lat")
     avg_power = basic.avg_power(frame)
     np = power.normalized_power(frame)
     return RideSummary(
-        start=frame["timestamp"][0],
-        utc_offset_s=decoded.utc_offset_s,
+        start=start,
+        utc_offset_s=utc_offset_s,
+        utc_offset_source=utc_offset_source,
         source=detect_source(decoded),
         device=device_name(decoded),
         sport=decoded.sport or "cycling",

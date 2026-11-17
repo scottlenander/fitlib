@@ -25,7 +25,7 @@ export type FixtureRide = {
 
 export const RIDES = {
   ZWIFT: {
-    file: 'zwift_watopia_steady_60min.fit',
+    file: '2025-08-02-08-29-42.fit',
     name: 'Zwift ride, 2 Aug 2025',
     date: '2025-08-02',
     changes: false,

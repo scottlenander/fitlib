@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import replace
 from datetime import date, datetime
 
@@ -12,6 +13,7 @@ from fitlib.models import (
     BikeSlot,
     BikeTotals,
     Filters,
+    OffsetSource,
     Page,
     Ride,
     RideMeta,
@@ -125,6 +127,7 @@ class MemoryCatalog:
         self._bikes: dict[str, Bike] = {}
         self._bike_defaults: dict[tuple[BikeSlot, date], BikeDefault] = {}
         self._routes: dict[str, Route] = {}
+        self._settings: dict[str, str] = {}
 
     def _bike_name(self, ride: Ride) -> str | None:
         """The name of a ride's bike.
@@ -548,6 +551,64 @@ class MemoryCatalog:
         with_value.sort(key=lambda r: _sort_value(r, sort), reverse=descending)
         ordered = with_value + without
         return Page(tuple(ordered[offset : offset + limit]), len(ordered), offset, limit)
+
+    def get_setting(self, key: str) -> str | None:
+        """Read a library setting.
+
+        Args:
+            key: The setting's name.
+
+        Returns:
+            Its value, or ``None`` if it isn't set.
+        """
+        return self._settings.get(key)
+
+    def set_setting(self, key: str, value: str | None) -> None:
+        """Set or clear a library setting.
+
+        Args:
+            key: The setting's name.
+            value: Its new value; ``None`` clears it.
+        """
+        if value is None:
+            self._settings.pop(key, None)
+        else:
+            self._settings[key] = value
+
+    def rides_by_offset_source(
+        self, sources: Iterable[OffsetSource]
+    ) -> list[tuple[str, datetime, int | None]]:
+        """List rides whose time zone came from one of some sources.
+
+        Args:
+            sources: The sources, e.g. the default time zone and none.
+
+        Returns:
+            ``(id, start, utc_offset_s)`` for each, oldest first.
+        """
+        wanted = set(sources)
+        rides = sorted(self._rides.values(), key=lambda r: (r.summary.start, r.id))
+        return [
+            (r.id, r.summary.start, r.summary.utc_offset_s)
+            for r in rides
+            if r.summary.utc_offset_source in wanted
+        ]
+
+    def set_utc_offsets(self, offsets: dict[str, tuple[int | None, OffsetSource]]) -> None:
+        """Change rides' time zones, keeping everything else.
+
+        Args:
+            offsets: For each ride id, its new offset from UTC and where it came from.
+
+        Raises:
+            RideNotFound: A ride doesn't exist (nothing is changed).
+        """
+        for ride_id in offsets:
+            self.get_ride(ride_id)
+        for ride_id, (offset, source) in offsets.items():
+            ride = self._rides[ride_id]
+            summary = replace(ride.summary, utc_offset_s=offset, utc_offset_source=source)
+            self._rides[ride_id] = replace(ride, summary=summary)
 
     def count(self) -> int:
         """Count the rides in the catalog.

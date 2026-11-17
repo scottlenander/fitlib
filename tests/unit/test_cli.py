@@ -819,3 +819,44 @@ def test_compare_needs_two_to_four_different_rides(imported: Path, days: list[st
 
     assert result.exit_code == 2
     assert message in result.output
+
+
+# -- timezone ---------------------------------------------------------------------------------
+
+
+def test_timezone_shows_sets_and_clears_the_default(imported: Path):
+    """``fitlib timezone`` shows the default, sets it, and clears it.
+
+    Given: the imported fixtures (every ride has a time zone from its file or file name).
+    Expect: "none (UTC)" at first; set to New York with 0 rides updated; shown afterwards;
+        cleared back to none.
+    """
+    shown = run(imported, "timezone")
+    set_ = run(imported, "timezone", "America/New_York")
+    after = run(imported, "timezone")
+    cleared = run(imported, "timezone", "--clear")
+
+    assert shown.exit_code == 0 and "Default time zone: none (UTC)" in shown.output
+    assert "Default time zone: America/New_York. Updated 0 rides." in set_.output
+    assert "Default time zone: America/New_York" in after.output
+    assert "Default time zone: none (UTC). Updated 0 rides." in cleared.output
+
+
+@pytest.mark.parametrize(
+    ("args", "message"),
+    [
+        (["Mars/Olympus_Mons"], "Unknown time zone 'Mars/Olympus_Mons'"),
+        (["Europe/Paris", "--clear"], "Give a time zone or --clear, not both"),
+    ],
+    ids=["unknown-zone", "zone-and-clear"],
+)
+def test_timezone_refuses_bad_input(imported: Path, args: list[str], message: str):
+    """An unknown zone, or a zone with --clear, is an error.
+
+    Given: each bad combination.
+    Expect: exit code 2 and a message saying what's wrong.
+    """
+    result = run(imported, "timezone", *args)
+
+    assert result.exit_code == 2
+    assert message in result.output

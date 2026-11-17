@@ -15,7 +15,7 @@ from fitlib.config import Config
 from tests.fixtures.generate import FIT_DIR
 
 PAUSE = "garmin_nord_pause_10min.fit"
-ZWIFT = "zwift_watopia_steady_60min.fit"
+ZWIFT = "2025-08-02-08-29-42.fit"
 IMPORTED_RIDES = 8
 
 

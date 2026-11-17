@@ -33,6 +33,19 @@ class Units(StrEnum):
     METRIC = "metric"
 
 
+class OffsetSource(StrEnum):
+    """Where a ride's time zone (its offset from UTC) came from."""
+
+    # The file's own local time (Garmin devices).
+    DEVICE = "device"
+    # The file's name, e.g. Zwift's ``2026-04-29-07-23-09.fit`` (local start time).
+    FILE_NAME = "file_name"
+    # The library's default time zone, set by the user.
+    DEFAULT = "default"
+    # None found: times are shown in UTC.
+    NONE = "none"
+
+
 class Source(StrEnum):
     """Where a ride was recorded, from the FIT file's manufacturer field."""
 
@@ -104,7 +117,7 @@ class RideSummary:
 
     Attributes:
         start: Time of the first record, in UTC (timezone-aware).
-        utc_offset_s: Local time minus UTC in seconds, when the device recorded local time.
+        utc_offset_s: Local time minus UTC in seconds, when known (see ``utc_offset_source``).
         source: Who recorded the ride.
         device: Readable device name, e.g. ``"Garmin Edge 540"``, if known.
         sport: FIT sport, normally ``"cycling"``.
@@ -135,6 +148,7 @@ class RideSummary:
         hr_curve: Best average heart rate for the same durations.
         power_histogram: Riding seconds at each whole watt.
         hr_histogram: Riding seconds at each whole beat per minute.
+        utc_offset_source: Where ``utc_offset_s`` came from; ``NONE`` when it is ``None``.
     """
 
     start: datetime
@@ -168,6 +182,7 @@ class RideSummary:
     hr_curve: Curve = ()
     power_histogram: Histogram = ()
     hr_histogram: Histogram = ()
+    utc_offset_source: OffsetSource = OffsetSource.NONE
 
     @property
     def end(self) -> datetime:
@@ -184,7 +199,7 @@ class RideSummary:
 
         Returns:
             The start shifted by ``utc_offset_s`` (still labelled UTC), or ``None`` if the
-            device didn't record local time.
+            ride's time zone isn't known.
         """
         if self.utc_offset_s is None:
             return None

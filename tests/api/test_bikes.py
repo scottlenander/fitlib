@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 from tests.api.conftest import Api
 
-ZWIFT = "zwift_watopia_steady_60min.fit"
+ZWIFT = "2025-08-02-08-29-42.fit"
 INTERVALS = "garmin_nord_intervals_5x4.fit"
 OUTDOOR_RIDES = 6  # every fixture ride except the Zwift ride and the Garmin indoor ride
 

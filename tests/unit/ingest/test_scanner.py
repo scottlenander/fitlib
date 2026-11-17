@@ -46,10 +46,10 @@ def test_reads_return_the_file_bytes():
     """
     sources = {s.name: s for s in scan([FIT_DIR])}
 
-    standalone = sources["zwift_watopia_steady_60min.fit"].read()
+    standalone = sources["2025-08-02-08-29-42.fit"].read()
     zipped = sources["garmin_export.zip:garmin_export_ride_a.fit"].read()
 
-    assert standalone == (FIT_DIR / "zwift_watopia_steady_60min.fit").read_bytes()
+    assert standalone == (FIT_DIR / "2025-08-02-08-29-42.fit").read_bytes()
     assert zipped[8:12] == b".FIT", "a zip member should read as a FIT file"
 
 

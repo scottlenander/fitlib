@@ -123,6 +123,7 @@ class RideSpec:
             epoch), for devices that write one that isn't a real time.
         zwift_records: Write records as Zwift does: speed only as ``enhanced_speed`` and the
             odometer (``distance``) only on the first record.
+        file_name: The file's name, if not ``<name>.fit``.
     """
 
     name: str
@@ -153,6 +154,17 @@ class RideSpec:
     # Zwift fills in speed every second (as enhanced_speed) but the odometer almost never, so
     # distance has to come from adding up the speed.
     zwift_records: bool = False
+    # Zwift names each file after the PC's local clock when the ride started.
+    file_name: str | None = None
+
+    @property
+    def fit_name(self) -> str:
+        """The file's name as written to the fixture folder (or inside its zip).
+
+        Returns:
+            ``file_name``, or ``<name>.fit``.
+        """
+        return self.file_name or f"{self.name}.fit"
 
     @property
     def duration_s(self) -> int:
@@ -276,6 +288,8 @@ RIDES: tuple[RideSpec, ...] = (
         source=Source.ZWIFT,
         raw_local_timestamp=0,
         zwift_records=True,
+        # Started 06:30:00 UTC; named 18 s earlier on a PC in CEST, as Zwift does.
+        file_name="2025-08-02-08-29-42.fit",
         start=ZWIFT_STEADY_START,
         segments=(Segment(seconds=3600, power=200),),
         loop=WATOPIA_LOOP,

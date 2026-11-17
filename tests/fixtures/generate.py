@@ -405,9 +405,9 @@ def build_all() -> dict[str, bytes]:
     zips: dict[str, dict[str, bytes]] = {}
     for spec in RIDES:
         if spec.zip_name:
-            zips.setdefault(spec.zip_name, {})[f"{spec.name}.fit"] = rides[spec.name]
+            zips.setdefault(spec.zip_name, {})[spec.fit_name] = rides[spec.name]
         else:
-            files[f"{spec.name}.fit"] = rides[spec.name]
+            files[spec.fit_name] = rides[spec.name]
     for zip_name, members in zips.items():
         files[f"{zip_name}.zip"] = _zip(members)
     for copy_name, source_name in DUPLICATES.items():
@@ -431,8 +431,8 @@ def committed_bytes(spec_name: str) -> bytes:
     spec = next(s for s in RIDES if s.name == spec_name)
     if spec.zip_name:
         with zipfile.ZipFile(FIT_DIR / f"{spec.zip_name}.zip") as archive:
-            return archive.read(f"{spec.name}.fit")
-    return (FIT_DIR / f"{spec.name}.fit").read_bytes()
+            return archive.read(spec.fit_name)
+    return (FIT_DIR / spec.fit_name).read_bytes()
 
 
 def write_all(out_dir: Path = FIT_DIR) -> list[Path]:

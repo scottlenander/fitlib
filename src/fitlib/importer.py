@@ -19,6 +19,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from fitlib.ingest.analyse import Analysed, Failed, NotARide, analyse
+from fitlib.ingest.localtime import DEFAULT_ZONE_SETTING
 from fitlib.ingest.scanner import scan
 from fitlib.ingest.summarize import METRICS_VERSION
 from fitlib.metadata import default_bike
@@ -62,6 +63,18 @@ class ImportReport:
             The number of entries across all four lists.
         """
         return len(self.imported) + len(self.duplicates) + len(self.skipped) + len(self.failed)
+
+
+def file_name(name: str) -> str:
+    """The file's own name, without folders or the zip it came from.
+
+    Args:
+        name: A scanned file's name, e.g. ``"export.zip:rides/2026-04-29-07-23-09.fit"``.
+
+    Returns:
+        Its last part, e.g. ``"2026-04-29-07-23-09.fit"``.
+    """
+    return Path(name.split(":")[-1]).name
 
 
 def overlap_fraction(a: RideSummary, b: RideSummary) -> float:
@@ -128,6 +141,7 @@ class Importer:
         """
         report = ImportReport()
         defaults = self._catalog.bike_defaults()
+        default_zone = self._catalog.get_setting(DEFAULT_ZONE_SETTING)
         seen: dict[str, str] = {}  # sha256 -> file name, within this run
         # Files being analysed, oldest first. Bounded, so memory stays flat however many
         # files there are; results are stored in file order, so overlaps resolve the same
@@ -151,7 +165,8 @@ class Importer:
                         on_progress(source.name)
                     continue
                 seen[sha] = source.name
-                in_flight.append((source.name, data, sha, executor.submit(analyse, data)))
+                future = executor.submit(analyse, data, file_name(source.name), default_zone)
+                in_flight.append((source.name, data, sha, future))
                 if len(in_flight) >= max_in_flight:
                     store_oldest()
             while in_flight:
@@ -250,7 +265,7 @@ class Importer:
             summary=result.summary,
             imported_at=self._clock(),
             metrics_version=METRICS_VERSION,
-            source_name=Path(name.split(":")[-1]).name,
+            source_name=file_name(name),
             meta=RideMeta(bike_id=default_bike(defaults, result.summary), bike_from_default=True),
         )
         self._blobs.put(raw_key(sha), data)

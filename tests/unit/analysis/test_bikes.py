@@ -128,4 +128,4 @@ def test_backfill_clears_default_bikes_no_default_covers(imported: ImportedLibra
     changed = backfill_bikes(imported.catalog)
 
     assert dict(changed) == {NO_BIKE: 1}
-    assert imported.ride("zwift_watopia_steady_60min.fit").meta.bike_id is None
+    assert imported.ride("2025-08-02-08-29-42.fit").meta.bike_id is None

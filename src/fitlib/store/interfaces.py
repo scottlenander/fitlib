@@ -9,6 +9,7 @@ Methods are added as phases need them.
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from datetime import date, datetime
 from typing import Protocol
 
@@ -19,6 +20,7 @@ from fitlib.models import (
     BikeSlot,
     BikeTotals,
     Filters,
+    OffsetSource,
     Page,
     Ride,
     RideMeta,
@@ -431,6 +433,50 @@ class CatalogStore(Protocol):
 
         Returns:
             The page of rides and the total number that match.
+        """
+        ...
+
+    def get_setting(self, key: str) -> str | None:
+        """Read a library setting.
+
+        Args:
+            key: The setting's name.
+
+        Returns:
+            Its value, or ``None`` if it isn't set.
+        """
+        ...
+
+    def set_setting(self, key: str, value: str | None) -> None:
+        """Set or clear a library setting.
+
+        Args:
+            key: The setting's name.
+            value: Its new value; ``None`` clears it.
+        """
+        ...
+
+    def rides_by_offset_source(
+        self, sources: Iterable[OffsetSource]
+    ) -> list[tuple[str, datetime, int | None]]:
+        """List rides whose time zone came from one of some sources.
+
+        Args:
+            sources: The sources, e.g. the default time zone and none.
+
+        Returns:
+            ``(id, start, utc_offset_s)`` for each, oldest first.
+        """
+        ...
+
+    def set_utc_offsets(self, offsets: dict[str, tuple[int | None, OffsetSource]]) -> None:
+        """Change rides' time zones, keeping everything else.
+
+        Args:
+            offsets: For each ride id, its new offset from UTC and where it came from.
+
+        Raises:
+            RideNotFound: A ride doesn't exist (nothing is changed).
         """
         ...
 

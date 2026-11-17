@@ -10,7 +10,7 @@ from fitlib.store.factory import open_stores
 from tests.api.conftest import Api
 
 INTERVALS = "garmin_nord_intervals_5x4.fit"
-ZWIFT = "zwift_watopia_steady_60min.fit"
+ZWIFT = "2025-08-02-08-29-42.fit"
 INDOOR = "garmin_indoor_no_hr.fit"
 HR_ONLY = "garmin_nord_hr_no_power.fit"
 # Every outdoor fixture ride laps the same 5 km loop.

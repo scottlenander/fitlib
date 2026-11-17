@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 import threading
-from collections.abc import Generator
+from collections.abc import Generator, Iterable
 from contextlib import contextmanager
 from datetime import UTC, date, datetime
 from importlib import resources
@@ -20,6 +20,7 @@ from fitlib.models import (
     Filters,
     GeoSummary,
     Lap,
+    OffsetSource,
     Page,
     Ride,
     RideMeta,
@@ -52,7 +53,7 @@ _SUMMARY_COLUMNS = (
     "start_ts", "utc_offset_s", "source", "device", "sport", "sub_sport", "indoor", "elapsed_s",
     "moving_s", "distance_m", "ascent_m", "avg_speed_mps", "max_speed_mps", "avg_power",
     "max_power", "avg_hr", "max_hr", "avg_cadence", "has_power", "has_hr", "has_gps", "np", "kj",
-    "vi", "decoupling_pct",
+    "vi", "decoupling_pct", "utc_offset_source",
 )  # fmt: skip
 _RIDE_COLUMNS = ("id", "sha256", "source_name", "imported_at", "metrics_version", *_SUMMARY_COLUMNS)
 
@@ -119,6 +120,7 @@ def _summary_values(s: RideSummary) -> dict[str, object]:
         "kj": s.kj,
         "vi": s.vi,
         "decoupling_pct": s.decoupling_pct,
+        "utc_offset_source": s.utc_offset_source.value,
     }
 
 
@@ -655,6 +657,7 @@ class SqliteCatalog:
         summary = RideSummary(
             start=_dt(row["start_ts"]),
             utc_offset_s=row["utc_offset_s"],
+            utc_offset_source=OffsetSource(row["utc_offset_source"]),
             source=Source(row["source"]),
             device=row["device"],
             sport=row["sport"],
@@ -1049,6 +1052,78 @@ class SqliteCatalog:
             )
             for r in rows
         ]
+
+    def get_setting(self, key: str) -> str | None:
+        """Read a library setting.
+
+        Args:
+            key: The setting's name.
+
+        Returns:
+            Its value, or ``None`` if it isn't set.
+        """
+        with self._lock:
+            row = self._db.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+        return row["value"] if row else None
+
+    def set_setting(self, key: str, value: str | None) -> None:
+        """Set or clear a library setting.
+
+        Args:
+            key: The setting's name.
+            value: Its new value; ``None`` clears it.
+        """
+        with self._tx() as db:
+            if value is None:
+                db.execute("DELETE FROM settings WHERE key = ?", (key,))
+            else:
+                db.execute(
+                    "INSERT INTO settings (key, value) VALUES (?, ?) "
+                    "ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+                    (key, value),
+                )
+
+    def rides_by_offset_source(
+        self, sources: Iterable[OffsetSource]
+    ) -> list[tuple[str, datetime, int | None]]:
+        """List rides whose time zone came from one of some sources.
+
+        Args:
+            sources: The sources, e.g. the default time zone and none.
+
+        Returns:
+            ``(id, start, utc_offset_s)`` for each, oldest first.
+        """
+        wanted = [s.value for s in sources]
+        marks = ", ".join("?" for _ in wanted)
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT id, start_ts, utc_offset_s FROM rides "
+                f"WHERE utc_offset_source IN ({marks}) ORDER BY start_ts, id",
+                wanted,
+            ).fetchall()
+        return [(r["id"], _dt(r["start_ts"]), r["utc_offset_s"]) for r in rows]
+
+    def set_utc_offsets(self, offsets: dict[str, tuple[int | None, OffsetSource]]) -> None:
+        """Change rides' time zones, keeping everything else.
+
+        Args:
+            offsets: For each ride id, its new offset from UTC and where it came from.
+
+        Raises:
+            RideNotFound: A ride doesn't exist (nothing is changed).
+        """
+        with self._tx() as db:
+            for ride_id, (offset, source) in offsets.items():
+                updated = db.execute(
+                    "UPDATE rides SET utc_offset_s = ?, utc_offset_source = ? WHERE id = ?",
+                    (offset, source.value, ride_id),
+                ).rowcount
+                if not updated:
+                    raise RideNotFound(ride_id)
+                # The default name (and so the search index) has the ride's local date.
+                row = db.execute("SELECT * FROM rides WHERE id = ?", (ride_id,)).fetchone()
+                self._index(db, self._load(row))
 
     def count(self) -> int:
         """Count the rides in the catalog.
