@@ -44,6 +44,7 @@ export const RIDES = {
     date: '2025-08-05',
     changes: false,
     usedBy: [
+      'regression/phoneWidth.spec.ts',
       'regression/rideStats.spec.ts',
       'regression/compare.spec.ts',
       'regression/similarRides.spec.ts',
@@ -102,6 +103,7 @@ export const RIDES = {
     date: '2025-08-23',
     changes: false,
     usedBy: [
+      'regression/phoneWidth.spec.ts',
       'regression/compare.spec.ts',
       'regression/similarRides.spec.ts',
       'regression/library.spec.ts',
@@ -113,6 +115,7 @@ export const RIDES = {
     date: '2025-08-24',
     changes: false,
     usedBy: [
+      'regression/phoneWidth.spec.ts',
       'regression/compare.spec.ts',
       'regression/similarRides.spec.ts',
       'smoke/libraryToRide.spec.ts',
