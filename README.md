@@ -200,6 +200,8 @@ logs.
 
 **After upgrading** to a version with new calculations, run `fitlib recompute` (the CLI and
 the library page say when). Rides imported before phase 4a need it for route matching.
+Zwift rides imported before the local-time fix showed the date 30 Dec 1989 (Zwift writes the
+FIT epoch as its local time); recompute dates them correctly, falling back to UTC.
 
 ## Code layout
 
@@ -303,7 +305,9 @@ uv run python -m tests.fixtures.generate
   counts, default-bike entries and the tag/bike/effort filters, invalid blob keys, Parquet
   streams; plus upgrading a phase 1a database.
 - **Ingest** (`tests/unit/ingest/`): scanning folders, files and zips (skipping hidden files and
-  macOS zip junk); decoding device, sport, local time, records and laps; rejecting bad files;
+  macOS zip junk); decoding device, sport, local time, records and laps; local times used only
+  when real (Zwift's 1989-12-31, seconds since power-on and impossible offsets ignored;
+  zones from -12 h to +14 h, to the nearest 15 minutes); rejecting bad files;
   1 Hz normalization (short gaps filled, pauses kept, duplicate timestamps).
 - **Metrics** (`tests/unit/metrics/`): elapsed and moving time, distance, speed, climbing, power,
   heart rate, cadence, location box and laps; NP (against a step-by-step reference), kJ, VI,
@@ -327,7 +331,7 @@ uv run python -m tests.fixtures.generate
   normalization; ride kinds; dated default bikes by local date; backfill never overwriting a
   bike set by hand, dry runs, and repeat runs.
 - **Recompute** (`tests/unit/test_recompute.py`): outdated rides brought up to date with metadata
-  kept; streams rewritten; missing raw files reported.
+  kept; streams rewritten; a Zwift ride dated 1989 repaired; missing raw files reported.
 - **Importer** (`tests/unit/test_importer.py`): the whole fixture folder (imports, duplicates,
   skips, failures), re-import, stored files and streams, overlapping recordings, the process
   pool, cleanup after a failed write, and no coordinates in logs.
@@ -360,7 +364,7 @@ side by side, with one ride or the same ride twice refused), **config** and
   - *Library*: search and an empty result; each filter and filters combined; sorting both ways;
     paging, kept across a reload; the estimated-TSS mark.
   - *Ride detail*: summary, training with an estimated FTP, zones, best efforts, laps and
-    charts; a ride without power; a start time without local time (UTC); switching units,
+    charts; a ride without power; a start time without a real local time (UTC; Zwift's 1989 date ignored); switching units,
     remembered across reloads and pages; an unknown ride.
   - *Import*: a new ride imported and opened from the results; duplicates, a run, an
     overlapping recording and a broken file reported.
