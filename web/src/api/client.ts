@@ -28,6 +28,7 @@ export type TagCount = Schemas['TagCount']
 export type SimilarRides = Schemas['SimilarRides']
 export type SimilarRide = Schemas['SimilarRide']
 export type Health = Schemas['Health']
+export type TimeZoneChange = Schemas['TimeZoneChange']
 export type Comparison = Schemas['Comparison']
 export type ComparedRide = Schemas['ComparedRide']
 export type Align = Comparison['align']
@@ -180,6 +181,25 @@ export function useUpdateMeta(rideId: string) {
     mutationFn: (patch: MetaPatch) =>
       request<RideDetail>(`/api/rides/${encodeURIComponent(rideId)}/meta`, json('PATCH', patch)),
     onSuccess: () => invalidate('ride', 'rides', 'tags', 'bikes'),
+  })
+}
+
+// The time zones the default can be set to (IANA names, from the server's database).
+export function useTimeZones() {
+  return useQuery({
+    queryKey: ['time-zones'],
+    queryFn: () => request<string[]>('/api/settings/time-zones'),
+    staleTime: Infinity,
+  })
+}
+
+// Changes the default time zone; rides that follow it change date and time.
+export function useSetTimeZone() {
+  const invalidate = useInvalidate()
+  return useMutation({
+    mutationFn: (timezone: string | null) =>
+      request<TimeZoneChange>('/api/settings/timezone', json('PUT', { timezone })),
+    onSuccess: () => invalidate('settings', 'ride', 'rides', 'similar', 'compare'),
   })
 }
 
