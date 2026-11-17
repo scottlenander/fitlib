@@ -151,12 +151,34 @@ def align_time(frames: list[pl.DataFrame], points: int = DEFAULT_POINTS) -> Alig
     return Aligned(align="time", x=[float(v) for v in x], series=series, gap=None)
 
 
+def _time_at(frame: pl.DataFrame, at: pl.Series, grid: pl.Series) -> list[float]:
+    """Work out when a ride reached each distance, between whole seconds.
+
+    Samples are a second apart, so the second a distance was first reached can be up to a
+    second late. Interpolating from the second before keeps the time gap smooth.
+
+    Args:
+        frame: The ride's samples with distance, in order.
+        at: For each grid distance, the first sample at or past it.
+        grid: The distances.
+
+    Returns:
+        Seconds from the start for each grid distance.
+    """
+    before = (at - 1).clip(0, frame.height - 1)
+    d0, d1 = frame["distance"].gather(before), frame["distance"].gather(at)
+    t0, t1 = frame["t"].gather(before).cast(pl.Float64), frame["t"].gather(at).cast(pl.Float64)
+    share = ((grid - d0) / (d1 - d0)).fill_nan(1.0).clip(0.0, 1.0)
+    return (t0 + (t1 - t0) * share).to_list()
+
+
 def align_distance(frames: list[pl.DataFrame], points: int = DEFAULT_POINTS) -> Aligned:
     """Line rides up by distance ridden.
 
     The axis runs from 0 to the end of the shortest ride, so every ride covers all of it.
     At each point, each ride's values are those of the first second it had ridden that far,
-    and its time is that second (elapsed, so stops and pauses count, as on a bike computer).
+    and its time is when it got there (elapsed, so stops and pauses count, as on a bike
+    computer), between whole seconds.
 
     Args:
         frames: The rides' 1 Hz frames, smoothed if wanted.
@@ -183,14 +205,14 @@ def align_distance(frames: list[pl.DataFrame], points: int = DEFAULT_POINTS) -> 
     x = [end * i / (count - 1) for i in range(count)]
     grid = pl.Series(x, dtype=pl.Float64)
     series = []
-    times = []
+    times: list[list[float]] = []
     for frame, fields in zip(riding, _recorded(frames), strict=True):
         at = frame["distance"].search_sorted(grid, side="left").clip(0, frame.height - 1)
         reached = frame.select(pl.all().gather(at))
         series.append({f: _values(reached[f]) for f in fields})
-        times.append(reached["t"].to_list())
+        times.append(_time_at(frame, at, grid))
     gap: list[Values] = [
-        [float(t - first) for t, first in zip(ride, times[0], strict=True)] for ride in times
+        [round(t - first, 1) for t, first in zip(ride, times[0], strict=True)] for ride in times
     ]
     return Aligned(align="distance", x=[round(v, 1) for v in x], series=series, gap=gap)
 

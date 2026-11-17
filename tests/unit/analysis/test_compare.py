@@ -144,3 +144,18 @@ def test_channels_a_ride_did_not_record_are_left_out():
     aligned = align([ride([8.0] * 40), ride([9.0] * 40)], by="time")
 
     assert set(aligned.series[0]) == {"power", "speed"}
+
+
+def test_the_gap_falls_between_whole_seconds():
+    """When a ride reached a point is interpolated, so the gap grows smoothly.
+
+    Given: one ride at 10 m/s and one at 7 m/s.
+    Expect: at 700 m the slower ride is 100 - 70 = 30 s behind, and at 500 m 21.4 s (not a
+    whole second).
+    """
+    aligned = align_distance([ride([10.0] * 100), ride([7.0] * 200)], points=100)
+
+    assert aligned.gap is not None
+    gap = dict(zip(aligned.x, aligned.gap[1], strict=True))
+    assert gap[700.0] == 30
+    assert gap[500.0] == pytest.approx(21.4, abs=0.05)
