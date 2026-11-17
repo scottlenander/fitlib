@@ -71,6 +71,28 @@ def test_outdated_rides_are_found_and_brought_up_to_date(imported: ImportedLibra
     assert rc.outdated() == [], "nothing should be outdated afterwards"
 
 
+def test_recompute_repairs_a_zwift_ride_dated_1989(imported: ImportedLibrary):
+    """A Zwift ride imported before version 4 took Zwift's 1989 local time; recompute fixes it.
+
+    Given: the Zwift ride stored at version 3 with the offset older versions worked out from
+        its 1989-12-31 local time (about -35 years), so it showed as 30 Dec 1989.
+    Expect: it is outdated; after recompute it has no offset and is dated 2 Aug 2025.
+    """
+    ride = imported.ride(ZWIFT)
+    broken = replace(ride.summary, utc_offset_s=-1_123_054_200)
+    imported.catalog.replace_summary(ride.id, broken, metrics_version=3)
+    rc = recomputer(imported)
+
+    outdated = rc.outdated()
+    rc.run(outdated)
+    after = imported.catalog.get_ride(ride.id)
+
+    assert broken.local_start is not None and broken.local_start.year == 1989
+    assert outdated == [ride.id]
+    assert after.summary.utc_offset_s is None
+    assert after.display_name == "Zwift ride, 2 Aug 2025"
+
+
 def test_recompute_replaces_the_stream(imported: ImportedLibrary):
     """A recomputed ride's stream is rewritten too.
 

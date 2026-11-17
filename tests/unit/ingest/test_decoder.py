@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+
 import pytest
 
-from fitlib.ingest.decoder import DecodeError, decode
+from fitlib.ingest.decoder import FIT_EPOCH, DecodeError, _utc_offset, decode
 from fitlib.ingest.source import detect_source, device_name, is_cycling, is_indoor
 from fitlib.models import Source
 from tests.fixtures.generate import FIT_DIR, committed_bytes, written_samples
@@ -26,7 +28,9 @@ def test_decodes_every_fixture(spec: RideSpec):
     assert decoded.manufacturer == spec.source.value
     assert decoded.sport == spec.sport
     assert decoded.sub_sport == spec.sub_sport
-    assert decoded.utc_offset_s == spec.utc_offset_s, "Garmin rides record local time (CEST)"
+    assert decoded.utc_offset_s == spec.utc_offset_s, (
+        "Garmin rides record local time (CEST); Zwift's 1989 local time is ignored"
+    )
     assert len(decoded.records) == len(written), "one record per written sample"
     assert [r["power"] for r in decoded.records] == [s.power for s in written]
     assert len(decoded.laps) == expected_laps
@@ -81,3 +85,61 @@ def test_runs_are_not_rides_and_indoor_is_detected():
     assert is_indoor(zwift, has_gps=True), "Zwift is virtual even though it has coordinates"
     assert is_indoor(indoor, has_gps=False)
     assert not is_indoor(outdoor, has_gps=True)
+
+
+END = datetime(2025, 8, 2, 7, 30, tzinfo=UTC)
+
+
+@pytest.mark.parametrize(
+    ("local", "expected"),
+    [
+        (END + timedelta(hours=2), 2 * 3600),
+        (int((END - FIT_EPOCH).total_seconds()) + 2 * 3600, 2 * 3600),
+        (END - timedelta(hours=5, seconds=3), -5 * 3600),
+        (END + timedelta(hours=5, minutes=45), 5 * 3600 + 45 * 60),
+        (END + timedelta(hours=14), 14 * 3600),
+        (END - timedelta(hours=12), -12 * 3600),
+        (FIT_EPOCH, None),
+        (0, None),
+        (3600, None),
+        (END + timedelta(hours=15), None),
+        (END - timedelta(days=1), None),
+        (None, None),
+    ],
+    ids=[
+        "cest",
+        "cest-as-seconds",
+        "us-eastern-with-clock-drift",
+        "nepal",
+        "kiribati",
+        "baker-island",
+        "zwift-fit-epoch",
+        "zero-seconds",
+        "relative-seconds",
+        "beyond-plus-14h",
+        "a-day-off",
+        "missing",
+    ],
+)
+def test_utc_offset_only_from_real_local_times(local, expected):
+    """The time zone comes from the local time only when it is a real one.
+
+    Given: an activity ending 07:30 UTC with local times as dates or seconds since the FIT
+        epoch: real zones (to the nearest 15 minutes), the FIT epoch Zwift writes, seconds
+        since power-on, and offsets no time zone has.
+    Expect: the offset for real zones, otherwise no local time.
+    """
+    offset = _utc_offset({"timestamp": END, "local_timestamp": local})
+
+    assert offset == expected
+
+
+def test_zwift_ride_with_fit_epoch_local_time_has_no_offset():
+    """Zwift's local time of 1989-12-31 is ignored, so the ride keeps its real date.
+
+    Given: the Zwift fixture, which writes the FIT epoch as its local time, as Zwift does.
+    Expect: no UTC offset (dates fall back to UTC), not one of about -35 years.
+    """
+    decoded = decode(committed_bytes("zwift_watopia_steady_60min"))
+
+    assert decoded.utc_offset_s is None

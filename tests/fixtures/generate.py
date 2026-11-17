@@ -352,6 +352,8 @@ def build(spec: RideSpec) -> bytes:
     if spec.utc_offset_s is not None:
         # Seconds since the FIT epoch (1989-12-31 00:00), in local time.
         activity.local_timestamp = end_ms // 1000 - FIT_EPOCH_S + spec.utc_offset_s
+    elif spec.raw_local_timestamp is not None:
+        activity.local_timestamp = spec.raw_local_timestamp
     activity.type = Activity.MANUAL
     activity.event = Event.ACTIVITY
     activity.event_type = EventType.STOP

@@ -3,13 +3,20 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 import fitdecode
 
 SEMICIRCLE_TO_DEG = 180 / 2**31
 FIT_EPOCH_S = 631_065_600  # 1989-12-31T00:00:00Z as a Unix timestamp
+FIT_EPOCH = datetime.fromtimestamp(FIT_EPOCH_S, UTC)
+# FIT times below this many seconds after the epoch (mid-1998) aren't dates but seconds
+# since the device powered on. Zwift writes 0 as its local time.
+FIT_DATETIME_MIN = 0x10000000
+# Every real time zone is between 12 hours behind UTC and 14 hours ahead.
+MIN_UTC_OFFSET_S = -12 * 3600
+MAX_UTC_OFFSET_S = 14 * 3600
 
 # Record fields kept, with the preferred ("enhanced", higher-range) source listed first.
 _RECORD_FIELDS: dict[str, tuple[str, ...]] = {
@@ -118,24 +125,31 @@ def _utc_offset(activity: dict[str, Any]) -> int | None:
 
     fitdecode returns ``local_timestamp`` as a datetime labelled UTC that actually holds local
     wall-clock time, or as raw seconds since the FIT epoch for some files; both are handled.
+    A local time that isn't a real date (Zwift writes the FIT epoch, 1989-12-31) or that
+    gives an offset no time zone has is ignored, as if the file had no local time.
 
     Args:
         activity: The activity message's fields.
 
     Returns:
         Local time minus UTC in seconds, rounded to the nearest 15 minutes (every real time
-        zone is a multiple), or ``None`` if the file has no local time.
+        zone is a multiple), or ``None`` if the file has no usable local time.
     """
     local, utc = activity.get("local_timestamp"), activity.get("timestamp")
     if not isinstance(utc, datetime):
         return None
     if isinstance(local, datetime):
-        seconds = (local.replace(tzinfo=None) - utc.replace(tzinfo=None)).total_seconds()
+        local_s = (local.replace(tzinfo=UTC) - FIT_EPOCH).total_seconds()
     elif isinstance(local, int):
-        seconds = local + FIT_EPOCH_S - utc.timestamp()
+        local_s = local
     else:
         return None
-    return round(seconds / 900) * 900
+    if local_s < FIT_DATETIME_MIN:
+        return None
+    offset = round((local_s + FIT_EPOCH_S - utc.timestamp()) / 900) * 900
+    if not MIN_UTC_OFFSET_S <= offset <= MAX_UTC_OFFSET_S:
+        return None
+    return offset
 
 
 def decode(data: bytes) -> DecodedActivity:
