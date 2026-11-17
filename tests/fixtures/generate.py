@@ -196,11 +196,13 @@ def _timer_event(timestamp_ms: int, event_type: EventType) -> EventMessage:
     return msg
 
 
-def _record(s: Sample) -> RecordMessage:
+def _record(s: Sample, zwift: bool = False) -> RecordMessage:
     """Build the record message for one sample.
 
     Args:
         s: The sample. Channels that are ``None`` are left out of the message.
+        zwift: Write it as Zwift does: speed as ``enhanced_speed`` only, and the odometer
+            only on the first record (second 0).
 
     Returns:
         The record message.
@@ -211,8 +213,13 @@ def _record(s: Sample) -> RecordMessage:
         msg.position_lat = s.lat
         msg.position_long = s.lon
     msg.altitude = s.altitude
-    msg.distance = s.distance
-    msg.speed = s.speed
+    if zwift:
+        if s.second == 0:
+            msg.distance = s.distance
+        msg.enhanced_speed = s.speed
+    else:
+        msg.distance = s.distance
+        msg.speed = s.speed
     if s.power is not None:
         msg.power = s.power
     if s.heart_rate is not None:
@@ -330,7 +337,7 @@ def build(spec: RideSpec) -> bytes:
             )
             builder.add(_timer_event(sample.timestamp_ms, EventType.START))
         if sample.second in written:
-            builder.add(_record(sample))
+            builder.add(_record(sample, zwift=spec.zwift_records))
     builder.add(_timer_event(end_ms, EventType.STOP_ALL))
 
     lap_ranges = _lap_ranges(spec)

@@ -121,6 +121,8 @@ class RideSpec:
         utc_offset_s: Local time minus UTC written to the file, or ``None`` for none.
         raw_local_timestamp: A local time written as is instead (seconds since the FIT
             epoch), for devices that write one that isn't a real time.
+        zwift_records: Write records as Zwift does: speed only as ``enhanced_speed`` and the
+            odometer (``distance``) only on the first record.
     """
 
     name: str
@@ -148,6 +150,9 @@ class RideSpec:
     # Written as the local time as is. Zwift writes 0 (the FIT epoch, 1989-12-31), which must
     # be ignored rather than taken as the rider's clock.
     raw_local_timestamp: int | None = None
+    # Zwift fills in speed every second (as enhanced_speed) but the odometer almost never, so
+    # distance has to come from adding up the speed.
+    zwift_records: bool = False
 
     @property
     def duration_s(self) -> int:
@@ -270,6 +275,7 @@ RIDES: tuple[RideSpec, ...] = (
         name="zwift_watopia_steady_60min",
         source=Source.ZWIFT,
         raw_local_timestamp=0,
+        zwift_records=True,
         start=ZWIFT_STEADY_START,
         segments=(Segment(seconds=3600, power=200),),
         loop=WATOPIA_LOOP,

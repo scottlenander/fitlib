@@ -201,7 +201,9 @@ logs.
 **After upgrading** to a version with new calculations, run `fitlib recompute` (the CLI and
 the library page say when). Rides imported before phase 4a need it for route matching.
 Zwift rides imported before the local-time fix showed the date 30 Dec 1989 (Zwift writes the
-FIT epoch as its local time); recompute dates them correctly, falling back to UTC.
+FIT epoch as its local time); recompute dates them correctly, falling back to UTC. Zwift
+rides imported before the distance fix had no distance (Zwift writes the odometer on only a
+few records); recompute adds it up from their speed.
 
 ## Code layout
 
@@ -307,7 +309,9 @@ uv run python -m tests.fixtures.generate
 - **Ingest** (`tests/unit/ingest/`): scanning folders, files and zips (skipping hidden files and
   macOS zip junk); decoding device, sport, local time, records and laps; local times used only
   when real (Zwift's 1989-12-31, seconds since power-on and impossible offsets ignored;
-  zones from -12 h to +14 h, to the nearest 15 minutes); rejecting bad files;
+  zones from -12 h to +14 h, to the nearest 15 minutes); rejecting bad files; distance from
+  the odometer, or added up from speed when few records carry it (as from Zwift), carrying on
+  from the first reading and not growing through pauses;
   1 Hz normalization (short gaps filled, pauses kept, duplicate timestamps).
 - **Metrics** (`tests/unit/metrics/`): elapsed and moving time, distance, speed, climbing, power,
   heart rate, cadence, location box and laps; NP (against a step-by-step reference), kJ, VI,
@@ -331,7 +335,8 @@ uv run python -m tests.fixtures.generate
   normalization; ride kinds; dated default bikes by local date; backfill never overwriting a
   bike set by hand, dry runs, and repeat runs.
 - **Recompute** (`tests/unit/test_recompute.py`): outdated rides brought up to date with metadata
-  kept; streams rewritten; a Zwift ride dated 1989 repaired; missing raw files reported.
+  kept; streams rewritten; a Zwift ride dated 1989 repaired; a Zwift ride without distance
+  given it; missing raw files reported.
 - **Importer** (`tests/unit/test_importer.py`): the whole fixture folder (imports, duplicates,
   skips, failures), re-import, stored files and streams, overlapping recordings, the process
   pool, cleanup after a failed write, and no coordinates in logs.

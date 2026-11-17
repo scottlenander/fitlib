@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import io
 import math
 from datetime import UTC, datetime, timedelta
 from functools import cache
 from itertools import pairwise
 from statistics import mean
 
+import fitdecode
 import polars as pl
 import pytest
 
@@ -91,16 +93,20 @@ def test_distance_and_speed(spec: RideSpec):
 
     Given: each cycling fixture; speed is (P / 0.25)^(1/3) m/s each second.
     Expect: distance = the sum of every second's speed except the last (the odometer reads
-    the distance *before* each second), within FIT's 1 cm resolution; max speed is the speed
-    at max power.
+    the distance *before* each second), within FIT's 1 cm resolution; for the Zwift ride,
+    whose distance is added up from speed, within FIT's 1 mm/s speed resolution each second.
+    Max speed is the speed at max power.
     """
     frame = frame_for(spec.name)
     expected_distance = sum(speed_for_power(p) for p in spec.powers()[:-1])
+    tolerance = 0.0005 * spec.duration_s if spec.zwift_records else 0.05
 
     distance = basic.distance_m(frame)
 
-    assert distance == pytest.approx(expected_distance, abs=0.05)
-    assert basic.avg_speed_mps(frame) == pytest.approx(expected_distance / spec.duration_s)
+    assert distance == pytest.approx(expected_distance, abs=tolerance)
+    assert basic.avg_speed_mps(frame) == pytest.approx(
+        expected_distance / spec.duration_s, abs=tolerance / spec.duration_s
+    )
     assert basic.max_speed_mps(frame) == pytest.approx(
         speed_for_power(max(spec.powers())), abs=1e-3
     )
@@ -199,3 +205,26 @@ def test_moving_time_without_speed_counts_pedalling_seconds():
     assert basic.moving_s(frame) == 3
     assert basic.distance_m(frame) is None, "no odometer or speed means no distance"
     assert basic.avg_speed_mps(frame) is None
+
+
+def test_zwift_distance_matches_the_files_own_total():
+    """Distance added up from Zwift's speeds agrees with the total Zwift writes in the file.
+
+    Given: the Zwift ride, written as Zwift writes (odometer on the first record only) with
+        the session's total_distance, which other apps show.
+    Expect: the ride's distance within 0.1 % of that total, and every riding second has a
+        distance, so charts and comparisons by distance work.
+    """
+    data = committed_bytes("zwift_watopia_steady_60min")
+    with fitdecode.FitReader(io.BytesIO(data)) as fit:
+        [total] = [
+            m.get_value("total_distance")
+            for m in fit
+            if isinstance(m, fitdecode.FitDataMessage) and m.name == "session"
+        ]
+    frame = frame_for("zwift_watopia_steady_60min")
+
+    distance = basic.distance_m(frame)
+
+    assert distance == pytest.approx(total, rel=0.001)
+    assert frame.filter(pl.col("active"))["distance"].null_count() == 0
