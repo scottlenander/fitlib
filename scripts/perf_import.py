@@ -16,13 +16,14 @@ import tempfile
 import time
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import replace
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from functools import partial
 from pathlib import Path
 
 # Make the repo root importable (for tests.fixtures), also in spawned worker processes.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from fitlib.analysis import trends  # noqa: E402
 from fitlib.analysis.similar import similar_efforts, similar_routes  # noqa: E402
 from fitlib.config import Config  # noqa: E402
 from fitlib.importer import Importer  # noqa: E402
@@ -108,6 +109,16 @@ def main() -> None:
             newest = c.search(Filters(indoor=False), limit=1).items[0]
             timed("similar routes (newest outdoor ride)", lambda: similar_routes(c, newest))
             timed("similar efforts (newest outdoor ride)", lambda: similar_efforts(c, newest))
+            # Trends over the whole six years: the worst case for each view.
+            first, last = date(2020, 1, 1), date(2025, 12, 31)
+            week, month = trends.Period.WEEK, trends.Period.MONTH
+            timed("trends: volume by week, all", lambda: trends.volume(c, week, first, last))
+            timed("trends: fitness, all days", lambda: trends.fitness(c, first, last))
+            timed("trends: FTP by week, all", lambda: trends.ftp_history(c, week, first, last))
+            timed("trends: FTP by month, all", lambda: trends.ftp_history(c, month, first, last))
+            timed("trends: efficiency, all", lambda: trends.efficiency(c, first, last))
+            timed("trends: power curve, all", lambda: trends.best_curve(c, "power", first, last))
+            timed("trends: route progress (newest)", lambda: trends.route_progress(c, newest))
         library_mb = sum(p.stat().st_size for p in library.rglob("*") if p.is_file()) / 1e6
         print(f"Library size: {library_mb:.0f} MB")
     finally:
