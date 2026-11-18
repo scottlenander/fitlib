@@ -2,8 +2,9 @@
 
 A local library for cycling `.fit` files from Zwift and Garmin. It imports rides from folders,
 stores them compactly, and summarises each ride in readable numbers, on the command line or in
-a browser, finds rides on the same route or with a similar effort, and compares rides side
-by side. Later phases add fitness trends.
+a browser, finds rides on the same route or with a similar effort, compares rides side
+by side, and shows trends: volume, fitness and fatigue, FTP, efficiency and best efforts over
+time.
 
 The project is built in phases. Phase 1a added the core: importing, storage, basic ride
 figures and a command line. Phase 1b added training figures (NP, IF, TSS, zones, best
@@ -12,9 +13,10 @@ units. Phase 1c added editing rides (name, notes, effort, bike, tags), bikes wit
 default bikes, and tag/bike/effort filters. Phase 2 added a local web API (`fitlib serve`).
 Phase 3a added the browser app (library, ride detail, import) and its Playwright tests;
 phase 3b added editing rides, bikes and default bikes, the athlete history, and dark mode.
-Phase 4a added route fingerprints and similar rides. **Phase 4b (this)** adds comparing 2 to
-4 rides: `fitlib compare`, an API endpoint, and a compare page reached from the library and
-from Similar rides.
+Phase 4a added route fingerprints and similar rides; phase 4b added comparing 2 to 4 rides.
+**Phase 5a (this)** adds trends on the command line and in the API: volume per week or
+month, fitness/fatigue/form, set and estimated FTP over time, efficiency, best efforts by
+period, and progress on a route. Phase 5b adds a Trends page to the browser app.
 
 ## Setup
 
@@ -38,6 +40,12 @@ uv run fitlib show 3f2a9c                   # a ride by id prefix (4+ characters
 uv run fitlib similar 3f2a9c                # rides on the same route
 uv run fitlib similar 3f2a9c --effort       # rides with a similar effort
 uv run fitlib compare 3f2a9c 7be1 c04d      # 2-4 rides' figures side by side
+uv run fitlib progress 3f2a9c               # every ride on this ride's route, oldest first
+uv run fitlib trends volume                 # last 12 weeks (--month: 12 months)
+uv run fitlib trends fitness                # fitness, fatigue and form, last 90 days
+uv run fitlib trends ftp --month            # set and estimated FTP, last year
+uv run fitlib trends efficiency             # NP / heart rate per ride, last year
+uv run fitlib trends curve --since 2025-01-01   # best power by duration (--hr: heart rate)
 uv run fitlib show 3f2a9c --units metric    # override the configured units once
 uv run fitlib athlete set --from 2025-01-01 --ftp 250 --weight 165 --max-hr 188
 uv run fitlib athlete show                  # history, and today's values
@@ -72,6 +80,11 @@ uv run fitlib --help                        # every command and option
 - **compare** prints 2 to 4 rides' figures side by side, one column per ride: date, moving
   time, distance, climbing, average speed and power, NP, IF, TSS, average HR, decoupling and
   the best 1, 5 and 20 minutes.
+- **progress** lists every ride on the same route as a ride (both covering at least 70 % of
+  each other's), oldest first, with time, distance, speed, power, NP, heart rate and TSS.
+- **trends** `volume`, `fitness`, `ftp`, `efficiency` and `curve` (see "Trends"). Each takes
+  `--since`/`--until` (local dates); `volume` and `ftp` take `--month`; `fitness` shows each
+  Sunday and the last day, or every day with `--daily`; `curve --hr` shows heart rate.
 - **athlete** records FTP, weight and max HR from a date on. Each value carries forward until
   changed, so `--ftp 260` alone keeps the earlier weight. Weight is entered and shown in your
   display units and stored in kg. `athlete remove DATE` deletes an entry.
@@ -152,6 +165,13 @@ Interactive docs are at `/docs`. Everything is under `/api`, and every figure is
 | `GET /api/rides` | The library: `q` text search, `since`/`until`, `source`, `indoor`, `min_duration_s`/`max_duration_s`, `has_power`, `tag` (repeat for all of several), `bike_id`, `has_bike`, `min_rpe`/`max_rpe`, `sort`, `desc`, `offset`, `limit` (≤ 200) |
 | `GET /api/rides/{id}` | One ride (id or 4+ character prefix): summary, training figures, zones, power/HR curves, laps, location box, metadata |
 | `GET /api/rides/{id}/similar` | `kind=route` (default): rides covering ≥ 30 % of this ride's route, with `overlap` each way and `same_route`; `kind=effort`: the closest efforts with `similarity` (0–100). `limit` ≤ 50. `has_route` says whether the ride has positions |
+| `GET /api/rides/{id}/route-progress` | Every ride on the same route as this one (itself included), oldest first, as list entries; `has_route` says whether it has positions |
+| `GET /api/trends/span` | The first and latest ride's local dates (`null` for an empty library) |
+| `GET /api/trends/volume` | `period=week\|month`, `since`/`until` (local dates): rides, `moving_s`, `distance_m`, `ascent_m`, `kj`, `tss` and `rides_without_tss` per week (from Monday) or month, empty ones included |
+| `GET /api/trends/fitness` | `since`/`until`: per day `tss`, `fitness` (CTL), `fatigue` (ATL), `form` (TSB); `rides_without_tss` |
+| `GET /api/trends/ftp` | `period`, `since`/`until`: per week or month, the set `ftp` and the `estimated` FTP on its last day |
+| `GET /api/trends/efficiency` | `since`/`until`: per ride with power and HR (≥ 20 min), `efficiency` (NP / HR), `np`, `avg_hr`, `decoupling_pct`, `indoor` |
+| `GET /api/trends/curve` | `kind=power\|hr`, `since`/`until`: the best value at each duration with its `ride_id` and `start` |
 | `GET /api/compare` | `ids` (repeat, 2–4, ids or prefixes): each ride's detail and its samples on one shared axis. `align=distance` (metres; with each ride's time `gap` to the first) or `time` (seconds); by default distance when every ride recorded it. `smooth` 0, 10 or 30 s for power and HR; `points` along the axis |
 | `GET /api/rides/{id}/streams` | 1 Hz samples as columns; `fields` to choose (lat/lon only when asked for), `step` to thin out |
 | `PATCH /api/rides/{id}/meta` | Name, notes, rpe, bike_id, tags. Fields left out stay; `null` clears |
@@ -199,6 +219,31 @@ effect on the ride's date. Changing your FTP history applies everywhere immediat
 For rides before your first FTP entry, FTP is **estimated** as 0.95 × the best 20 minutes in
 the six weeks up to the ride, and marked as estimated.
 
+### Trends
+
+Trends use the figures stored per ride, never the 1 Hz samples, so they're quick over years
+of rides. Rides count on their **local date**; date ranges are local dates, both ends
+included. Left out, a range ends today.
+
+- **Volume**: rides, moving time, distance, climbing, work (kJ) and TSS per week (Monday to
+  Sunday) or month. The first week or month is widened back to its start; empty ones show as
+  zeros. Default: 12 weeks or 12 months.
+- **Fitness, fatigue and form**: fitness (CTL) is an exponentially weighted average of daily
+  TSS over 42 days, fatigue (ATL) over 7 days, and form (TSB) is yesterday's fitness minus
+  fatigue. They're built up from your first ride, so a day's values don't depend on the range
+  shown. Default: 90 days.
+- **TSS** is the same as on each ride: from the FTP set on its date, or estimated. Rides
+  without power (or with no FTP to compare with) add 0 and are counted, so you can see what's
+  missing.
+- **FTP over time**: at the end of each week or month, the FTP set in the athlete history and
+  the estimate (0.95 × the best 20 minutes in the six weeks up to that day). Default: a year.
+- **Efficiency**: Normalized Power / average heart rate (W per bpm) for each ride with power
+  and heart rate lasting at least 20 minutes; higher means more power for the same heart
+  rate. Shown with the ride's decoupling. Default: a year.
+- **Best efforts by period**: the best power or heart rate at each duration from 1 s to 2 h,
+  with the ride each came from. Default: 42 days.
+- **Route progress**: every ride on the same route as a ride, oldest first.
+
 ### Configuration
 
 By default the library lives in `~/.fitlib/library`. To change it, create
@@ -243,7 +288,7 @@ search find rides by their new names (with the start time).
 | `fitlib/models.py` | Domain objects shared by every layer |
 | `fitlib/ingest/` | Find files (incl. zips), decode with `fitdecode`, normalize to 1 Hz, summarize |
 | `fitlib/metrics/` | Ride figures from a 1 Hz stream (basic, power, HR, curves, zones), route fingerprints (`route.py`) and FTP-based formulas (`load.py`) |
-| `fitlib/analysis/` | FTP-based figures for a ride (athlete history or estimated FTP); default-bike backfill; similar rides (`similar.py`); lining rides up to compare (`compare.py`) |
+| `fitlib/analysis/` | FTP-based figures for a ride (athlete history or estimated FTP); default-bike backfill; similar rides (`similar.py`); lining rides up to compare (`compare.py`); trends over many rides (`trends.py`) |
 | `fitlib/metadata.py` | Tag rules, ride kinds for default bikes, and which dated default applies |
 | `fitlib/store/` | `CatalogStore` / `BlobStore` interfaces; `local/` (SQLite + files) and `memory/` backends; `factory.py` picks one |
 | `fitlib/importer.py` | Hash, dedupe, analyse in worker processes, store |
@@ -368,6 +413,14 @@ uv run python -m tests.fixtures.generate
   one-sided overlap, ordering and limits; effort features, the similarity scale, ranking, and
   power rides kept apart from HR-only ones, and a ride with a one-minute stop still a
   similar effort. Import and recompute store fingerprints.
+- **Trends** (`tests/unit/analysis/test_trends.py`): TSS equal to the ride page's for every
+  fixture ride, with set and estimated FTP, including estimates looking back before the
+  range; volume by week and month by local date (a ride late on Sunday UTC counted on Monday,
+  empty weeks as zeros); fitness, fatigue and form by hand and independent of the range;
+  FTP per week and month, and an estimate expiring after six weeks; efficiency only for rides
+  with power, heart rate and 20 minutes; best efforts leaving out rides outside the range by
+  local date; route progress; an empty library; default ranges and a backwards range refused.
+  The store's trend rows and best curve by period are in the catalog contract tests.
 - **Comparing rides** (`tests/unit/analysis/test_compare.py`): lining up by time (rides
   ending early) and by distance (to the shortest ride); the time gap, between whole seconds
   and with a 60 s step at a stop; no distance refused; smoothing that flattens spikes but
@@ -385,7 +438,9 @@ uv run python -m tests.fixtures.generate
 - **CLI** (`tests/unit/test_cli.py`, including `serve` in normal and e2e mode, and `similar`
   by route and effort, with nothing to match, and for rides needing a recompute, and `compare`
 side by side, with one ride or the same ride twice refused, and `timezone` shown, set,
-cleared and refused for an unknown zone or a zone with `--clear`), **config** and
+cleared and refused for an unknown zone or a zone with `--clear`, every `trends` view, a
+backwards range and an empty period, and `progress` on the loop, alone and without GPS),
+**config** and
   **display formatting** (both unit systems).
 - **API** (`tests/api/`): the fixture rides are imported once into a template library;
   read-only tests share it and tests that change anything get their own copy. Covered: every
@@ -403,7 +458,11 @@ cleared and refused for an unknown zone or a zone with `--clear`), **config** an
   by default, by time, four rides by prefix, smoothing, too few or many rides, the same ride
   twice, unknown rides, a ride without distance); the default time zone (zones listed, a ride
   without one moving to the evening before in New York and back to UTC when cleared, rides
-  with their own untouched, unknown zones refused).
+  with their own untouched, unknown zones refused); trends (the span, weekly and monthly
+  volume adding up to the rides, default ranges, fitness from the Zwift ride, FTP before and
+  after setting one, efficiency, best efforts naming their rides, an empty period, backwards
+  ranges refused) and route progress (the loop oldest first, rides alone or without GPS,
+  unknown rides).
 - **Browser app unit tests** (`web/src/*.test.ts`): durations, distances, speeds, heights and
   weights in both unit systems, and weights typed in either; local versus UTC start times; the
   library's URL state (reading, writing, defaults, every filter, turning it into an API
@@ -452,7 +511,8 @@ cleared and refused for an unknown zone or a zone with `--clear`), **config** an
 ### Performance check
 
 Not part of CI. Generates synthetic rides over six years, imports them into a temporary
-library and times some searches:
+library and times some searches, similar rides and every trend over the six years (each
+under 0.2 s for 2,000 rides):
 
 ```bash
 uv run python scripts/perf_import.py --rides 2000

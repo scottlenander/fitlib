@@ -17,6 +17,7 @@ from fitlib.models import (
     BikeKind,
     BikeSlot,
     BikeTotals,
+    CurveBest,
     Filters,
     GeoSummary,
     Lap,
@@ -28,6 +29,7 @@ from fitlib.models import (
     Route,
     SortKey,
     Source,
+    TrendRow,
 )
 from fitlib.store.interfaces import (
     MIN_ID_PREFIX,
@@ -907,6 +909,76 @@ class SqliteCatalog:
                 (kind, duration_s, _ts(start), _ts(end)),
             ).fetchone()
         return row[0]
+
+    def trend_rows(self, start: datetime | None, end: datetime | None) -> list[TrendRow]:
+        """Read the figures trends need for every ride in a time window, in one go.
+
+        Args:
+            start: Earliest ride start (inclusive), or ``None`` for no lower bound.
+            end: Latest ride start (inclusive), or ``None`` for no upper bound.
+
+        Returns:
+            One row per ride, oldest first (ties by id).
+        """
+        query = (
+            "SELECT r.id, r.start_ts, r.utc_offset_s, r.source, r.indoor, r.moving_s, "
+            "r.distance_m, r.ascent_m, r.kj, r.np, r.avg_hr, r.decoupling_pct, "
+            "c.value AS best_20min_power FROM rides r LEFT JOIN ride_curves c "
+            "ON c.ride_id = r.id AND c.kind = 'power' AND c.duration_s = 1200 WHERE 1 = 1"
+        )
+        params: list[int] = []
+        if start is not None:
+            query += " AND r.start_ts >= ?"
+            params.append(_ts(start))
+        if end is not None:
+            query += " AND r.start_ts <= ?"
+            params.append(_ts(end))
+        with self._lock:
+            rows = self._db.execute(query + " ORDER BY r.start_ts, r.id", params).fetchall()
+        return [
+            TrendRow(
+                id=r["id"],
+                start=_dt(r["start_ts"]),
+                utc_offset_s=r["utc_offset_s"],
+                source=Source(r["source"]),
+                indoor=bool(r["indoor"]),
+                moving_s=r["moving_s"],
+                distance_m=r["distance_m"],
+                ascent_m=r["ascent_m"],
+                kj=r["kj"],
+                np=r["np"],
+                avg_hr=r["avg_hr"],
+                decoupling_pct=r["decoupling_pct"],
+                best_20min_power=r["best_20min_power"],
+            )
+            for r in rows
+        ]
+
+    def best_curve_between(self, kind: str, start: datetime, end: datetime) -> list[CurveBest]:
+        """Find the best effort at every duration among rides in a time window.
+
+        Args:
+            kind: ``"power"`` or ``"hr"``.
+            start: Earliest ride start (inclusive).
+            end: Latest ride start (inclusive).
+
+        Returns:
+            One entry per duration any ride in the window has, shortest first. Ties go to the
+            earliest ride.
+        """
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT duration_s, value, ride_id, start_ts FROM ("
+                " SELECT c.duration_s, c.value, c.ride_id, r.start_ts, ROW_NUMBER() OVER ("
+                "  PARTITION BY c.duration_s ORDER BY c.value DESC, r.start_ts, r.id) AS n"
+                " FROM ride_curves c JOIN rides r ON r.id = c.ride_id"
+                " WHERE c.kind = ? AND r.start_ts BETWEEN ? AND ?"
+                ") WHERE n = 1 ORDER BY duration_s",
+                (kind, _ts(start), _ts(end)),
+            ).fetchall()
+        return [
+            CurveBest(r["duration_s"], r["value"], r["ride_id"], _dt(r["start_ts"])) for r in rows
+        ]
 
     def athlete_history(self) -> list[AthleteEntry]:
         """List the athlete history.

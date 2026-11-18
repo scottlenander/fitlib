@@ -13,12 +13,14 @@ from fastapi import APIRouter, HTTPException, Query
 
 from fitlib.analysis.similar import similar_efforts, similar_routes
 from fitlib.analysis.training import training
+from fitlib.analysis.trends import route_progress
 from fitlib.api.deps import StoresDep
 from fitlib.api.schemas import (
     MetaPatch,
     RideDetail,
     RideItem,
     RidePage,
+    RouteProgress,
     SimilarRide,
     SimilarRides,
     Streams,
@@ -257,6 +259,30 @@ def get_similar(
             for m in similar_efforts(catalog, ride, limit)
         ]
     return SimilarRides(kind=kind, has_route=has_route, items=items)
+
+
+@router.get("/{ref}/route-progress")
+def get_route_progress(stores: StoresDep, ref: str) -> RouteProgress:
+    """List every ride on the same route as this one, to see progress over time.
+
+    Args:
+        stores: The library's stores.
+        ref: The ride's id or a unique prefix.
+
+    Returns:
+        The same-route rides, this one included, oldest first, with TSS.
+    """
+    catalog = stores.catalog
+    ride = find_ride(stores, ref)
+    history = catalog.athlete_history()
+    bikes = {b.id: b for b in catalog.list_bikes()}
+    return RouteProgress(
+        has_route=bool(catalog.route_cells(ride.id)),
+        items=[
+            ride_item(r, training(catalog, r, history), bikes)
+            for r in route_progress(catalog, ride)
+        ],
+    )
 
 
 @router.patch("/{ref}/meta")

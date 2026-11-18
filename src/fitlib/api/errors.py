@@ -9,6 +9,7 @@ from __future__ import annotations
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
+from fitlib.analysis.trends import BadRange
 from fitlib.ingest.localtime import UnknownTimeZone
 from fitlib.metadata import InvalidTag
 from fitlib.store.interfaces import (
@@ -29,6 +30,7 @@ STATUS: dict[type[Exception], int] = {
     DuplicateBike: 409,
     InvalidTag: 422,
     UnknownTimeZone: 422,
+    BadRange: 422,
 }
 
 
