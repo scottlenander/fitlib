@@ -19,6 +19,7 @@ from fitlib.models import (
     BikeDefault,
     BikeSlot,
     BikeTotals,
+    CurveBest,
     Filters,
     OffsetSource,
     Page,
@@ -27,6 +28,7 @@ from fitlib.models import (
     RideSummary,
     Route,
     SortKey,
+    TrendRow,
 )
 
 MIN_ID_PREFIX = 4
@@ -192,6 +194,32 @@ class CatalogStore(Protocol):
 
         Returns:
             The highest best average, or ``None`` if no ride in the window has one.
+        """
+        ...
+
+    def trend_rows(self, start: datetime | None, end: datetime | None) -> list[TrendRow]:
+        """Read the figures trends need for every ride in a time window, in one go.
+
+        Args:
+            start: Earliest ride start (inclusive), or ``None`` for no lower bound.
+            end: Latest ride start (inclusive), or ``None`` for no upper bound.
+
+        Returns:
+            One row per ride, oldest first (ties by id).
+        """
+        ...
+
+    def best_curve_between(self, kind: str, start: datetime, end: datetime) -> list[CurveBest]:
+        """Find the best effort at every duration among rides in a time window.
+
+        Args:
+            kind: ``"power"`` or ``"hr"``.
+            start: Earliest ride start (inclusive).
+            end: Latest ride start (inclusive).
+
+        Returns:
+            One entry per duration any ride in the window has, shortest first. Ties go to the
+            earliest ride.
         """
         ...
 

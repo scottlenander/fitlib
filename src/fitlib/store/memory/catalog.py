@@ -12,6 +12,7 @@ from fitlib.models import (
     BikeDefault,
     BikeSlot,
     BikeTotals,
+    CurveBest,
     Filters,
     OffsetSource,
     Page,
@@ -20,6 +21,7 @@ from fitlib.models import (
     RideSummary,
     Route,
     SortKey,
+    TrendRow,
 )
 from fitlib.store.interfaces import (
     MIN_ID_PREFIX,
@@ -395,6 +397,59 @@ class MemoryCatalog:
             if d == duration_s
         ]
         return max(values, default=None)
+
+    def trend_rows(self, start: datetime | None, end: datetime | None) -> list[TrendRow]:
+        """Read the figures trends need for every ride in a time window, in one go.
+
+        Args:
+            start: Earliest ride start (inclusive), or ``None`` for no lower bound.
+            end: Latest ride start (inclusive), or ``None`` for no upper bound.
+
+        Returns:
+            One row per ride, oldest first (ties by id).
+        """
+        rides = sorted(self._rides.values(), key=lambda r: (r.summary.start, r.id))
+        return [
+            TrendRow(
+                id=ride.id,
+                start=s.start,
+                utc_offset_s=s.utc_offset_s,
+                source=s.source,
+                indoor=s.indoor,
+                moving_s=s.moving_s,
+                distance_m=s.distance_m,
+                ascent_m=s.ascent_m,
+                kj=s.kj,
+                np=s.np,
+                avg_hr=s.avg_hr,
+                decoupling_pct=s.decoupling_pct,
+                best_20min_power=dict(s.power_curve).get(1200),
+            )
+            for ride in rides
+            if (s := ride.summary)
+            and (start is None or s.start >= start)
+            and (end is None or s.start <= end)
+        ]
+
+    def best_curve_between(self, kind: str, start: datetime, end: datetime) -> list[CurveBest]:
+        """Find the best effort at every duration among rides in a time window.
+
+        Args:
+            kind: ``"power"`` or ``"hr"``.
+            start: Earliest ride start (inclusive).
+            end: Latest ride start (inclusive).
+
+        Returns:
+            One entry per duration any ride in the window has, shortest first. Ties go to the
+            earliest ride.
+        """
+        best: dict[int, CurveBest] = {}
+        for ride in self.rides_starting_between(start, end):  # oldest first, so ties keep it
+            curve = ride.summary.power_curve if kind == "power" else ride.summary.hr_curve
+            for duration, value in curve:
+                if duration not in best or value > best[duration].value:
+                    best[duration] = CurveBest(duration, value, ride.id, ride.summary.start)
+        return [best[d] for d in sorted(best)]
 
     def athlete_history(self) -> list[AthleteEntry]:
         """List the athlete history.

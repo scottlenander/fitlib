@@ -371,6 +371,68 @@ class BikeTotals:
     moving_s: int
 
 
+@dataclass(frozen=True)
+class TrendRow:
+    """The few figures of one ride that trends need, read in bulk without laps or curves.
+
+    Attributes:
+        id: The ride's id.
+        start: Start time (UTC).
+        utc_offset_s: Offset of the rider's clock from UTC, if known.
+        source: Where the file came from.
+        indoor: Whether it was ridden indoors.
+        moving_s: Riding time in seconds.
+        distance_m: Distance in metres, if known.
+        ascent_m: Climbing in metres, if known.
+        kj: Work in kilojoules, if the ride has power.
+        np: Normalized Power, if the ride has power.
+        avg_hr: Average heart rate, if the ride has heart rate.
+        decoupling_pct: Aerobic decoupling, if worked out.
+        best_20min_power: Best 20-minute average power, if the ride has one.
+    """
+
+    id: str
+    start: datetime
+    utc_offset_s: int | None
+    source: Source
+    indoor: bool
+    moving_s: int
+    distance_m: float | None
+    ascent_m: float | None
+    kj: float | None
+    np: float | None
+    avg_hr: float | None
+    decoupling_pct: float | None
+    best_20min_power: float | None
+
+    @property
+    def local_date(self) -> date:
+        """The day of the ride in the rider's local time, or in UTC when that isn't known.
+
+        Returns:
+            The date.
+        """
+        offset = timedelta(seconds=self.utc_offset_s or 0)
+        return (self.start + offset).date()
+
+
+@dataclass(frozen=True)
+class CurveBest:
+    """The best effort over one duration in a period, and the ride it came from.
+
+    Attributes:
+        duration_s: The duration in seconds.
+        value: The best average power or heart rate over it.
+        ride_id: The ride with that best (the earliest, if several tie).
+        start: That ride's start (UTC).
+    """
+
+    duration_s: int
+    value: float
+    ride_id: str
+    start: datetime
+
+
 class SortKey(StrEnum):
     """What the ride library can be sorted by."""
 

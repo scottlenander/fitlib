@@ -542,6 +542,72 @@ def test_best_effort_between(catalog: CatalogStore):
     assert no_duration is None, "no ride had a 60-minute effort"
 
 
+def test_trend_rows(catalog: CatalogStore):
+    """Trend rows carry each ride's light figures, oldest first, inside the window.
+
+    Given: a ride with power on day 0, a heart-rate-only indoor ride on day 1 with no time
+    zone, and a ride on day 5.
+    Expect: all three with no bounds; days 0-1 with bounds; the first row's figures match its
+    summary, and the second has no power figures and the UTC date.
+    """
+    first = make_ride(start=at(0))
+    hr_only = make_ride(
+        start=at(1),
+        utc_offset_s=None,
+        indoor=True,
+        has_power=False,
+        np=None,
+        kj=None,
+        power_curve=(),
+    )
+    later = make_ride(start=at(5))
+    for ride in (later, hr_only, first):
+        catalog.add_ride(ride)
+
+    everything = catalog.trend_rows(None, None)
+    window = catalog.trend_rows(at(0), at(1))
+
+    assert [r.id for r in everything] == [first.id, hr_only.id, later.id]
+    assert [r.id for r in window] == [first.id, hr_only.id]
+    row = window[0]
+    s = first.summary
+    assert (row.start, row.utc_offset_s, row.source, row.indoor) == (s.start, 7200, s.source, False)
+    assert (row.moving_s, row.distance_m, row.ascent_m) == (3500, 30_000.0, 250.0)
+    assert (row.kj, row.np, row.avg_hr, row.decoupling_pct) == (720.0, 215.0, 142.0, 3.2)
+    assert row.best_20min_power == 250.0
+    assert row.local_date == date(2025, 8, 2)
+    assert (window[1].np, window[1].kj, window[1].best_20min_power) == (None, None, None)
+    assert window[1].indoor
+
+
+def test_best_curve_between(catalog: CatalogStore):
+    """Each duration's best in a window comes with the ride it came from.
+
+    Given: ride A (day 0) best at 5 s and tied at 1 min, ride B (day 3) best at 1 min (tie)
+    and 20 min, ride C (day 60) better at everything but outside the window.
+    Expect: 5 s from A, 1 min from A (the earlier of the tie), 20 min from B; HR comes from
+    the HR curves.
+    """
+    a = make_ride(start=at(0), power_curve=((5, 900.0), (60, 400.0)), hr_curve=((5, 170.0),))
+    b = make_ride(
+        start=at(3), power_curve=((5, 800.0), (60, 400.0), (1200, 260.0)), hr_curve=()
+    )
+    c = make_ride(start=at(60), power_curve=((5, 999.0), (60, 999.0), (1200, 999.0)))
+    for ride in (c, b, a):
+        catalog.add_ride(ride)
+
+    power = catalog.best_curve_between("power", at(0), at(42))
+    hr = catalog.best_curve_between("hr", at(0), at(42))
+
+    assert [(p.duration_s, p.value, p.ride_id) for p in power] == [
+        (5, 900.0, a.id),
+        (60, 400.0, a.id),
+        (1200, 260.0, b.id),
+    ], "ties should go to the earlier ride"
+    assert power[2].start == b.summary.start
+    assert [(h.duration_s, h.value, h.ride_id) for h in hr] == [(5, 170.0, a.id)]
+
+
 def test_athlete_history_entries(catalog: CatalogStore):
     """Athlete history entries are kept by date, oldest first; a date can be replaced or removed.
 
