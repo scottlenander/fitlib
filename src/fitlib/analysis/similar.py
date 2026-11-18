@@ -61,13 +61,16 @@ class EffortMatch:
     similarity: int
 
 
-def similar_routes(catalog: CatalogStore, ride: Ride, limit: int = 10) -> list[RouteMatch]:
+def similar_routes(
+    catalog: CatalogStore, ride: Ride, limit: int = 10, candidates: int = ROUTE_CANDIDATES
+) -> list[RouteMatch]:
     """Find rides that covered at least ``PARTLY_SHARED`` of a ride's route.
 
     Args:
         catalog: The library's catalog.
         ride: The ride to match.
         limit: The most matches to return.
+        candidates: How many rides sharing the most cells to score.
 
     Returns:
         Matches, same-route ones first, then by overlap, then newest first. Empty when the
@@ -78,7 +81,7 @@ def similar_routes(catalog: CatalogStore, ride: Ride, limit: int = 10) -> list[R
         return []
     mine_grown = dilate(mine)
     matches = []
-    for other_id, _ in catalog.route_candidates(ride.id, ROUTE_CANDIDATES):
+    for other_id, _ in catalog.route_candidates(ride.id, candidates):
         theirs = catalog.route_cells(other_id)
         covered = overlap(mine, dilate(theirs))
         if covered < PARTLY_SHARED:

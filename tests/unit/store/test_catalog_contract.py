@@ -589,9 +589,7 @@ def test_best_curve_between(catalog: CatalogStore):
     the HR curves.
     """
     a = make_ride(start=at(0), power_curve=((5, 900.0), (60, 400.0)), hr_curve=((5, 170.0),))
-    b = make_ride(
-        start=at(3), power_curve=((5, 800.0), (60, 400.0), (1200, 260.0)), hr_curve=()
-    )
+    b = make_ride(start=at(3), power_curve=((5, 800.0), (60, 400.0), (1200, 260.0)), hr_curve=())
     c = make_ride(start=at(60), power_curve=((5, 999.0), (60, 999.0), (1200, 999.0)))
     for ride in (c, b, a):
         catalog.add_ride(ride)
