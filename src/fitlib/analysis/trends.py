@@ -40,6 +40,40 @@ class Period(StrEnum):
     MONTH = "month"
 
 
+class View(StrEnum):
+    """The kinds of trend, each with its own default date range."""
+
+    VOLUME = "volume"
+    FITNESS = "fitness"
+    FTP = "ftp"
+    EFFICIENCY = "efficiency"
+    CURVE = "curve"
+
+
+# How far back each view goes when no start date is given (monthly volume: 12 months).
+DEFAULT_DAYS = {
+    View.VOLUME: 12 * 7,
+    View.FITNESS: 90,
+    View.FTP: 365,
+    View.EFFICIENCY: 365,
+    View.CURVE: 42,
+}
+DEFAULT_MONTHS = 12
+
+
+class BadRange(ValueError):
+    """A date range that ends before it starts."""
+
+    def __init__(self, since: date, until: date):
+        """Name both dates in the message.
+
+        Args:
+            since: The first day asked for.
+            until: The last day asked for.
+        """
+        super().__init__(f"since ({since}) must not be after until ({until})")
+
+
 @dataclass(frozen=True)
 class RideLoad:
     """One ride with its training stress worked out as on the ride page.
@@ -170,6 +204,55 @@ def utc_bounds(since: date | None, until: date | None) -> tuple[datetime | None,
     if until is not None:
         end = datetime.combine(until + timedelta(days=1), time(), UTC) - _EARLIEST_OFFSET
     return start, end
+
+
+def months_back(day: date, months: int) -> date:
+    """The 1st of the month a number of months before a day's month.
+
+    Args:
+        day: Any date.
+        months: How many months back.
+
+    Returns:
+        The date.
+    """
+    index = day.year * 12 + day.month - 1 - months
+    return date(index // 12, index % 12 + 1, 1)
+
+
+def resolve_range(
+    view: View,
+    since: date | None,
+    until: date | None,
+    period: Period = Period.WEEK,
+    today: date | None = None,
+) -> tuple[date, date]:
+    """Fill in a date range's missing ends with the view's defaults, and check it.
+
+    Args:
+        view: Which trend the range is for.
+        since: First day asked for, if any.
+        until: Last day asked for, if any.
+        period: For volume, whether it's by week or month.
+        today: Today's date; the computer's by default.
+
+    Returns:
+        The first and last days. ``until`` defaults to today; ``since`` to
+        ``DEFAULT_DAYS[view]`` days before it (inclusive), or for monthly volume the 1st of the
+        month ``DEFAULT_MONTHS - 1`` months before.
+
+    Raises:
+        BadRange: ``since`` is after ``until``.
+    """
+    until = until or today or date.today()
+    if since is None:
+        if view is View.VOLUME and period is Period.MONTH:
+            since = months_back(until, DEFAULT_MONTHS - 1)
+        else:
+            since = until - timedelta(days=DEFAULT_DAYS[view] - 1)
+    if since > until:
+        raise BadRange(since, until)
+    return since, until
 
 
 def _in_range(day: date, since: date | None, until: date | None) -> bool:

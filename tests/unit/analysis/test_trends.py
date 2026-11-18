@@ -345,3 +345,42 @@ def test_trends_of_an_empty_library():
     assert all(d.fitness == 0 for d in result.days)
     assert trends.efficiency(catalog, AUG_1, until) == []
     assert trends.best_curve(catalog, "power", AUG_1, until) == []
+
+
+# -- date ranges ------------------------------------------------------------------------------
+
+TODAY = date(2026, 3, 18)
+
+
+@pytest.mark.parametrize(
+    ("view", "period", "since"),
+    [
+        (trends.View.VOLUME, Period.WEEK, date(2025, 12, 25)),  # 12 weeks
+        (trends.View.VOLUME, Period.MONTH, date(2025, 4, 1)),  # this month and the 11 before
+        (trends.View.FITNESS, Period.WEEK, date(2025, 12, 19)),  # 90 days
+        (trends.View.FTP, Period.WEEK, date(2025, 3, 19)),  # a year
+        (trends.View.EFFICIENCY, Period.WEEK, date(2025, 3, 19)),
+        (trends.View.CURVE, Period.WEEK, date(2026, 2, 5)),  # 42 days
+    ],
+    ids=["volume-week", "volume-month", "fitness", "ftp", "efficiency", "curve"],
+)
+def test_default_ranges(view: trends.View, period: Period, since: date):
+    """Left out, a range ends today and starts a span back that suits the view.
+
+    Given: today 18 Mar 2026 and no dates.
+    Expect: the view's default first day, counting today as one of its days.
+    """
+    assert trends.resolve_range(view, None, None, period, today=TODAY) == (since, TODAY)
+
+
+def test_given_ranges_are_kept_or_refused():
+    """Dates given are kept; a range ending before it starts is refused.
+
+    Given: 1 to 31 Aug; then 31 Aug to 1 Aug.
+    Expect: the same dates; then ``BadRange`` naming both.
+    """
+    kept = trends.resolve_range(trends.View.CURVE, AUG_1, AUG_31)
+
+    assert kept == (AUG_1, AUG_31)
+    with pytest.raises(trends.BadRange, match=r"since \(2025-08-31\).*until \(2025-08-01\)"):
+        trends.resolve_range(trends.View.CURVE, AUG_31, AUG_1)

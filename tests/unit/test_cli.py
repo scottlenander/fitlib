@@ -860,3 +860,141 @@ def test_timezone_refuses_bad_input(imported: Path, args: list[str], message: st
 
     assert result.exit_code == 2
     assert message in result.output
+
+
+# -- trends -----------------------------------------------------------------------------------
+
+AUGUST = ("--since", "2025-08-01", "--until", "2025-08-31")
+
+
+def table_rows(output: str, first: str) -> list[str]:
+    """Pick out table rows starting with a pattern.
+
+    Args:
+        output: The command's output.
+        first: A regular expression for the first column.
+
+    Returns:
+        The matching lines.
+    """
+    return [line for line in output.splitlines() if re.match(rf"^\s*{first}\s", line)]
+
+
+def test_trends_volume_by_week_and_month(imported: Path):
+    """``fitlib trends volume`` adds up August by week, or by month with ``--month``.
+
+    Given: the 9 fixture rides, 2 to 24 Aug.
+    Expect: weeks of 28 Jul to 25 Aug with 1, 2, 3, 3 and 0 rides; one August row with 9
+    rides; both note the 2 rides without TSS.
+    """
+    weekly = run(imported, "trends", "volume", *AUGUST)
+    monthly = run(imported, "trends", "volume", "--month", *AUGUST)
+
+    assert weekly.exit_code == 0, weekly.output
+    weeks = table_rows(weekly.output, r"2025-\d\d-\d\d")
+    assert [row.split()[:2] for row in weeks] == [
+        ["2025-07-28", "1"],
+        ["2025-08-04", "2"],
+        ["2025-08-11", "3"],
+        ["2025-08-18", "3"],
+        ["2025-08-25", "0"],
+    ]
+    assert table_rows(monthly.output, "Aug 2025")[0].split()[2] == "9"
+    for result in (weekly, monthly):
+        assert "2 rides have no TSS" in result.output
+
+
+def test_trends_fitness_shows_sundays_or_every_day(imported: Path):
+    """``fitlib trends fitness`` shows each Sunday and the last day, or every day with --daily.
+
+    Given: 1 to 20 Aug.
+    Expect: Sundays 3, 10 and 17 Aug and Wed 20 Aug; 20 rows with ``--daily``.
+    """
+    since_until = ("--since", "2025-08-01", "--until", "2025-08-20")
+
+    weekly = run(imported, "trends", "fitness", *since_until)
+    daily = run(imported, "trends", "fitness", "--daily", *since_until)
+
+    assert weekly.exit_code == 0, weekly.output
+    assert [r.split()[1] for r in table_rows(weekly.output, "(Sun|Wed)")] == [
+        "2025-08-03",
+        "2025-08-10",
+        "2025-08-17",
+        "2025-08-20",
+    ]
+    assert len(table_rows(daily.output, "(Mon|Tue|Wed|Thu|Fri|Sat|Sun)")) == 20
+
+
+def test_trends_ftp_efficiency_and_curve(imported: Path):
+    """The FTP, efficiency and best-effort trends list August's figures.
+
+    Given: the fixture rides; no FTP set; best 20 minutes 228 W on 5 Aug.
+    Expect: FTP by month estimated at 217 W; 6 rides with an efficiency, the 5 Aug ride at
+    1.68 W/bpm; the 20-minute best of 228 W from 5 Aug.
+    """
+    ftp = run(imported, "trends", "ftp", "--month", *AUGUST)
+    efficiency = run(imported, "trends", "efficiency", *AUGUST)
+    curve = run(imported, "trends", "curve", *AUGUST)
+
+    assert table_rows(ftp.output, "2025-08-31")[0].split()[1:] == ["–", "217", "W"]
+    rows = table_rows(efficiency.output, r"2025-\d\d-\d\d")
+    assert len(rows) == 6
+    assert "1.68" in next(r for r in rows if r.split()[0] == "2025-08-05")
+    assert table_rows(curve.output, "20 min")[0].split()[2:5] == ["228", "W", "2025-08-05"]
+
+
+def test_trends_without_rides_or_with_a_bad_range(imported: Path):
+    """An empty period says so; a range ending before it starts is an error.
+
+    Given: heart rate in July 2025 (before the rides), then since 31 Aug and until 1 Aug.
+    Expect: "No heart rate ..."; then exit code 2 naming both dates.
+    """
+    empty = run(
+        imported, "trends", "curve", "--hr", "--since", "2025-07-01", "--until", "2025-07-31"
+    )
+    backwards = run(imported, "trends", "fitness", "--since", "2025-08-31", "--until", "2025-08-01")
+
+    assert "No heart rate from 2025-07-01 to 2025-07-31." in empty.output
+    assert backwards.exit_code == 2
+    assert "since (2025-08-31) must not be after until (2025-08-01)" in backwards.output
+
+
+def test_progress_lists_the_route_oldest_first(imported: Path):
+    """``fitlib progress`` lists every ride on the route, marking the one asked about.
+
+    Given: the 12 Aug ride on the Nord loop, which 6 fixture rides lap.
+    Expect: 6 rows from 5 to 24 Aug, the 12 Aug one marked "this ride".
+    """
+    result = run(imported, "progress", ride_id_on(imported, "2025-08-12"))
+
+    assert result.exit_code == 0, result.output
+    rows = table_rows(result.output, r"2025-\d\d-\d\d")
+    assert [r.split()[0] for r in rows] == [
+        "2025-08-05",
+        "2025-08-09",
+        "2025-08-12",
+        "2025-08-16",
+        "2025-08-23",
+        "2025-08-24",
+    ]
+    assert [r.split()[0] for r in rows if "this ride" in r] == ["2025-08-12"]
+
+
+@pytest.mark.parametrize(
+    ("day", "message"),
+    [
+        ("2025-08-02", "No other rides on this route yet."),
+        ("2025-08-19", "has no GPS positions, so it has no route to follow"),
+    ],
+    ids=["alone-on-route", "no-gps"],
+)
+def test_progress_without_other_rides(imported: Path, day: str, message: str):
+    """A ride alone on its route, or without GPS, says so.
+
+    Given: the Zwift ride (alone in Watopia) and the indoor ride (no GPS).
+    Expect: a message saying why there's nothing more to list.
+    """
+    result = run(imported, "progress", ride_id_on(imported, day))
+
+    assert result.exit_code == 0, result.output
+    assert message in result.output

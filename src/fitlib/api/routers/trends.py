@@ -7,14 +7,14 @@ and ``since`` goes back a span that suits each view.
 from __future__ import annotations
 
 from dataclasses import asdict
-from datetime import date, timedelta
+from datetime import date
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from pydantic import BaseModel
 
 from fitlib.analysis import trends
-from fitlib.analysis.trends import Period
+from fitlib.analysis.trends import Period, View, resolve_range
 from fitlib.api.deps import StoresDep
 from fitlib.api.schemas import (
     CurveBestOut,
@@ -31,12 +31,6 @@ from fitlib.api.schemas import (
 
 router = APIRouter(prefix="/trends", tags=["trends"])
 
-DEFAULT_WEEKS = 12
-DEFAULT_MONTHS = 12
-DEFAULT_FITNESS_DAYS = 90
-DEFAULT_YEAR_DAYS = 365
-DEFAULT_CURVE_DAYS = 42
-
 
 class Span(BaseModel):
     """The local dates of the first and latest rides, for an "all time" range.
@@ -48,43 +42,6 @@ class Span(BaseModel):
 
     first: date | None
     last: date | None
-
-
-def date_range(since: date | None, until: date | None, default_days: int) -> tuple[date, date]:
-    """Fill in a date range's missing ends and check it.
-
-    Args:
-        since: First day asked for, if any.
-        until: Last day asked for, if any.
-        default_days: How many days the range covers when ``since`` is left out.
-
-    Returns:
-        The first and last days.
-
-    Raises:
-        HTTPException: 422 if ``since`` is after ``until``.
-    """
-    until = until or date.today()
-    since = since or until - timedelta(days=default_days - 1)
-    if since > until:
-        raise HTTPException(
-            status_code=422, detail=f"since ({since}) must not be after until ({until})"
-        )
-    return since, until
-
-
-def _months_back(day: date, months: int) -> date:
-    """The 1st of the month a number of months before a day's month.
-
-    Args:
-        day: Any date.
-        months: How many months back.
-
-    Returns:
-        The date.
-    """
-    index = day.year * 12 + day.month - 1 - months
-    return date(index // 12, index % 12 + 1, 1)
 
 
 @router.get("/span")
@@ -120,9 +77,7 @@ def get_volume(
     Returns:
         One bucket per week or month, empty ones included.
     """
-    if since is None and period == "month":
-        since = _months_back(until or date.today(), DEFAULT_MONTHS - 1)
-    since, until = date_range(since, until, DEFAULT_WEEKS * 7)
+    since, until = resolve_range(View.VOLUME, since, until, Period(period))
     buckets = trends.volume(stores.catalog, Period(period), since, until)
     return Volume(
         period=period,
@@ -146,7 +101,7 @@ def get_fitness(
     Returns:
         One entry per day, and how many rides added no TSS.
     """
-    since, until = date_range(since, until, DEFAULT_FITNESS_DAYS)
+    since, until = resolve_range(View.FITNESS, since, until)
     result = trends.fitness(stores.catalog, since, until)
     return FitnessOut(
         since=since,
@@ -174,7 +129,7 @@ def get_ftp(
     Returns:
         One point per week or month.
     """
-    since, until = date_range(since, until, DEFAULT_YEAR_DAYS)
+    since, until = resolve_range(View.FTP, since, until)
     points = trends.ftp_history(stores.catalog, Period(period), since, until)
     return FtpOut(
         period=period,
@@ -200,7 +155,7 @@ def get_efficiency(
     Returns:
         One point per ride, oldest first.
     """
-    since, until = date_range(since, until, DEFAULT_YEAR_DAYS)
+    since, until = resolve_range(View.EFFICIENCY, since, until)
     points = trends.efficiency(stores.catalog, since, until)
     return EfficiencyOut(
         since=since, until=until, points=[EfficiencyPointOut(**asdict(p)) for p in points]
@@ -225,7 +180,7 @@ def get_curve(
     Returns:
         One point per duration, each with the ride it came from.
     """
-    since, until = date_range(since, until, DEFAULT_CURVE_DAYS)
+    since, until = resolve_range(View.CURVE, since, until)
     points = trends.best_curve(stores.catalog, kind, since, until)
     return CurveOut(
         kind=kind, since=since, until=until, points=[CurveBestOut(**asdict(p)) for p in points]
