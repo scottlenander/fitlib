@@ -444,6 +444,33 @@ export interface paths {
     patch: operations['update_meta_api_rides__ref__meta_patch']
     trace?: never
   }
+  '/api/rides/{ref}/route-progress': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * Get Route Progress
+     * @description List every ride on the same route as this one, to see progress over time.
+     *
+     *     Args:
+     *         stores: The library's stores.
+     *         ref: The ride's id or a unique prefix.
+     *
+     *     Returns:
+     *         The same-route rides, this one included, oldest first, with TSS.
+     */
+    get: operations['get_route_progress_api_rides__ref__route_progress_get']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/rides/{ref}/similar': {
     parameters: {
       query?: never
@@ -603,6 +630,178 @@ export interface paths {
      *         The tags, as the catalog orders them.
      */
     get: operations['list_tags_api_tags_get']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/trends/curve': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * Get Curve
+     * @description Find the best power or heart rate at every duration in a period.
+     *
+     *     Args:
+     *         stores: The library's stores.
+     *         kind: ``power`` or ``hr``.
+     *         since: First day; 42 days back by default.
+     *         until: Last day; today by default.
+     *
+     *     Returns:
+     *         One point per duration, each with the ride it came from.
+     */
+    get: operations['get_curve_api_trends_curve_get']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/trends/efficiency': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * Get Efficiency
+     * @description List the efficiency factor (NP / average heart rate) of each ride.
+     *
+     *     Only rides with power and heart rate lasting 20 minutes or more are included.
+     *
+     *     Args:
+     *         stores: The library's stores.
+     *         since: First day; a year back by default.
+     *         until: Last day; today by default.
+     *
+     *     Returns:
+     *         One point per ride, oldest first.
+     */
+    get: operations['get_efficiency_api_trends_efficiency_get']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/trends/fitness': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * Get Fitness
+     * @description Work out fitness (CTL), fatigue (ATL) and form (TSB) for each day.
+     *
+     *     Args:
+     *         stores: The library's stores.
+     *         since: First day; 90 days back by default.
+     *         until: Last day; today by default.
+     *
+     *     Returns:
+     *         One entry per day, and how many rides added no TSS.
+     */
+    get: operations['get_fitness_api_trends_fitness_get']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/trends/ftp': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * Get Ftp
+     * @description Track set and estimated FTP at the end of each week or month.
+     *
+     *     Args:
+     *         stores: The library's stores.
+     *         period: ``week`` or ``month``.
+     *         since: First day; a year back by default.
+     *         until: Last day; today by default.
+     *
+     *     Returns:
+     *         One point per week or month.
+     */
+    get: operations['get_ftp_api_trends_ftp_get']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/trends/span': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * Get Span
+     * @description Find the first and latest ride dates.
+     *
+     *     Args:
+     *         stores: The library's stores.
+     *
+     *     Returns:
+     *         Their local dates, or nulls for an empty library.
+     */
+    get: operations['get_span_api_trends_span_get']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/trends/volume': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * Get Volume
+     * @description Add up rides, time, distance, climbing, work and TSS per week or month.
+     *
+     *     Args:
+     *         stores: The library's stores.
+     *         period: ``week`` (Monday to Sunday) or ``month``.
+     *         since: First day; by default 12 weeks or 12 months back. The first bucket is widened
+     *             back to the start of its week or month.
+     *         until: Last day; today by default.
+     *
+     *     Returns:
+     *         One bucket per week or month, empty ones included.
+     */
+    get: operations['get_volume_api_trends_volume_get']
     put?: never
     post?: never
     delete?: never
@@ -847,6 +1046,58 @@ export interface components {
       x: number[]
     }
     /**
+     * CurveBestOut
+     * @description The best effort over one duration in a period.
+     *
+     *     Attributes:
+     *         duration_s: The duration.
+     *         value: Best average power (W) or heart rate (bpm).
+     *         ride_id: The ride it came from.
+     *         start: That ride's start, UTC.
+     */
+    CurveBestOut: {
+      /** Duration S */
+      duration_s: number
+      /** Ride Id */
+      ride_id: string
+      /**
+       * Start
+       * Format: date-time
+       */
+      start: string
+      /** Value */
+      value: number
+    }
+    /**
+     * CurveOut
+     * @description Best efforts at every duration in a period.
+     *
+     *     Attributes:
+     *         kind: ``power`` or ``hr``.
+     *         since: First day.
+     *         until: Last day.
+     *         points: One per duration, shortest first.
+     */
+    CurveOut: {
+      /**
+       * Kind
+       * @enum {string}
+       */
+      kind: 'power' | 'hr'
+      /** Points */
+      points: components['schemas']['CurveBestOut'][]
+      /**
+       * Since
+       * Format: date
+       */
+      since: string
+      /**
+       * Until
+       * Format: date
+       */
+      until: string
+    }
+    /**
      * CurvePoint
      * @description The best average over one duration.
      *
@@ -890,6 +1141,61 @@ export interface components {
       bike_id: string | null
     }
     /**
+     * EfficiencyOut
+     * @description Efficiency of each ride with power and heart rate lasting 20 minutes or more.
+     *
+     *     Attributes:
+     *         since: First day.
+     *         until: Last day.
+     *         points: One per ride, oldest first.
+     */
+    EfficiencyOut: {
+      /** Points */
+      points: components['schemas']['EfficiencyPointOut'][]
+      /**
+       * Since
+       * Format: date
+       */
+      since: string
+      /**
+       * Until
+       * Format: date
+       */
+      until: string
+    }
+    /**
+     * EfficiencyPointOut
+     * @description One ride's efficiency factor.
+     *
+     *     Attributes:
+     *         ride_id: The ride.
+     *         day: Its local date.
+     *         efficiency: Normalized Power / average heart rate, in W per bpm.
+     *         np: Normalized Power.
+     *         avg_hr: Average heart rate.
+     *         decoupling_pct: Aerobic decoupling, if worked out.
+     *         indoor: Whether it was ridden indoors.
+     */
+    EfficiencyPointOut: {
+      /** Avg Hr */
+      avg_hr: number
+      /**
+       * Day
+       * Format: date
+       */
+      day: string
+      /** Decoupling Pct */
+      decoupling_pct: number | null
+      /** Efficiency */
+      efficiency: number
+      /** Indoor */
+      indoor: boolean
+      /** Np */
+      np: number
+      /** Ride Id */
+      ride_id: string
+    }
+    /**
      * FileOutcome
      * @description What happened to one file.
      *
@@ -902,6 +1208,107 @@ export interface components {
       detail: string
       /** File */
       file: string
+    }
+    /**
+     * FitnessDayOut
+     * @description Training load on one day.
+     *
+     *     Attributes:
+     *         day: The local date.
+     *         tss: TSS ridden that day.
+     *         fitness: Chronic training load (CTL, 42-day average) at the end of the day.
+     *         fatigue: Acute training load (ATL, 7-day average) at the end of the day.
+     *         form: Training stress balance (TSB): yesterday's fitness minus fatigue.
+     */
+    FitnessDayOut: {
+      /**
+       * Day
+       * Format: date
+       */
+      day: string
+      /** Fatigue */
+      fatigue: number
+      /** Fitness */
+      fitness: number
+      /** Form */
+      form: number
+      /** Tss */
+      tss: number
+    }
+    /**
+     * FitnessOut
+     * @description Fitness, fatigue and form for each day of a range.
+     *
+     *     Attributes:
+     *         since: First day.
+     *         until: Last day.
+     *         rides_without_tss: Rides in the range that add no TSS (no power, or no FTP).
+     *         days: One per day, oldest first.
+     */
+    FitnessOut: {
+      /** Days */
+      days: components['schemas']['FitnessDayOut'][]
+      /** Rides Without Tss */
+      rides_without_tss: number
+      /**
+       * Since
+       * Format: date
+       */
+      since: string
+      /**
+       * Until
+       * Format: date
+       */
+      until: string
+    }
+    /**
+     * FtpOut
+     * @description Set and estimated FTP over time.
+     *
+     *     Attributes:
+     *         period: ``week`` or ``month``.
+     *         since: First day asked for.
+     *         until: Last day.
+     *         points: One per week or month, oldest first.
+     */
+    FtpOut: {
+      /**
+       * Period
+       * @enum {string}
+       */
+      period: 'week' | 'month'
+      /** Points */
+      points: components['schemas']['FtpPointOut'][]
+      /**
+       * Since
+       * Format: date
+       */
+      since: string
+      /**
+       * Until
+       * Format: date
+       */
+      until: string
+    }
+    /**
+     * FtpPointOut
+     * @description FTP at the end of one week or month.
+     *
+     *     Attributes:
+     *         day: The last day of the week or month (or of the range).
+     *         ftp: The FTP set in the athlete history on that day, if any.
+     *         estimated: 0.95 × the best 20 minutes in the six weeks up to that day, if any.
+     */
+    FtpPointOut: {
+      /**
+       * Day
+       * Format: date
+       */
+      day: string
+      /** Estimated */
+      estimated: number | null
+      /** Ftp */
+      ftp: number | null
     }
     /**
      * GeoOut
@@ -1270,6 +1677,20 @@ export interface components {
       total: number
     }
     /**
+     * RouteProgress
+     * @description Every ride on the same route as a given one, to see progress over time.
+     *
+     *     Attributes:
+     *         has_route: Whether the asked-about ride has positions to match routes on.
+     *         items: The same-route rides, the asked-about one included, oldest first.
+     */
+    RouteProgress: {
+      /** Has Route */
+      has_route: boolean
+      /** Items */
+      items: components['schemas']['RideItem'][]
+    }
+    /**
      * Settings
      * @description Settings for the browser app.
      *
@@ -1339,6 +1760,20 @@ export interface components {
      * @enum {string}
      */
     Source: 'zwift' | 'garmin' | 'other'
+    /**
+     * Span
+     * @description The local dates of the first and latest rides, for an "all time" range.
+     *
+     *     Attributes:
+     *         first: The first ride's local date, or ``null`` for an empty library.
+     *         last: The latest ride's local date, or ``null``.
+     */
+    Span: {
+      /** First */
+      first: string | null
+      /** Last */
+      last: string | null
+    }
     /**
      * Streams
      * @description A ride's samples, one per second (or every ``step`` seconds), as columns.
@@ -1456,6 +1891,70 @@ export interface components {
       msg: string
       /** Error Type */
       type: string
+    }
+    /**
+     * Volume
+     * @description Riding per week or month.
+     *
+     *     Attributes:
+     *         period: ``week`` or ``month``.
+     *         since: First day asked for (the first bucket starts on or before it).
+     *         until: Last day.
+     *         buckets: One per week or month, oldest first, empty ones included.
+     */
+    Volume: {
+      /** Buckets */
+      buckets: components['schemas']['VolumeBucketOut'][]
+      /**
+       * Period
+       * @enum {string}
+       */
+      period: 'week' | 'month'
+      /**
+       * Since
+       * Format: date
+       */
+      since: string
+      /**
+       * Until
+       * Format: date
+       */
+      until: string
+    }
+    /**
+     * VolumeBucketOut
+     * @description What was ridden in one week or month.
+     *
+     *     Attributes:
+     *         start: The first day of the week (Monday) or month.
+     *         rides: Number of rides.
+     *         moving_s: Riding time.
+     *         distance_m: Distance.
+     *         ascent_m: Climbing.
+     *         kj: Work in kilojoules.
+     *         tss: Total Training Stress Score.
+     *         rides_without_tss: Rides adding no TSS (no power, or no FTP).
+     */
+    VolumeBucketOut: {
+      /** Ascent M */
+      ascent_m: number
+      /** Distance M */
+      distance_m: number
+      /** Kj */
+      kj: number
+      /** Moving S */
+      moving_s: number
+      /** Rides */
+      rides: number
+      /** Rides Without Tss */
+      rides_without_tss: number
+      /**
+       * Start
+       * Format: date
+       */
+      start: string
+      /** Tss */
+      tss: number
     }
     /**
      * ZoneTime
@@ -1993,6 +2492,37 @@ export interface operations {
       }
     }
   }
+  get_route_progress_api_rides__ref__route_progress_get: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        ref: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['RouteProgress']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
   get_similar_api_rides__ref__similar_get: {
     parameters: {
       query?: {
@@ -2152,6 +2682,189 @@ export interface operations {
         }
         content: {
           'application/json': components['schemas']['TagCount'][]
+        }
+      }
+    }
+  }
+  get_curve_api_trends_curve_get: {
+    parameters: {
+      query?: {
+        kind?: 'power' | 'hr'
+        since?: string | null
+        until?: string | null
+      }
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['CurveOut']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  get_efficiency_api_trends_efficiency_get: {
+    parameters: {
+      query?: {
+        since?: string | null
+        until?: string | null
+      }
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['EfficiencyOut']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  get_fitness_api_trends_fitness_get: {
+    parameters: {
+      query?: {
+        since?: string | null
+        until?: string | null
+      }
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['FitnessOut']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  get_ftp_api_trends_ftp_get: {
+    parameters: {
+      query?: {
+        period?: 'week' | 'month'
+        since?: string | null
+        until?: string | null
+      }
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['FtpOut']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  get_span_api_trends_span_get: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Span']
+        }
+      }
+    }
+  }
+  get_volume_api_trends_volume_get: {
+    parameters: {
+      query?: {
+        period?: 'week' | 'month'
+        since?: string | null
+        until?: string | null
+      }
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Volume']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
         }
       }
     }

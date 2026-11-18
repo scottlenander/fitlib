@@ -18,6 +18,7 @@ from fitlib.api.routers import (
     rides,
     settings,
     tags,
+    trends,
 )
 from fitlib.api.static import default_static_dir, mount_app
 from fitlib.config import Config
@@ -62,6 +63,7 @@ def create_app(
     api.include_router(athlete.router)
     api.include_router(imports.router)
     api.include_router(settings.router)
+    api.include_router(trends.router)
 
     @api.api_route(
         "/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"], include_in_schema=False
