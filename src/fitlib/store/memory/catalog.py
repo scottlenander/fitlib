@@ -22,6 +22,9 @@ from fitlib.models import (
     Route,
     SortKey,
     TrendRow,
+    WatchedFile,
+    WatchFolder,
+    WatchOutcome,
 )
 from fitlib.store.interfaces import (
     MIN_ID_PREFIX,
@@ -130,6 +133,8 @@ class MemoryCatalog:
         self._bike_defaults: dict[tuple[BikeSlot, date], BikeDefault] = {}
         self._routes: dict[str, Route] = {}
         self._settings: dict[str, str] = {}
+        self._watch_folders: dict[str, WatchFolder] = {}
+        self._watched: dict[str, WatchedFile] = {}
 
     def _bike_name(self, ride: Ride) -> str | None:
         """The name of a ride's bike.
@@ -664,6 +669,87 @@ class MemoryCatalog:
             ride = self._rides[ride_id]
             summary = replace(ride.summary, utc_offset_s=offset, utc_offset_source=source)
             self._rides[ride_id] = replace(ride, summary=summary)
+
+    def watch_folders(self) -> list[WatchFolder]:
+        """List the watched folders.
+
+        Returns:
+            Every watched folder, by path.
+        """
+        return [self._watch_folders[p] for p in sorted(self._watch_folders)]
+
+    def add_watch_folder(self, folder: WatchFolder) -> bool:
+        """Start watching a folder.
+
+        Args:
+            folder: The folder, with its absolute path.
+
+        Returns:
+            ``False`` if it was already watched (nothing changes).
+        """
+        if folder.path in self._watch_folders:
+            return False
+        self._watch_folders[folder.path] = folder
+        return True
+
+    def remove_watch_folder(self, path: str) -> bool:
+        """Stop watching a folder, forgetting the files found in it.
+
+        Args:
+            path: The folder's path, as added.
+
+        Returns:
+            ``False`` if it wasn't watched.
+        """
+        if self._watch_folders.pop(path, None) is None:
+            return False
+        self._watched = {k: v for k, v in self._watched.items() if v.folder != path}
+        return True
+
+    def watched_file(self, path: str) -> WatchedFile | None:
+        """Look up a file found in a watched folder.
+
+        Args:
+            path: The file's absolute path.
+
+        Returns:
+            What was recorded for it, or ``None`` if it has never been imported.
+        """
+        return self._watched.get(path)
+
+    def record_watched_file(self, file: WatchedFile) -> None:
+        """Record what importing a watched file did, replacing anything recorded before.
+
+        Args:
+            file: The file, its size and modification time, and the outcome.
+        """
+        self._watched[file.path] = file
+
+    def recent_watched_files(self, limit: int = 20) -> list[WatchedFile]:
+        """List the latest files from watched folders that weren't already in the library.
+
+        Args:
+            limit: The most files to list.
+
+        Returns:
+            Imported, skipped and failed files, newest first (duplicates are left out: the
+            first scan of an existing folder finds hundreds).
+        """
+        files = [f for f in self._watched.values() if f.outcome is not WatchOutcome.DUPLICATE]
+        files.sort(key=lambda f: f.path)
+        files.sort(key=lambda f: f.seen_at, reverse=True)
+        return files[:limit]
+
+    def watched_file_counts(self) -> dict[str, int]:
+        """Count the files found in each watched folder.
+
+        Returns:
+            Files recorded per folder path; folders with none are left out.
+        """
+        counts: dict[str, int] = {}
+        for file in self._watched.values():
+            counts[file.folder] = counts.get(file.folder, 0) + 1
+        return counts
 
     def count(self) -> int:
         """Count the rides in the catalog.

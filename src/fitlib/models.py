@@ -493,3 +493,56 @@ class Page[T]:
     total: int
     offset: int
     limit: int
+
+
+class WatchOutcome(StrEnum):
+    """What happened to a file found in a watched folder."""
+
+    IMPORTED = "imported"
+    DUPLICATE = "duplicate"
+    SKIPPED = "skipped"
+    FAILED = "failed"
+
+
+@dataclass(frozen=True)
+class WatchFolder:
+    """A folder whose new .fit and .zip files are imported while the server runs.
+
+    It belongs to this computer: the path means nothing elsewhere, so it's never synced.
+
+    Attributes:
+        path: The folder's absolute path.
+        added_at: When it was added (UTC).
+    """
+
+    path: str
+    added_at: datetime
+
+
+@dataclass(frozen=True)
+class WatchedFile:
+    """A file found in a watched folder, and what importing it did.
+
+    Its size and modification time say whether it has changed since: an unchanged file is
+    never read again.
+
+    Attributes:
+        path: The file's absolute path.
+        folder: The watched folder it was found in.
+        size: Its size in bytes when imported.
+        mtime_ns: Its modification time, in nanoseconds since 1970, when imported.
+        outcome: Imported, a duplicate, skipped or failed (for a zip, the best of its files).
+        detail: For a zip, how many files had each outcome; otherwise why it was skipped or
+            failed, if it was.
+        ride_id: The ride it became (for a zip, the first), or the ride it duplicates.
+        seen_at: When it was imported (UTC).
+    """
+
+    path: str
+    folder: str
+    size: int
+    mtime_ns: int
+    outcome: WatchOutcome
+    detail: str | None
+    ride_id: str | None
+    seen_at: datetime

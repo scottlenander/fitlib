@@ -13,6 +13,7 @@ dependencies = [
     "python-multipart>=0.0.33",
     "typer>=0.29.1",
     "uvicorn>=0.54.0",
+    "watchdog>=7.1.0",
 ]
 
 [project.scripts]

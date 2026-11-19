@@ -29,6 +29,8 @@ from fitlib.models import (
     Route,
     SortKey,
     TrendRow,
+    WatchedFile,
+    WatchFolder,
 )
 
 MIN_ID_PREFIX = 4
@@ -505,6 +507,75 @@ class CatalogStore(Protocol):
 
         Raises:
             RideNotFound: A ride doesn't exist (nothing is changed).
+        """
+        ...
+
+    def watch_folders(self) -> list[WatchFolder]:
+        """List the watched folders.
+
+        Returns:
+            Every watched folder, by path.
+        """
+        ...
+
+    def add_watch_folder(self, folder: WatchFolder) -> bool:
+        """Start watching a folder.
+
+        Args:
+            folder: The folder, with its absolute path.
+
+        Returns:
+            ``False`` if it was already watched (nothing changes).
+        """
+        ...
+
+    def remove_watch_folder(self, path: str) -> bool:
+        """Stop watching a folder, forgetting the files found in it.
+
+        Args:
+            path: The folder's path, as added.
+
+        Returns:
+            ``False`` if it wasn't watched.
+        """
+        ...
+
+    def watched_file(self, path: str) -> WatchedFile | None:
+        """Look up a file found in a watched folder.
+
+        Args:
+            path: The file's absolute path.
+
+        Returns:
+            What was recorded for it, or ``None`` if it has never been imported.
+        """
+        ...
+
+    def record_watched_file(self, file: WatchedFile) -> None:
+        """Record what importing a watched file did, replacing anything recorded before.
+
+        Args:
+            file: The file, its size and modification time, and the outcome.
+        """
+        ...
+
+    def recent_watched_files(self, limit: int = 20) -> list[WatchedFile]:
+        """List the latest files from watched folders that weren't already in the library.
+
+        Args:
+            limit: The most files to list.
+
+        Returns:
+            Imported, skipped and failed files, newest first (duplicates are left out: the
+            first scan of an existing folder finds hundreds).
+        """
+        ...
+
+    def watched_file_counts(self) -> dict[str, int]:
+        """Count the files found in each watched folder.
+
+        Returns:
+            Files recorded per folder path; folders with none are left out.
         """
         ...
 
