@@ -7,6 +7,7 @@ import { LibraryPage } from './pages/LibraryPage'
 import { NotFoundPage } from './pages/NotFoundPage'
 import { RidePage } from './pages/RidePage'
 import { SettingsPage } from './pages/SettingsPage'
+import { TrendsPage } from './pages/TrendsPage'
 
 export function App() {
   return (
@@ -15,6 +16,7 @@ export function App() {
         <Route index element={<LibraryPage />} />
         <Route path="rides/:id" element={<RidePage />} />
         <Route path="compare" element={<ComparePage />} />
+        <Route path="trends" element={<TrendsPage />} />
         <Route path="import" element={<ImportPage />} />
         <Route path="bikes" element={<BikesPage />} />
         <Route path="settings" element={<SettingsPage />} />

@@ -2,6 +2,7 @@ import { test, expect, type Page } from '@playwright/test'
 import { ComparePage } from '../../pageObjects/comparePage'
 import { LibraryPage } from '../../pageObjects/libraryPage'
 import { RidePage } from '../../pageObjects/ridePage'
+import { TrendsPage } from '../../pageObjects/trendsPage'
 import { expectNoViolations } from '../../libs/accessibility'
 import { RIDES } from '../../libs/constants'
 import { TestData } from '../../libs/testData'
@@ -25,6 +26,7 @@ test('pages fit a phone screen, with wide tables scrolling on their own, by keyb
   const library = new LibraryPage(page)
   const ride = new RidePage(page)
   const compare = new ComparePage(page)
+  const trends = new TrendsPage(page)
   const testData = new TestData(request)
 
   await test.step('Library', async () => {
@@ -46,6 +48,22 @@ test('pages fit a phone screen, with wide tables scrolling on their own, by keyb
     await compare.goto([await testData.rideId(EXPORT_A.file), await testData.rideId(EXPORT_B.file)])
     await expect(compare.table).toBeVisible()
     expect(await pageScrollsSideways(page), 'the compare page should fit the screen').toBe(false)
+    await expectNoViolations(page)
+  })
+
+  await test.step('Trends, with every table shown', async () => {
+    await trends.goto({ since: '2025-08-01', until: '2025-08-31' })
+    await expect(trends.bestChart).toBeVisible()
+    for (const section of [
+      trends.fitness,
+      trends.volume,
+      trends.ftp,
+      trends.efficiency,
+      trends.best,
+    ])
+      await trends.showTable(section).click()
+    await expect(trends.volumeTable).toBeVisible()
+    expect(await pageScrollsSideways(page), 'the trends page should fit the screen').toBe(false)
     await expectNoViolations(page)
   })
 })

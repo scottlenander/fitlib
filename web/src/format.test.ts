@@ -90,3 +90,16 @@ describe('times', () => {
     expect(f.date('2025-08-02T06:30:00Z')).toBe('2025-08-02')
   })
 })
+
+describe('dates and totals', () => {
+  test('days and months for trends', () => {
+    expect(f.day('2025-08-18')).toBe('Mon 18 Aug 2025')
+    expect(f.shortDay('2025-08-04')).toBe('04 Aug')
+    expect(f.month('2025-08-01')).toBe('Aug 2025')
+  })
+
+  test('long totals in hours', () => {
+    expect(f.hours(45_000)).toBe('12.5 h')
+    expect(f.hours(null)).toBe(f.DASH)
+  })
+})

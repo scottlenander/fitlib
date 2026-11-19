@@ -3,6 +3,7 @@ import { LibraryPage } from '../../pageObjects/libraryPage'
 import { RidePage } from '../../pageObjects/ridePage'
 import { ImportPage } from '../../pageObjects/importPage'
 import { ComparePage } from '../../pageObjects/comparePage'
+import { TrendsPage } from '../../pageObjects/trendsPage'
 import { RIDES } from '../../libs/constants'
 
 // Read-only: the newest and oldest rides are listed; the interval ride is opened, then
@@ -11,13 +12,14 @@ const NEWEST = RIDES.EXPORT_B.name
 const OLDEST = RIDES.ZWIFT.name
 const RIDE = RIDES.INTERVALS
 
-test('a rider browses the library, opens a ride, finds the import page and compares rides', async ({
+test('a rider browses the library, opens a ride, finds the import page, compares rides and sees trends', async ({
   page,
 }) => {
   const library = new LibraryPage(page)
   const ride = new RidePage(page)
   const importPage = new ImportPage(page)
   const compare = new ComparePage(page)
+  const trends = new TrendsPage(page)
 
   await test.step('Open the library', async () => {
     await library.goto()
@@ -58,5 +60,14 @@ test('a rider browses the library, opens a ride, finds the import page and compa
     await expect(compare.traces, {
       message: 'The overlaid charts should be drawn',
     }).toBeVisible()
+  })
+  await test.step('See trends over the fixture rides', async () => {
+    await compare.header.trendsLink.click()
+    await trends.preset('All').check()
+    await expect(trends.rangeText).toContainText('Sat 02 Aug 2025 to')
+    await expect(trends.fitnessChart, {
+      message: 'The fitness chart should be drawn',
+    }).toBeVisible()
+    await expect(trends.volumeChart).toBeVisible()
   })
 })

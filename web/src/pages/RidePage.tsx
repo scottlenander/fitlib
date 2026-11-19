@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react'
 import { Link, useParams } from 'react-router'
 import { ApiError, useRide, type RideDetail } from '../api/client'
 import { RideDetails } from '../components/RideDetails'
+import { RouteProgress } from '../components/RouteProgress'
 import { ScrollBox } from '../components/ScrollBox'
 import { SimilarRides } from '../components/SimilarRides'
 import { Stats, type Stat } from '../components/Stats'
@@ -200,6 +201,7 @@ function Ride({ ride }: { ride: RideDetail }) {
       )}
 
       <SimilarRides ride={ride} />
+      <RouteProgress ride={ride} />
     </article>
   )
 }

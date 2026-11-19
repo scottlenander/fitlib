@@ -1,7 +1,7 @@
 // An ECharts chart that resizes with its container. Only the chart types fitlib uses are
 // bundled. The chart is drawn on a canvas, so callers give it an accessible label and show
 // the same numbers in a table nearby.
-import { LineChart } from 'echarts/charts'
+import { BarChart, LineChart, ScatterChart } from 'echarts/charts'
 import {
   DataZoomComponent,
   GridComponent,
@@ -15,6 +15,8 @@ import { useTheme } from '../theme'
 
 echarts.use([
   LineChart,
+  BarChart,
+  ScatterChart,
   GridComponent,
   TooltipComponent,
   DataZoomComponent,
@@ -35,11 +37,13 @@ type Props = {
   testId: string
   // For charts with a zoom bar (dataZoom): a label for it and a button back to everything.
   zoom?: ZoomControls
+  // Called with the data item clicked, e.g. to open the ride a point stands for.
+  onItemClick?: (data: unknown) => void
 }
 
 type DataZoomState = { start?: number; end?: number }
 
-export function EChart({ option, label, height, testId, zoom }: Props) {
+export function EChart({ option, label, height, testId, zoom, onItemClick }: Props) {
   const element = useRef<HTMLDivElement>(null)
   const chart = useRef<echarts.ECharts | null>(null)
   const { theme } = useTheme()
@@ -48,6 +52,10 @@ export function EChart({ option, label, height, testId, zoom }: Props) {
   const [zoomedOn, setZoomedOn] = useState<{ option: ChartOption; theme: string } | null>(null)
   const zoomed = zoomedOn?.option === option && zoomedOn.theme === theme
   const drawn = useRef({ option, theme })
+  const clicked = useRef(onItemClick)
+  useEffect(() => {
+    clicked.current = onItemClick
+  }, [onItemClick])
 
   // Drawn again from scratch when the theme changes, in ECharts' matching colours.
   useEffect(() => {
@@ -59,6 +67,7 @@ export function EChart({ option, label, height, testId, zoom }: Props) {
       const isZoomed = !!range && ((range.start ?? 0) > 0 || (range.end ?? 100) < 100)
       setZoomedOn(isZoomed ? drawn.current : null)
     })
+    instance.on('click', (event) => clicked.current?.(event.data))
     const observer = new ResizeObserver(() => instance.resize())
     observer.observe(element.current)
     return () => {

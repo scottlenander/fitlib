@@ -130,3 +130,24 @@ export function shortDuration(seconds: number): string {
   const minutes = Math.round((seconds % 3600) / 60)
   return minutes ? `${hours} h ${minutes} min` : `${hours} h`
 }
+
+// A YYYY-MM-DD date as "Mon 18 Aug 2025".
+export function day(iso: string): string {
+  const f = fields(`${iso}T00:00`)
+  return `${DAYS[f.weekday]} ${pad(f.day)} ${MONTHS[f.month - 1]} ${f.year}`
+}
+
+// A YYYY-MM-DD date as "18 Aug", for chart labels.
+export function shortDay(iso: string): string {
+  const f = fields(`${iso}T00:00`)
+  return `${pad(f.day)} ${MONTHS[f.month - 1]}`
+}
+
+// A YYYY-MM-DD date's month as "Aug 2025".
+export function month(iso: string): string {
+  const f = fields(`${iso}T00:00`)
+  return `${MONTHS[f.month - 1]} ${f.year}`
+}
+
+// Hours as "12.5 h", for totals too long for "1:02:05".
+export const hours = (seconds: Maybe) => (missing(seconds) ? DASH : `${fixed(seconds / 3600, 1)} h`)
