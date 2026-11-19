@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
 from pathlib import Path
@@ -1013,3 +1014,109 @@ def test_progress_without_other_rides(imported: Path, day: str, message: str):
 
     assert result.exit_code == 0, result.output
     assert message in result.output
+
+
+# -- watch ------------------------------------------------------------------------------------
+
+
+@pytest.fixture
+def activities(tmp_path: Path) -> Path:
+    """A folder of rides to watch: two rides and a broken file, all settled long ago.
+
+    Args:
+        tmp_path: The test's temp folder.
+
+    Returns:
+        The folder's resolved path.
+    """
+    folder = (tmp_path / "Activities").resolve()
+    folder.mkdir()
+    for name in (
+        "2025-08-02-08-29-42.fit",
+        "garmin_nord_intervals_5x4.fit",
+        "corrupt_truncated.fit",
+    ):
+        shutil.copyfile(FIT_DIR / name, folder / name)
+        os.utime(folder / name, (1_700_000_000, 1_700_000_000))
+    return folder
+
+
+def test_watch_add_list_scan_and_remove(config: Path, activities: Path):
+    """A folder can be watched, scanned, listed and removed from the command line.
+
+    Given: the folder added, scanned twice, listed, then removed.
+    Expect: "Watching"; the first scan imports 2 rides with 1 failure, the second finds
+    nothing new; the list shows the folder with 3 files and the latest files; removed.
+    """
+    added = run(config, "watch", "add", str(activities))
+    first = run(config, "watch", "scan")
+    second = run(config, "watch", "scan")
+    listed = run(config, "watch", "list")
+    removed = run(config, "watch", "remove", str(activities))
+    empty = run(config, "watch", "list")
+
+    assert added.exit_code == 0, added.output
+    assert f"Watching {activities}." in added.output
+    assert "Imported 2, already in library 0, skipped 0, failed 1." in first.output
+    assert "corrupt_truncated.fit" in first.output
+    assert "Nothing new in the watched folders." in second.output
+    assert re.search(rf"{re.escape(str(activities))}\s+yes\s+3", listed.output)
+    assert "garmin_nord_intervals_5x4.fit" in listed.output and "imported" in listed.output
+    assert removed.exit_code == 0
+    assert "No watched folders" in empty.output
+
+
+@pytest.mark.parametrize(
+    ("args", "message"),
+    [
+        (("add", "Activities"), "Give the folder's full path"),
+        (("add", "{library}"), "holds fitlib's own library"),
+        (("add", "{activities}"), "is already watched"),
+        (("remove", "/no/such/folder"), "isn't a watched folder"),
+    ],
+    ids=["relative", "the-library", "twice", "remove-unknown"],
+)
+def test_watch_refusals(config: Path, activities: Path, tmp_path: Path, args, message):
+    """Folders that can't be watched, are watched already, or aren't watched are refused.
+
+    Given: the folder watched, then a relative path, the library, the same folder again, or
+    removing a folder never added.
+    Expect: exit code 2 with the reason.
+    """
+    (tmp_path / "library").mkdir(exist_ok=True)
+    run(config, "watch", "add", str(activities))
+
+    result = run(
+        config,
+        "watch",
+        *(a.format(library=tmp_path / "library", activities=activities) for a in args),
+    )
+
+    assert result.exit_code == EXIT_ERROR
+    assert message in result.output
+
+
+def test_watch_scan_leaves_files_still_being_written(config: Path, activities: Path):
+    """A file written moments ago is left for the next scan.
+
+    Given: a watched folder with a ride written just now.
+    Expect: the scan says one file is still being written.
+    """
+    run(config, "watch", "add", str(activities))
+    shutil.copyfile(FIT_DIR / "garmin_indoor_no_hr.fit", activities / "new.fit")
+
+    result = run(config, "watch", "scan")
+
+    assert "1 file is still being written; scan again shortly." in result.output
+
+
+def test_watch_without_folders(config: Path):
+    """With nothing watched, list and scan say how to add a folder.
+
+    Given: no watched folders.
+    Expect: both point to ``fitlib watch add``.
+    """
+    for command in ("list", "scan"):
+        result = run(config, "watch", command)
+
+        assert "Add one with `fitlib watch add FOLDER`." in result.output
