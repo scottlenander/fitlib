@@ -53,6 +53,19 @@ def drop(folder: Path, fixture: str, mtime: float = LONG_AGO) -> Path:
     return path
 
 
+@pytest.fixture(autouse=True)
+def home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """A home folder of the test's own, so suggestions never come from the real one.
+
+    Returns:
+        The home folder (with no Zwift folder in it).
+    """
+    path = tmp_path / "home"
+    path.mkdir()
+    monkeypatch.setenv("HOME", str(path))
+    return path
+
+
 def test_no_folders_at_first(client: TestClient):
     """A new library watches nothing; without a watcher, the server says so.
 
@@ -67,6 +80,7 @@ def test_no_folders_at_first(client: TestClient):
         "recent": [],
         "waiting": 0,
         "last_import": None,
+        "suggestions": [],
     }
 
 
@@ -231,16 +245,33 @@ def test_the_server_watcher_imports_what_is_there_and_what_arrives(
 def test_e2e_mode_keeps_watched_folders_in_the_temp_folder(tmp_path: Path, folder: Path):
     """In e2e mode, only folders inside the temp folder can be watched.
 
-    Given: an app in e2e mode, then a temp folder and the home folder.
-    Expect: the temp folder accepted; the home folder refused.
+    Given: an app in e2e mode, then a temp folder and this repository's tests folder.
+    Expect: the temp folder accepted; the tests folder refused.
     """
     config = Config(library=tmp_path / "library")
     app = create_app(config, workers=1, e2e_fixtures=FIT_DIR)
 
     with TestClient(app) as client:
         inside = client.post("/api/watch/folders", json={"path": str(folder)})
-        outside = client.post("/api/watch/folders", json={"path": str(Path.home())})
+        outside = client.post("/api/watch/folders", json={"path": str(Path(__file__).parent)})
 
     assert inside.status_code == 201
     assert outside.status_code == 422
     assert "Only folders inside" in outside.json()["detail"]
+
+
+def test_zwift_folder_is_suggested_until_watched(client: TestClient, home: Path):
+    """Zwift's Activities folder is suggested when it exists, until it's watched.
+
+    Given: ``~/Documents/Zwift/Activities`` in the home folder, then watched.
+    Expect: suggested before, not after.
+    """
+    zwift = home / "Documents" / "Zwift" / "Activities"
+    zwift.mkdir(parents=True)
+
+    before = client.get("/api/watch").json()["suggestions"]
+    client.post("/api/watch/folders", json={"path": before[0]})
+    after = client.get("/api/watch").json()["suggestions"]
+
+    assert before == [str(zwift.resolve())]
+    assert after == []

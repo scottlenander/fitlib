@@ -419,6 +419,24 @@ RIDES: tuple[RideSpec, ...] = (
     ),
 )
 
+# Rides kept out of the fixture folder (in ``tests/fixtures/extra/``), so they're never in the
+# library at the start: the browser tests drop one into a watched folder. An indoor ride on
+# 7 Aug with heart rate but no power or GPS, so once imported it changes no other test's
+# counts (they use rides from 13 Aug on), best efforts, routes or similar efforts.
+EXTRA_RIDES: tuple[RideSpec, ...] = (
+    RideSpec(
+        name="garmin_indoor_hr_only",
+        source=Source.GARMIN,
+        utc_offset_s=CEST,
+        start=datetime(2025, 8, 7, 16, 0, tzinfo=UTC),
+        segments=(Segment(seconds=1800, power=150, cadence=85),),
+        loop=NORD_LOOP,
+        indoor=True,
+        has_power=False,
+        serial_number=0x0F17_000C,
+    ),
+)
+
 # Exact byte copies under another name, for dedupe tests: {copy_name: source_name}.
 DUPLICATES: dict[str, str] = {
     "garmin_nord_intervals_5x4_copy": "garmin_nord_intervals_5x4",

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from tests.fixtures.generate import FIT_DIR, build_all
+from tests.fixtures.generate import EXTRA_DIR, FIT_DIR, build_all, build_extra
 
 REGENERATE = "run `uv run python -m tests.fixtures.generate` and commit the result"
 
@@ -48,3 +48,14 @@ def test_committed_fixtures_match_the_specs(generated: dict[str, bytes]):
 
     assert sorted(committed) == sorted(expected), f"Fixture files differ; {REGENERATE}"
     assert not stale, f"Stale fixtures {stale}; {REGENERATE}"
+
+
+def test_committed_extra_rides_match_the_specs():
+    """The rides in ``tests/fixtures/extra/`` are exactly what their specs generate.
+
+    Given: the committed extra rides and a fresh build of ``EXTRA_RIDES``.
+    Expect: the same file names with identical bytes.
+    """
+    committed = {path.name: path.read_bytes() for path in EXTRA_DIR.iterdir() if path.is_file()}
+
+    assert committed == build_extra(), f"Extra fixtures differ; {REGENERATE}"

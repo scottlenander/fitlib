@@ -23,6 +23,7 @@ from fitlib.watcher import (
     Watcher,
     check_folder,
     scan,
+    suggested_folders,
     watch_folder,
 )
 
@@ -81,6 +82,8 @@ class WatchStatus(BaseModel):
         waiting: Files waiting to stop changing before they're imported.
         last_import: When the watcher last imported a ride, if it has since the server
             started: the browser app checks this to refresh its lists.
+        suggestions: Usual ride folders on this computer not watched yet (Zwift's
+            Activities folder, a plugged-in Garmin), offered as one-click additions.
     """
 
     running: bool
@@ -88,6 +91,7 @@ class WatchStatus(BaseModel):
     recent: list[WatchedFileOut]
     waiting: int
     last_import: datetime | None
+    suggestions: list[str]
 
 
 class FolderIn(BaseModel):
@@ -149,15 +153,17 @@ def _folder(path: str, watcher: Watcher | None, counts: dict[str, int]) -> Watch
     return WatchFolderOut(path=path, state=state, message=message, files=counts.get(path, 0))
 
 
-def _status(stores: Stores, watcher: Watcher | None) -> WatchStatus:
+def _status(stores: Stores, watcher: Watcher | None, root: Path | None) -> WatchStatus:
     catalog = stores.catalog
     counts = catalog.watched_file_counts()
+    folders = catalog.watch_folders()
     return WatchStatus(
         running=watcher is not None,
-        folders=[_folder(f.path, watcher, counts) for f in catalog.watch_folders()],
+        folders=[_folder(f.path, watcher, counts) for f in folders],
         recent=[_file(f) for f in catalog.recent_watched_files(RECENT)],
         waiting=watcher.waiting if watcher is not None else 0,
         last_import=watcher.last_import if watcher is not None else None,
+        suggestions=suggested_folders({f.path for f in folders}, root),
     )
 
 
@@ -172,7 +178,7 @@ def get_watch(request: Request, stores: StoresDep) -> WatchStatus:
     Returns:
         The folders with their state, recent files, and when a ride was last imported.
     """
-    return _status(stores, _watcher(request))
+    return _status(stores, _watcher(request), request.app.state.watch_root)
 
 
 @router.post("/folders", status_code=201)

@@ -131,6 +131,37 @@ class ScanResult:
     still_writing: int
 
 
+# Where ride files usually land, offered as one-click folders to watch when they exist.
+SUGGESTED = (
+    "~/Documents/Zwift/Activities",
+    "/Volumes/GARMIN/Garmin/Activities",
+)
+
+
+def suggested_folders(watched: set[str], allowed_root: Path | None = None) -> list[str]:
+    """Usual ride folders that exist on this computer and aren't watched yet.
+
+    Args:
+        watched: The watched folders' paths.
+        allowed_root: If given, only folders inside it (e2e mode).
+
+    Returns:
+        Their resolved paths, in ``SUGGESTED`` order.
+    """
+    found = []
+    for raw in SUGGESTED:
+        path = Path(raw).expanduser()
+        if not path.is_dir():
+            continue
+        path = path.resolve()
+        if str(path) in watched:
+            continue
+        if allowed_root is not None and not path.is_relative_to(allowed_root.resolve()):
+            continue
+        found.append(str(path))
+    return found
+
+
 def check_folder(raw: str, library: Path, allowed_root: Path | None = None) -> Path:
     """Check that a folder can be watched, and give its full path.
 

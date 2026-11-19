@@ -36,9 +36,11 @@ from fit_tool.profile.profile_type import (
     SubSport,
 )
 
-from tests.fixtures.specs import CORRUPT, DUPLICATES, RIDES, Loop, RideSpec, Source
+from tests.fixtures.specs import CORRUPT, DUPLICATES, EXTRA_RIDES, RIDES, Loop, RideSpec, Source
 
 FIT_DIR = Path(__file__).parent / "fit"
+# Rides that start outside the library (dropped into a watched folder by the browser tests).
+EXTRA_DIR = Path(__file__).parent / "extra"
 
 METRES_PER_DEG_LAT = 111_320.0
 # Speed model: v = (P / k) ** (1/3) m/s. 200 W -> ~9.3 m/s (33 km/h). Coasting at 0 W stops.
@@ -421,6 +423,15 @@ def build_all() -> dict[str, bytes]:
     return files
 
 
+def build_extra() -> dict[str, bytes]:
+    """Build the rides committed in ``tests/fixtures/extra/``.
+
+    Returns:
+        File contents keyed by file name.
+    """
+    return {spec.fit_name: build(spec) for spec in EXTRA_RIDES}
+
+
 def committed_bytes(spec_name: str) -> bytes:
     """Read a ride's committed FIT bytes (much faster than ``build``).
 
@@ -439,17 +450,19 @@ def committed_bytes(spec_name: str) -> bytes:
     return (FIT_DIR / spec.fit_name).read_bytes()
 
 
-def write_all(out_dir: Path = FIT_DIR) -> list[Path]:
+def write_all(out_dir: Path = FIT_DIR, expected: dict[str, bytes] | None = None) -> list[Path]:
     """Write every fixture file, removing files in the folder that are no longer generated.
 
     Args:
         out_dir: Where to write; ``tests/fixtures/fit/`` by default.
+        expected: The files to write; ``build_all()`` by default.
 
     Returns:
         The paths written, sorted.
     """
     out_dir.mkdir(parents=True, exist_ok=True)
-    expected = build_all()
+    if expected is None:
+        expected = build_all()
     for stale in out_dir.iterdir():
         if stale.is_file() and stale.name not in expected:
             stale.unlink()
@@ -463,7 +476,7 @@ def write_all(out_dir: Path = FIT_DIR) -> list[Path]:
 
 def main() -> None:
     """Regenerate the committed fixtures and list the files written."""
-    for path in write_all():
+    for path in [*write_all(), *write_all(EXTRA_DIR, build_extra())]:
         print(f"wrote {path.relative_to(Path.cwd()) if path.is_relative_to(Path.cwd()) else path}")
 
 

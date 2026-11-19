@@ -2158,6 +2158,8 @@ export interface components {
      *         waiting: Files waiting to stop changing before they're imported.
      *         last_import: When the watcher last imported a ride, if it has since the server
      *             started: the browser app checks this to refresh its lists.
+     *         suggestions: Usual ride folders on this computer not watched yet (Zwift's
+     *             Activities folder, a plugged-in Garmin), offered as one-click additions.
      */
     WatchStatus: {
       /** Folders */
@@ -2168,6 +2170,8 @@ export interface components {
       recent: components['schemas']['WatchedFileOut'][]
       /** Running */
       running: boolean
+      /** Suggestions */
+      suggestions: string[]
       /** Waiting */
       waiting: number
     }
