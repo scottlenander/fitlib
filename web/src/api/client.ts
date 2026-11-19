@@ -43,6 +43,10 @@ export type Efficiency = Schemas['EfficiencyOut']
 export type EfficiencyPoint = Schemas['EfficiencyPointOut']
 export type BestCurve = Schemas['CurveOut']
 export type CurveBest = Schemas['CurveBestOut']
+export type WatchStatus = Schemas['WatchStatus']
+export type WatchFolder = Schemas['WatchFolderOut']
+export type WatchedFile = Schemas['WatchedFileOut']
+export type ScanResult = Schemas['ScanOut']
 export type RideQuery = NonNullable<operations['list_rides_api_rides_get']['parameters']['query']>
 
 // An error from the API, with its status and message.
@@ -353,4 +357,55 @@ export function useEfficiency(range: Range, enabled: boolean) {
 
 export function useBestCurve(range: Range, kind: 'power' | 'hr', enabled: boolean) {
   return useQuery(trend<BestCurve>('curve', { ...range, kind }, enabled))
+}
+
+// Watched folders. The status is polled while the tab is visible (TanStack Query pauses the
+// interval in a hidden tab), so new rides from the server's watcher show up without a
+// reload; with several pages asking, the shortest interval wins.
+export const WATCH_POLL_MS = 15_000
+
+export function useWatch(pollMs = WATCH_POLL_MS) {
+  return useQuery({
+    queryKey: ['watch'],
+    queryFn: () => request<WatchStatus>('/api/watch'),
+    refetchInterval: pollMs,
+  })
+}
+
+// Everything a newly imported ride can change.
+export const NEW_RIDE_KEYS = [
+  'rides',
+  'ride',
+  'trends',
+  'route-progress',
+  'similar',
+  'tags',
+  'health',
+]
+
+export function useAddWatchFolder() {
+  const invalidate = useInvalidate()
+  return useMutation({
+    mutationFn: (path: string) =>
+      request<WatchFolder>('/api/watch/folders', json('POST', { path })),
+    onSuccess: () => invalidate('watch'),
+  })
+}
+
+export function useRemoveWatchFolder() {
+  const invalidate = useInvalidate()
+  return useMutation({
+    mutationFn: (path: string) =>
+      request<void>(`/api/watch/folders${queryString({ path })}`, { method: 'DELETE' }),
+    onSuccess: () => invalidate('watch'),
+  })
+}
+
+export function useScanWatched() {
+  const invalidate = useInvalidate()
+  return useMutation({
+    mutationFn: () => request<ScanResult>('/api/watch/scan', { method: 'POST' }),
+    // Without the server's watcher, the scan has imported rides by the time it answers.
+    onSuccess: (result) => invalidate('watch', ...(result.background ? [] : NEW_RIDE_KEYS)),
+  })
 }

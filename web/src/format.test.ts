@@ -103,3 +103,13 @@ describe('dates and totals', () => {
     expect(f.hours(null)).toBe(f.DASH)
   })
 })
+
+describe('moments', () => {
+  test("a UTC moment is shown on this computer's clock", () => {
+    const iso = '2026-11-19T15:54:00Z'
+    const local = new Date(iso)
+    const hh = String(local.getHours()).padStart(2, '0')
+
+    expect(f.when(iso)).toMatch(new RegExp(`^\\w{3} \\d{2} Nov 2026, ${hh}:54$`))
+  })
+})

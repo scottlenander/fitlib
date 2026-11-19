@@ -1,3 +1,4 @@
+import { basename } from 'node:path'
 import { expect, type APIRequestContext } from '@playwright/test'
 
 // Quick set-up and clean-up through the e2e-only routes (src/fitlib/api/routers/e2e.py,
@@ -51,6 +52,18 @@ export class TestData {
       data: { timezone: null },
     })
     this.check(response.ok(), 'PUT /api/settings/timezone', response.status())
+  }
+
+  // Stops watching the temp folders a watched folders test left behind (one that failed
+  // before its clean-up): their names start with `prefix`.
+  async stopWatchingLeftovers(prefix: string) {
+    const response = await this.request.get('/api/watch')
+    this.check(response.ok(), 'GET /api/watch', response.status())
+    const { folders } = (await response.json()) as { folders: { path: string }[] }
+    for (const { path } of folders.filter((f) => basename(f.path).startsWith(prefix))) {
+      const removed = await this.request.delete('/api/watch/folders', { params: { path } })
+      this.check(removed.ok(), 'DELETE /api/watch/folders', removed.status())
+    }
   }
 
   private async post(path: string) {
