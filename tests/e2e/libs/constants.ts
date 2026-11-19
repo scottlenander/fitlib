@@ -53,6 +53,7 @@ export const RIDES = {
       'regression/library.spec.ts',
       'regression/rideDetail.spec.ts',
       'accessibility/pages.spec.ts',
+      'regression/trends.spec.ts',
     ],
   },
   PAUSE: {
@@ -96,6 +97,7 @@ export const RIDES = {
       'regression/bikes.spec.ts',
       'regression/library.spec.ts',
       'regression/rideDetail.spec.ts',
+      'regression/trends.spec.ts',
     ],
   },
   EXPORT_A: {
@@ -108,6 +110,7 @@ export const RIDES = {
       'regression/compare.spec.ts',
       'regression/similarRides.spec.ts',
       'regression/library.spec.ts',
+      'regression/trends.spec.ts',
     ],
   },
   NO_TIME_ZONE: {
@@ -130,6 +133,7 @@ export const RIDES = {
       'regression/similarRides.spec.ts',
       'smoke/libraryToRide.spec.ts',
       'regression/library.spec.ts',
+      'regression/trends.spec.ts',
     ],
   },
 } as const satisfies Record<string, FixtureRide>

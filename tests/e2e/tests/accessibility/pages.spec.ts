@@ -3,6 +3,7 @@ import { ComparePage } from '../../pageObjects/comparePage'
 import { ImportPage } from '../../pageObjects/importPage'
 import { LibraryPage } from '../../pageObjects/libraryPage'
 import { RidePage } from '../../pageObjects/ridePage'
+import { TrendsPage } from '../../pageObjects/trendsPage'
 import { expectNoViolations } from '../../libs/accessibility'
 import { RIDES, UPLOADS } from '../../libs/constants'
 import { TestData } from '../../libs/testData'
@@ -26,6 +27,7 @@ for (const theme of THEMES) {
     const ride = new RidePage(page)
     const importPage = new ImportPage(page)
     const compare = new ComparePage(page)
+    const trends = new TrendsPage(page)
     const testData = new TestData(request)
     await page.emulateMedia({ colorScheme: theme.system })
 
@@ -48,6 +50,8 @@ for (const theme of THEMES) {
       await expect(ride.traceChart).toBeVisible()
       await expect(ride.curveChart).toBeVisible()
       await expect(ride.similar.routeTable).toBeVisible()
+      await ride.progress.showTable.click()
+      await expect(ride.progress.table).toBeVisible()
       await expectNoViolations(page)
     })
 
@@ -85,6 +89,27 @@ for (const theme of THEMES) {
     await test.step('Compare with too few rides', async () => {
       await compare.goto([])
       await expect(compare.empty).toBeVisible()
+      await expectNoViolations(page)
+    })
+
+    await test.step('Trends, with every table shown', async () => {
+      await trends.goto({ since: '2025-08-01', until: '2025-08-31' })
+      await expect(trends.bestChart).toBeVisible()
+      for (const section of [
+        trends.fitness,
+        trends.volume,
+        trends.ftp,
+        trends.efficiency,
+        trends.best,
+      ])
+        await trends.showTable(section).click()
+      await expect(trends.bestTable).toBeVisible()
+      await expectNoViolations(page)
+    })
+
+    await test.step('Trends with a range that ends before it starts', async () => {
+      await trends.goto({ since: '2025-09-30', until: '2025-08-31' })
+      await expect(trends.error).toBeVisible()
       await expectNoViolations(page)
     })
 

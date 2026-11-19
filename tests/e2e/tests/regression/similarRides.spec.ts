@@ -77,3 +77,48 @@ test('rides with nothing on their route say why', async ({ page, request }) => {
     await expect(ride.similar.empty).toHaveText("No other rides share this ride's route.")
   })
 })
+
+test('progress on a route lists its rides oldest first, by speed', async ({ page, request }) => {
+  const ride = new RidePage(page)
+  const { progress } = ride
+  const testData = new TestData(request)
+
+  await test.step('Open the 23 Aug export ride, on the loop', async () => {
+    await ride.goto(await testData.rideId(EXPORT_A.file))
+    await expect(progress.chart).toHaveAttribute(
+      'aria-label',
+      'Avg speed of each ride on this route, by date',
+    )
+  })
+
+  await test.step('Its table lists the loop, oldest first, this ride marked', async () => {
+    await progress.showTable.click()
+    await expect(progress.rows.first(), {
+      message: 'The interval ride (5 Aug) is the oldest on the loop',
+    }).toContainText(INTERVALS.name)
+    await expect(progress.thisRide()).toContainText('2025-08-23')
+    await expect(progress.row(EXPORT_B.name)).toContainText('19.8 mph')
+    await expect(progress.rows.last()).toContainText(EXPORT_B.name)
+  })
+
+  await test.step('Show power instead', async () => {
+    await progress.metric.selectOption({ label: 'Avg power' })
+    await expect(progress.chart).toHaveAttribute(
+      'aria-label',
+      'Avg power of each ride on this route, by date',
+    )
+  })
+
+  await test.step('Open the oldest ride on the route', async () => {
+    await progress.row(INTERVALS.name).getByRole('link').click()
+    await expect(ride.heading).toHaveText(INTERVALS.name)
+  })
+
+  await test.step('A ride alone on its route has no progress section', async () => {
+    await ride.goto(await testData.rideId(ZWIFT.file))
+    await expect(ride.similar.empty).toBeVisible()
+    await expect(progress.root, {
+      message: 'The Zwift ride is the only one in Watopia',
+    }).toBeHidden()
+  })
+})

@@ -11,6 +11,7 @@ export class Header {
   readonly root: Locator
   readonly nav: Locator
   readonly libraryLink: Locator
+  readonly trendsLink: Locator
   readonly importLink: Locator
   readonly bikesLink: Locator
   readonly settingsLink: Locator
@@ -22,6 +23,7 @@ export class Header {
     this.root = page.getByRole('banner')
     this.nav = page.getByRole('navigation', { name: 'Main' })
     this.libraryLink = this.nav.getByRole('link', { name: 'Library', exact: true })
+    this.trendsLink = this.nav.getByRole('link', { name: 'Trends', exact: true })
     this.importLink = this.nav.getByRole('link', { name: 'Import', exact: true })
     this.bikesLink = this.nav.getByRole('link', { name: 'Bikes', exact: true })
     this.settingsLink = this.nav.getByRole('link', { name: 'Settings', exact: true })
