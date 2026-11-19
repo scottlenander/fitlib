@@ -7,7 +7,8 @@ import path from 'node:path'
 // `usedBy` here; claim a free one if you will change it. Tests that count rides or page
 // through the library must leave out rides that another spec changes (use a date filter).
 //
-// Global settings are claimed the same way: the bikes spec owns the "indoor" default-bike
+// Global settings are claimed the same way: the watched folders spec owns the watched folders
+// (and the extra ride it drops into one); the bikes spec owns the "indoor" default-bike
 // slot, the athlete spec owns athlete entries dated 2026 (after every fixture ride, so
 // no ride's FTP changes), and the time zone spec owns the default time zone (which only
 // moves the NO_TIME_ZONE ride). Bikes can't be deleted, so specs name theirs with a per-run suffix.
@@ -149,4 +150,18 @@ export const UPLOADS = {
   OVERLAP: 'zwift_watopia_steady_60min_head_unit.fit',
   // Already in the library: both rides inside it are imported at start-up.
   EXPORT_ZIP: 'garmin_export.zip',
+} as const
+
+// A ride kept out of the library at start-up (tests/fixtures/extra/), dropped into a watched
+// folder by the watched folders spec, which deletes it first. An outdoor ride on 7 Aug on a
+// loop of its own, with heart rate but no power, so once imported it changes no other spec's
+// counts (they use rides from 13 Aug on, or indoor rides), best efforts, routes, default
+// bikes or similar efforts.
+export const EXTRA_DIR = path.join(__dirname, '..', '..', 'fixtures', 'extra')
+export const EXTRA = {
+  WATCHED: {
+    file: 'garmin_arras_hr_only.fit',
+    name: 'Garmin 2025-08-07 18:00',
+    usedBy: ['regression/watchedFolders.spec.ts'],
+  },
 } as const

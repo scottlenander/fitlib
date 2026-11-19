@@ -1,11 +1,15 @@
 import { expect, type Locator, type Page } from '@playwright/test'
 import { Header, THEME_NAME } from './components/header'
+import { NewRidesNotice } from './components/newRidesNotice'
 import { Stats } from './components/stats'
 
 export type AthleteValues = { from: string; ftp?: string; weight?: string; maxHr?: string }
 
 // Settings (/settings): the light/dark toggle (also in the header), the units switch (only
-// here), the default time zone and the athlete history.
+// here), the default time zone, the watched folders and the athlete history.
+// Watched folders: the list (each with its state, files found and a Stop watching button),
+// the form to add one, Scan now (once there's a folder) and the latest files table (once a
+// file that wasn't already in the library has been found).
 // The history table only appears once there is an entry.
 export class SettingsPage {
   readonly page: Page
@@ -23,6 +27,19 @@ export class SettingsPage {
   readonly saveTimeZone: Locator
   // "Saved: America/New York. 1 ride updated."
   readonly timeZoneNotice: Locator
+  readonly newRides: NewRidesNotice
+  readonly watched: Locator
+  readonly watchedFolders: Locator
+  readonly noWatchedFolders: Locator
+  readonly folderToWatch: Locator
+  readonly watchButton: Locator
+  readonly watchError: Locator
+  // "Watching <path>. Rides already in it are being imported."
+  readonly watchNotice: Locator
+  readonly scanNow: Locator
+  // "Looking for new rides in the watched folders…" with the server's watcher running.
+  readonly scanResult: Locator
+  readonly latestFiles: Locator
   readonly today: Stats
   readonly history: Locator
   readonly form: Locator
@@ -49,6 +66,19 @@ export class SettingsPage {
     })
     this.saveTimeZone = this.timeZoneForm.getByRole('button', { name: 'Save time zone' })
     this.timeZoneNotice = this.timeZoneForm.getByTestId('form-notice')
+    this.newRides = new NewRidesNotice(page)
+    this.watched = page.getByRole('region', { name: 'Watched folders', exact: true })
+    this.watchedFolders = this.watched.getByTestId('watch-folder')
+    this.noWatchedFolders = this.watched.getByTestId('watch-empty')
+    this.folderToWatch = this.watched.getByLabel('Folder to watch')
+    this.watchButton = this.watched.getByRole('button', { name: 'Watch folder', exact: true })
+    this.watchError = this.watched.getByTestId('form-error')
+    this.watchNotice = this.watched.getByTestId('form-notice')
+    this.scanNow = this.watched.getByRole('button', { name: 'Scan now' })
+    this.scanResult = this.watched.getByTestId('scan-result')
+    this.latestFiles = this.watched.getByRole('table', {
+      name: 'Latest files from watched folders',
+    })
     this.today = new Stats(page, 'athlete-today')
     this.history = page.getByRole('table', { name: 'Athlete history' })
     this.form = page.getByTestId('athlete-form')
@@ -70,6 +100,28 @@ export class SettingsPage {
     return this.history
       .getByRole('row')
       .filter({ has: this.page.getByRole('rowheader', { name: from, exact: true }) })
+  }
+
+  // A watched folder's row, by its path.
+  watchedFolder(folder: string): Locator {
+    return this.watchedFolders.filter({ hasText: folder })
+  }
+
+  stopWatching(folder: string): Locator {
+    return this.watched.getByRole('button', { name: `Stop watching ${folder}`, exact: true })
+  }
+
+  // A row of the latest files table, by file name.
+  latestFile(name: string): Locator {
+    return this.latestFiles
+      .getByRole('row')
+      .filter({ has: this.page.getByRole('rowheader', { name, exact: true }) })
+  }
+
+  // Types a folder's path and watches it.
+  async watchFolder(folder: string) {
+    await this.folderToWatch.fill(folder)
+    await this.watchButton.click()
   }
 
   removeButton(from: string): Locator {

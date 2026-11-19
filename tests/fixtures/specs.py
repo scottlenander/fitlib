@@ -75,6 +75,12 @@ YPRES_LON = 2.88
 YPRES_LOOP = Loop(
     YPRES_LAT, YPRES_LON, lap_length_m=6_000, base_altitude_m=20, altitude_amplitude_m=5
 )
+# Near Arras, about 45 km from the Nord loop: only the extra ride (below) rides it.
+ARRAS_LAT = 50.29
+ARRAS_LON = 2.78
+ARRAS_LOOP = Loop(
+    ARRAS_LAT, ARRAS_LON, lap_length_m=4_000, base_altitude_m=70, altitude_amplitude_m=8
+)
 WATOPIA_LOOP = Loop(
     WATOPIA_LAT, WATOPIA_LON, lap_length_m=9_000, base_altitude_m=10, altitude_amplitude_m=20
 )
@@ -420,18 +426,18 @@ RIDES: tuple[RideSpec, ...] = (
 )
 
 # Rides kept out of the fixture folder (in ``tests/fixtures/extra/``), so they're never in the
-# library at the start: the browser tests drop one into a watched folder. An indoor ride on
-# 7 Aug with heart rate but no power or GPS, so once imported it changes no other test's
-# counts (they use rides from 13 Aug on), best efforts, routes or similar efforts.
+# library at the start: the browser tests drop one into a watched folder. An outdoor ride on
+# 7 Aug on a loop of its own, with heart rate but no power, so once imported it changes no
+# other test's counts (they use rides from 13 Aug on, or indoor rides), best efforts, routes,
+# default bikes (no test sets an outdoor default) or similar efforts.
 EXTRA_RIDES: tuple[RideSpec, ...] = (
     RideSpec(
-        name="garmin_indoor_hr_only",
+        name="garmin_arras_hr_only",
         source=Source.GARMIN,
         utc_offset_s=CEST,
         start=datetime(2025, 8, 7, 16, 0, tzinfo=UTC),
         segments=(Segment(seconds=1800, power=150, cadence=85),),
-        loop=NORD_LOOP,
-        indoor=True,
+        loop=ARRAS_LOOP,
         has_power=False,
         serial_number=0x0F17_000C,
     ),
