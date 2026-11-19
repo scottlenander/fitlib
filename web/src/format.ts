@@ -151,3 +151,9 @@ export function month(iso: string): string {
 
 // Hours as "12.5 h", for totals too long for "1:02:05".
 export const hours = (seconds: Maybe) => (missing(seconds) ? DASH : `${fixed(seconds / 3600, 1)} h`)
+
+// A moment (an ISO time in UTC) on this computer's clock: "Wed 19 Nov 2026, 15:54".
+export function when(iso: string): string {
+  const d = new Date(iso)
+  return `${DAYS[d.getDay()]} ${pad(d.getDate())} ${MONTHS[d.getMonth()]} ${d.getFullYear()}, ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}

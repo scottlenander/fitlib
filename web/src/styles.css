@@ -655,3 +655,45 @@ textarea {
 .show-table[open] summary {
   margin-bottom: 0.5rem;
 }
+
+/* Settings: watched folders. Long paths wrap anywhere rather than widening the page. */
+.watch-folders {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+.watch-folders li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.75rem;
+}
+.watch-path {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.watch-state-missing,
+.watch-state-error {
+  color: var(--error);
+}
+/* Messages quoting a long path (added, not found) wrap it rather than widening the page. */
+.watched p {
+  overflow-wrap: anywhere;
+}
+.watch-input {
+  width: min(32rem, 100%);
+}
+.suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+.suggestions button {
+  overflow-wrap: anywhere;
+}
+.new-rides .notice {
+  margin-top: 0;
+}

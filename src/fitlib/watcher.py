@@ -316,7 +316,8 @@ def import_file(stores: Stores, path: Path, folder: str, state: FileState) -> Wa
         outcome=outcome,
         detail=detail,
         ride_id=ride_id,
-        seen_at=datetime.now(UTC),
+        # Whole seconds, as stored, so the watcher's last import matches the stored files.
+        seen_at=datetime.now(UTC).replace(microsecond=0),
     )
     stores.catalog.record_watched_file(record)
     log.info("Watched folder: %s %s", path.name, outcome.value)

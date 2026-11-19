@@ -11,6 +11,7 @@ import {
 } from '../api/client'
 import { DisplaySwitches } from '../components/DisplaySwitches'
 import { Stats } from '../components/Stats'
+import { WatchedFolders } from '../components/WatchedFolders'
 import * as f from '../format'
 import { useUnits } from '../units'
 import { usePageTitle } from '../usePageTitle'
@@ -31,6 +32,7 @@ export function SettingsPage() {
         </p>
       </section>
       <TimeZoneSection />
+      <WatchedFolders />
       <AthleteSection />
     </>
   )
@@ -151,45 +153,48 @@ function AthleteSection() {
         </>
       )}
       {athlete.data && athlete.data.history.length > 0 && (
-        <table>
-          <caption>Athlete history</caption>
-          <thead>
-            <tr>
-              <th scope="col">From</th>
-              <th scope="col" className="num">
-                FTP
-              </th>
-              <th scope="col" className="num">
-                Weight
-              </th>
-              <th scope="col" className="num">
-                Max HR
-              </th>
-              <th scope="col">
-                <span className="visually-hidden">Actions</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {athlete.data.history.map((entry) => (
-              <tr key={entry.effective_from}>
-                <th scope="row">{entry.effective_from}</th>
-                <td className="num">{f.watts(entry.ftp)}</td>
-                <td className="num">{f.weight(entry.weight_kg, units)}</td>
-                <td className="num">{f.bpm(entry.max_hr)}</td>
-                <td>
-                  <button
-                    type="button"
-                    aria-label={`Remove values from ${entry.effective_from}`}
-                    onClick={() => confirmRemove(entry.effective_from)}
-                  >
-                    Remove
-                  </button>
-                </td>
+        // Scrolls sideways on a phone; its Remove buttons can be reached with Tab.
+        <div className="table-scroll">
+          <table>
+            <caption>Athlete history</caption>
+            <thead>
+              <tr>
+                <th scope="col">From</th>
+                <th scope="col" className="num">
+                  FTP
+                </th>
+                <th scope="col" className="num">
+                  Weight
+                </th>
+                <th scope="col" className="num">
+                  Max HR
+                </th>
+                <th scope="col">
+                  <span className="visually-hidden">Actions</span>
+                </th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {athlete.data.history.map((entry) => (
+                <tr key={entry.effective_from}>
+                  <th scope="row">{entry.effective_from}</th>
+                  <td className="num">{f.watts(entry.ftp)}</td>
+                  <td className="num">{f.weight(entry.weight_kg, units)}</td>
+                  <td className="num">{f.bpm(entry.max_hr)}</td>
+                  <td>
+                    <button
+                      type="button"
+                      aria-label={`Remove values from ${entry.effective_from}`}
+                      onClick={() => confirmRemove(entry.effective_from)}
+                    >
+                      Remove
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
       {remove.isError && <p role="alert">{remove.error.message}</p>}
       <AthleteForm />
