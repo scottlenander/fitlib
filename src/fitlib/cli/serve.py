@@ -32,6 +32,13 @@ def serve(
     open_browser: Annotated[
         bool, typer.Option("--open", help="Open the app in a browser once it starts.")
     ] = False,
+    watch: Annotated[
+        bool,
+        typer.Option(
+            "--watch/--no-watch",
+            help="Import new rides from the watched folders (fitlib watch add) while serving.",
+        ),
+    ] = True,
 ) -> None:
     """Serve the API and browser app until stopped.
 
@@ -44,6 +51,7 @@ def serve(
         host: Address to listen on.
         port: Port to listen on.
         open_browser: Open the app in the default browser (``--open``).
+        watch: Watch the library's watched folders while serving (``--no-watch`` to not).
 
     Raises:
         typer.Exit: The config is invalid, or e2e mode lacks its fixtures folder or was
@@ -61,7 +69,7 @@ def serve(
             raise fail(f"{E2E_ENV}=1 needs {E2E_FIXTURES_ENV} set to the fixtures folder.")
         fixtures = Path(raw)
     try:
-        web = create_app(config, e2e_fixtures=fixtures)
+        web = create_app(config, e2e_fixtures=fixtures, watch=watch)
     except UnsafeLibrary as exc:
         raise fail(str(exc)) from None
 

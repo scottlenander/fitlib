@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 import threading
+import time
 from collections.abc import Generator, Iterable
 from contextlib import contextmanager
 from datetime import UTC, date, datetime
@@ -61,6 +62,10 @@ _SUMMARY_COLUMNS = (
     "vi", "decoupling_pct", "utc_offset_source",
 )  # fmt: skip
 _RIDE_COLUMNS = ("id", "sha256", "source_name", "imported_at", "metrics_version", *_SUMMARY_COLUMNS)
+
+
+# How long a connection waits for another to finish writing.
+BUSY_TIMEOUT_S = 5.0
 
 
 def _migrations() -> list[tuple[int, str]]:
@@ -177,22 +182,49 @@ class SqliteCatalog:
         self._db = sqlite3.connect(path, autocommit=True, check_same_thread=False)
         self._db.row_factory = sqlite3.Row
         self._db.execute("PRAGMA foreign_keys = ON")
-        self._db.execute("PRAGMA busy_timeout = 5000")
+        self._db.execute(f"PRAGMA busy_timeout = {int(BUSY_TIMEOUT_S * 1000)}")
         if str(path) != ":memory:":
-            self._db.execute("PRAGMA journal_mode = WAL")
+            self._use_wal()
         self._migrate()
+
+    def _use_wal(self) -> None:
+        """Switch the database to WAL mode, if it isn't already.
+
+        Switching needs a lock SQLite doesn't wait for, so when another connection is opening
+        a new library at the same moment, it's tried again for up to ``BUSY_TIMEOUT_S``.
+        """
+        deadline = time.monotonic() + BUSY_TIMEOUT_S
+        while self._db.execute("PRAGMA journal_mode").fetchone()[0] != "wal":
+            try:
+                self._db.execute("PRAGMA journal_mode = WAL")
+            except sqlite3.OperationalError:
+                if time.monotonic() > deadline:
+                    raise
+                time.sleep(0.01)
 
     # -- schema -----------------------------------------------------------------------------
 
     def _migrate(self) -> None:
-        """Apply every migration newer than the database's ``user_version``, one per transaction."""
+        """Apply every migration newer than the database's ``user_version``, one per transaction.
+
+        Each takes the write lock first and checks the version again, so two connections
+        opening a new library at once (the server's watcher and a request) don't both apply
+        it: the second waits, then finds it done.
+        """
         current = self._db.execute("PRAGMA user_version").fetchone()[0]
         for version, script in _migrations():
-            if version > current:
-                # One script per transaction, so a failed migration leaves the schema as it was.
-                self._db.executescript(
-                    f"BEGIN;\n{script}\nPRAGMA user_version = {version};\nCOMMIT;"
-                )
+            if version <= current:
+                continue
+            # One script per transaction, so a failed migration leaves the schema as it was.
+            self._db.execute("BEGIN IMMEDIATE")
+            try:
+                current = self._db.execute("PRAGMA user_version").fetchone()[0]
+                if version > current:
+                    self._db.executescript(f"{script}\nPRAGMA user_version = {version};")
+                self._db.execute("COMMIT")
+            except BaseException:
+                self._db.execute("ROLLBACK")
+                raise
 
     @property
     def schema_version(self) -> int:
@@ -1309,8 +1341,9 @@ class SqliteCatalog:
         """
         with self._lock:
             rows = self._db.execute(
+                # Within a second, the one recorded last first (a replaced row gets a new rowid).
                 "SELECT * FROM watch_files WHERE outcome != 'duplicate' "
-                "ORDER BY seen_at DESC, path LIMIT ?",
+                "ORDER BY seen_at DESC, rowid DESC LIMIT ?",
                 (limit,),
             ).fetchall()
         return [_watched(r) for r in rows]

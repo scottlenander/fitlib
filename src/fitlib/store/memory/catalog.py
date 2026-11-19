@@ -723,6 +723,7 @@ class MemoryCatalog:
         Args:
             file: The file, its size and modification time, and the outcome.
         """
+        self._watched.pop(file.path, None)  # to the end: recorded last
         self._watched[file.path] = file
 
     def recent_watched_files(self, limit: int = 20) -> list[WatchedFile]:
@@ -735,8 +736,10 @@ class MemoryCatalog:
             Imported, skipped and failed files, newest first (duplicates are left out: the
             first scan of an existing folder finds hundreds).
         """
-        files = [f for f in self._watched.values() if f.outcome is not WatchOutcome.DUPLICATE]
-        files.sort(key=lambda f: f.path)
+        # Latest recorded first, then newest first (the sort keeps that order for ties).
+        files = [
+            f for f in reversed(self._watched.values()) if f.outcome is not WatchOutcome.DUPLICATE
+        ]
         files.sort(key=lambda f: f.seen_at, reverse=True)
         return files[:limit]
 

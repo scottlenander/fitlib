@@ -375,7 +375,8 @@ class Watcher:
 
     Args:
         open_stores: Opens the library's stores (each pass gets its own).
-        observer: Delivers file system events; ``watchdog``'s for this system by default.
+        observer: Makes what delivers file system events (a new one each time the watcher
+            starts, as one can only run once); ``watchdog``'s for this system by default.
         clock: Seconds, for timing (monotonic).
         now: Seconds since 1970, for comparing with modification times.
         stable_s: How long a file must stay unchanged before it's imported.
@@ -387,7 +388,7 @@ class Watcher:
     def __init__(
         self,
         open_stores: OpenStores,
-        observer: BaseObserver | None = None,
+        observer: Callable[[], BaseObserver] = Observer,
         clock: Callable[[], float] = time.monotonic,
         now: Callable[[], float] = time.time,
         stable_s: float = STABLE_S,
@@ -396,7 +397,9 @@ class Watcher:
         tick_s: float = TICK_S,
     ) -> None:
         self._open = open_stores
-        self._observer = observer if observer is not None else Observer()
+        self._make_observer = observer
+        self._observer = observer()
+        self._started = False
         self._clock = clock
         self._now = now
         self._stable_s = stable_s
@@ -421,6 +424,14 @@ class Watcher:
 
     def start(self) -> None:
         """Start watching, on a background thread; the first pass scans every folder."""
+        if self._started:  # started before and stopped: begin again from scratch
+            self._observer = self._make_observer()
+            self._watches.clear()
+            with self._lock:
+                self._states.clear()
+                self._scan_all = self._refresh_now = True
+            self._stopping.clear()
+        self._started = True
         self._observer.start()
         self._thread = threading.Thread(target=self._run, name="fitlib-watcher", daemon=True)
         self._thread.start()

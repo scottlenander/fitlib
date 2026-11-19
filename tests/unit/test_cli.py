@@ -13,6 +13,7 @@ from typer.testing import CliRunner
 from fitlib.cli import EXIT_ERROR, EXIT_IMPORT_FAILURES, app
 from fitlib.config import Config
 from fitlib.store.factory import open_stores
+from fitlib.watcher import Watcher
 from tests.fixtures.generate import FIT_DIR
 
 # Wide output so tables don't wrap and assertions can match whole rows.
@@ -620,6 +621,20 @@ def test_serve_runs_the_app_on_localhost(config: Path, tmp_path: Path, served: d
     assert status(served["app"], "/api/health") == 200
     assert status(served["app"], "/e2e/rides") == 404, "no test shortcuts outside e2e mode"
     assert "http://localhost:8000/" in result.output
+
+
+def test_serve_watches_folders_unless_told_not_to(config: Path, served: dict):
+    """``fitlib serve`` watches the watched folders, unless given ``--no-watch``.
+
+    Given: ``serve``, then ``serve --no-watch``.
+    Expect: a watcher in the first app, none in the second.
+    """
+    run(config, "serve")
+    watching = served["app"].state.watcher
+    run(config, "serve", "--no-watch")
+
+    assert isinstance(watching, Watcher)
+    assert served["app"].state.watcher is None
 
 
 def test_serve_warns_when_listening_beyond_this_computer(config: Path, served: dict):

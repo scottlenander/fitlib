@@ -347,7 +347,7 @@ class Harness:
         self.stores.catalog.add_watch_folder(WatchFolder(str(folder), datetime.now(UTC)))
         self.watcher = Watcher(
             self.open,
-            observer=self.observer,  # type: ignore[arg-type]
+            observer=lambda: self.observer,  # type: ignore[arg-type,return-value]
             clock=self.clock,
             now=lambda: LONG_AGO + 3600,
             stable_s=10,
@@ -555,3 +555,30 @@ def test_watcher_imports_a_file_dropped_into_a_folder(folder: Path):
         watcher.stop()
 
     assert s.catalog.watched_file(str(folder / ZWIFT)).outcome is WatchOutcome.IMPORTED
+
+
+def test_watcher_can_be_started_again_after_stopping(folder: Path):
+    """A stopped watcher can be started again (as when the app's lifespan runs twice).
+
+    Given: a real watcher started and stopped, then started again with a ride copied in.
+    Expect: the ride imported the second time round.
+    """
+    s = stores()
+    s.catalog.add_watch_folder(WatchFolder(str(folder), datetime.now(UTC)))
+
+    @contextmanager
+    def open_stores() -> Iterator[Stores]:
+        yield s
+
+    watcher = Watcher(open_stores, stable_s=0.3, tick_s=0.05)
+    watcher.start()
+    watcher.stop()
+    drop(folder, ZWIFT)
+    watcher.start()
+    try:
+        deadline = time.monotonic() + 10
+        while s.catalog.count() == 0:
+            assert time.monotonic() < deadline, "the ride should be imported after a restart"
+            time.sleep(0.05)
+    finally:
+        watcher.stop()

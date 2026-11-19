@@ -20,6 +20,7 @@ from fitlib.store.interfaces import (
     DuplicateBike,
     RideNotFound,
 )
+from fitlib.watcher import AlreadyWatched, BadWatchFolder, NotWatched
 
 STATUS: dict[type[Exception], int] = {
     RideNotFound: 404,
@@ -31,6 +32,9 @@ STATUS: dict[type[Exception], int] = {
     InvalidTag: 422,
     UnknownTimeZone: 422,
     BadRange: 422,
+    BadWatchFolder: 422,
+    AlreadyWatched: 409,
+    NotWatched: 404,
 }
 
 

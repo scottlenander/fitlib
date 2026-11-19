@@ -7,6 +7,7 @@ pass this whole file unchanged.
 from __future__ import annotations
 
 import sqlite3
+import threading
 from collections.abc import Iterator
 from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
@@ -941,6 +942,20 @@ def test_watched_files_are_recorded_replaced_and_listed(catalog: CatalogStore):
     assert catalog.watched_file_counts() == {"/rides": 3, "/other": 1}
 
 
+def test_recent_files_in_the_same_second_are_latest_first(catalog: CatalogStore):
+    """Files recorded in the same second are listed in the order recorded, latest first.
+
+    Given: three files imported at the same time, recorded b, a, c; then b recorded again.
+    Expect: b, c, a.
+    """
+    for name in ("b", "a", "c", "b"):
+        catalog.record_watched_file(watched(f"/rides/{name}.fit", WatchOutcome.IMPORTED, 0))
+
+    recent = catalog.recent_watched_files()
+
+    assert [Path(f.path).stem for f in recent] == ["b", "c", "a"]
+
+
 def test_removing_a_folder_forgets_its_files(catalog: CatalogStore):
     """Files found in a folder are forgotten when it's no longer watched.
 
@@ -981,6 +996,37 @@ def test_sqlite_catalog_persists_and_is_migrated(tmp_path: Path):
 
     assert loaded == ride, "the ride should survive closing and reopening the catalog"
     assert version == 6
+
+
+def test_new_library_opened_twice_at_once(tmp_path: Path):
+    """Two connections opening a new library at the same moment both get the full schema.
+
+    Given: eight threads opening the same new catalog file together (as the server's watcher
+    and a request can).
+    Expect: every one opens at the latest schema, with no error.
+    """
+    path = tmp_path / "catalog.sqlite3"
+    start = threading.Barrier(8)
+    versions: list[int] = []
+    errors: list[BaseException] = []
+
+    def open_it() -> None:
+        start.wait()
+        try:
+            catalog = SqliteCatalog(path)
+            versions.append(catalog.schema_version)
+            catalog.close()
+        except BaseException as exc:  # reported below
+            errors.append(exc)
+
+    threads = [threading.Thread(target=open_it) for _ in range(8)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert errors == []
+    assert versions == [6] * 8
 
 
 def test_phase_1a_database_is_upgraded(tmp_path: Path):
