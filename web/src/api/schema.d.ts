@@ -810,6 +810,111 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/watch': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * Get Watch
+     * @description Show the watched folders and the latest files found in them.
+     *
+     *     Args:
+     *         request: The request (for the server's watcher).
+     *         stores: The library's stores.
+     *
+     *     Returns:
+     *         The folders with their state, recent files, and when a ride was last imported.
+     */
+    get: operations['get_watch_api_watch_get']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/watch/folders': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * Add Folder
+     * @description Start watching a folder; what's already in it is imported shortly.
+     *
+     *     Args:
+     *         request: The request (for the server's watcher).
+     *         stores: The library's stores.
+     *         config: The config (for the library folder, which can't be watched).
+     *         body: The folder.
+     *
+     *     Returns:
+     *         The folder as stored, with its state.
+     *
+     *     Raises:
+     *         BadWatchFolder: Not a full path to a folder, or the library's own (422).
+     *         AlreadyWatched: The folder is already watched (409).
+     */
+    post: operations['add_folder_api_watch_folders_post']
+    /**
+     * Remove Folder
+     * @description Stop watching a folder. Rides already imported from it stay in the library.
+     *
+     *     Args:
+     *         request: The request (for the server's watcher).
+     *         stores: The library's stores.
+     *         path: The folder, as listed.
+     *
+     *     Returns:
+     *         An empty 204 response.
+     *
+     *     Raises:
+     *         NotWatched: The folder isn't watched (404).
+     */
+    delete: operations['remove_folder_api_watch_folders_delete']
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/watch/scan': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * Scan Folders
+     * @description Look for new files in every watched folder now.
+     *
+     *     With the server's watcher running, it scans in the background; otherwise the scan is
+     *     done before answering.
+     *
+     *     Args:
+     *         request: The request (for the server's watcher).
+     *         stores: The library's stores.
+     *
+     *     Returns:
+     *         Whether it runs in the background, or what the scan did.
+     */
+    post: operations['scan_folders_api_watch_scan_post']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
 }
 export type webhooks = Record<string, never>
 export interface components {
@@ -1262,6 +1367,23 @@ export interface components {
       until: string
     }
     /**
+     * FolderIn
+     * @description A folder to watch.
+     *
+     *     Attributes:
+     *         path: Its full path; ``~`` stands for your home folder.
+     */
+    FolderIn: {
+      /** Path */
+      path: string
+    }
+    /**
+     * FolderState
+     * @description Where a watched folder stands.
+     * @enum {string}
+     */
+    FolderState: 'watching' | 'missing' | 'error' | 'stopped'
+    /**
      * FtpOut
      * @description Set and estimated FTP over time.
      *
@@ -1691,6 +1813,48 @@ export interface components {
       items: components['schemas']['RideItem'][]
     }
     /**
+     * ScanOut
+     * @description What scanning the watched folders did.
+     *
+     *     Attributes:
+     *         background: The server's watcher will scan shortly (the counts are then 0); without
+     *             one, the scan was done before answering.
+     *         imported: Files imported.
+     *         duplicates: Files already in the library.
+     *         skipped: Files left out (not rides, or second recordings).
+     *         failed: Files that couldn't be read.
+     *         still_writing: Files changed in the last few seconds, left for later.
+     */
+    ScanOut: {
+      /** Background */
+      background: boolean
+      /**
+       * Duplicates
+       * @default 0
+       */
+      duplicates: number
+      /**
+       * Failed
+       * @default 0
+       */
+      failed: number
+      /**
+       * Imported
+       * @default 0
+       */
+      imported: number
+      /**
+       * Skipped
+       * @default 0
+       */
+      skipped: number
+      /**
+       * Still Writing
+       * @default 0
+       */
+      still_writing: number
+    }
+    /**
      * Settings
      * @description Settings for the browser app.
      *
@@ -1955,6 +2119,88 @@ export interface components {
       start: string
       /** Tss */
       tss: number
+    }
+    /**
+     * WatchFolderOut
+     * @description A watched folder.
+     *
+     *     Attributes:
+     *         path: Its full path.
+     *         state: ``watching``; ``missing`` (not there now: watched again when it's back);
+     *             ``error`` (see ``message``); or ``stopped`` (the server isn't watching, e.g.
+     *             started with ``--no-watch``).
+     *         message: What went wrong, for an error.
+     *         files: How many files have been found in it.
+     */
+    WatchFolderOut: {
+      /** Files */
+      files: number
+      /** Message */
+      message: string | null
+      /** Path */
+      path: string
+      state: components['schemas']['FolderState']
+    }
+    /**
+     * WatchOutcome
+     * @description What happened to a file found in a watched folder.
+     * @enum {string}
+     */
+    WatchOutcome: 'imported' | 'duplicate' | 'skipped' | 'failed'
+    /**
+     * WatchStatus
+     * @description The watched folders and what was found in them lately.
+     *
+     *     Attributes:
+     *         running: Whether the server is watching (it isn't with ``--no-watch``).
+     *         folders: The watched folders, by path.
+     *         recent: The latest files that weren't already in the library, newest first.
+     *         waiting: Files waiting to stop changing before they're imported.
+     *         last_import: When the watcher last imported a ride, if it has since the server
+     *             started: the browser app checks this to refresh its lists.
+     */
+    WatchStatus: {
+      /** Folders */
+      folders: components['schemas']['WatchFolderOut'][]
+      /** Last Import */
+      last_import: string | null
+      /** Recent */
+      recent: components['schemas']['WatchedFileOut'][]
+      /** Running */
+      running: boolean
+      /** Waiting */
+      waiting: number
+    }
+    /**
+     * WatchedFileOut
+     * @description A file found in a watched folder, and what importing it did.
+     *
+     *     Attributes:
+     *         path: Its full path.
+     *         name: Its file name.
+     *         folder: The watched folder it was in.
+     *         outcome: ``imported``, ``duplicate``, ``skipped`` or ``failed``.
+     *         detail: Why it was skipped or failed; for a zip, how many files had each outcome.
+     *         ride_id: The ride it became (for a zip, the first), if imported.
+     *         seen_at: When it was imported, UTC.
+     */
+    WatchedFileOut: {
+      /** Detail */
+      detail: string | null
+      /** Folder */
+      folder: string
+      /** Name */
+      name: string
+      outcome: components['schemas']['WatchOutcome']
+      /** Path */
+      path: string
+      /** Ride Id */
+      ride_id: string | null
+      /**
+       * Seen At
+       * Format: date-time
+       */
+      seen_at: string
     }
     /**
      * ZoneTime
@@ -2865,6 +3111,108 @@ export interface operations {
         }
         content: {
           'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  get_watch_api_watch_get: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['WatchStatus']
+        }
+      }
+    }
+  }
+  add_folder_api_watch_folders_post: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['FolderIn']
+      }
+    }
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['WatchFolderOut']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  remove_folder_api_watch_folders_delete: {
+    parameters: {
+      query: {
+        path: string
+      }
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  scan_folders_api_watch_scan_post: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['ScanOut']
         }
       }
     }

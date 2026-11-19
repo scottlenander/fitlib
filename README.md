@@ -16,8 +16,9 @@ phase 3b added editing rides, bikes and default bikes, the athlete history, and 
 Phase 4a added route fingerprints and similar rides; phase 4b added comparing 2 to 4 rides.
 Phase 5a added trends on the command line and in the API: volume per week or month,
 fitness/fatigue/form, set and estimated FTP over time, efficiency, best efforts by period, and
-progress on a route. **Phase 5b (this)** adds them to the browser app: a Trends page, and
-progress on a route on the ride page.
+progress on a route; phase 5b added them to the browser app. **Phase 6a (this)** adds
+watched folders: while `fitlib serve` runs, new rides in folders you choose (such as Zwift's
+Activities folder) are imported on their own. Phase 6b adds them to the Settings page.
 
 ## Setup
 
@@ -51,6 +52,9 @@ uv run fitlib show 3f2a9c --units metric    # override the configured units once
 uv run fitlib athlete set --from 2025-01-01 --ftp 250 --weight 165 --max-hr 188
 uv run fitlib athlete show                  # history, and today's values
 uv run fitlib timezone America/New_York     # default time zone (or --clear; none shows it)
+uv run fitlib watch add ~/Documents/Zwift/Activities   # import new rides while serving
+uv run fitlib watch list                    # watched folders and the latest files found
+uv run fitlib watch scan                    # import what's new in them now
 uv run fitlib recompute                     # only needed after fitlib's calculations change
 uv run fitlib edit 3f2a9c --name "Arenberg" --note "Windy" --rpe 7 --tag z2 --tag cobbles
 uv run fitlib edit 3f2a9c 77b0e1 --bike "Giant Contend 1"    # several rides at once
@@ -90,6 +94,9 @@ uv run fitlib --help                        # every command and option
   changed, so `--ftp 260` alone keeps the earlier weight. Weight is entered and shown in your
   display units and stored in kg. `athlete remove DATE` deletes an entry.
 - **timezone** shows or sets the library's default time zone (see "Dates and time zones").
+- **watch** `add FOLDER`, `remove FOLDER`, `list` and `scan`: folders whose new rides are
+  imported while `fitlib serve` runs (see "Watched folders"). `scan` imports what's new in
+  them now, without the server.
 - **edit** sets a ride's name, notes, effort (RPE 1-10), bike and tags; `--clear-…` removes a
   value, `--untag` removes a tag. Effort, bike and tags can be set on several rides at once;
   name and notes only on one. Tags are stored lower-case ("Z2" and "z2" are the same tag).
@@ -114,7 +121,7 @@ uv run fitlib --help                        # every command and option
 ### Browser app
 
 ```bash
-uv run fitlib serve --open     # http://localhost:8000/ ; --port, --host
+uv run fitlib serve --open     # http://localhost:8000/ ; --port, --host, --no-watch
 ```
 
 - **Library** (`/`): search (name, notes, tags, bike, device), filters (source, indoor/outdoor,
@@ -183,6 +190,9 @@ Interactive docs are at `/docs`. Everything is under `/api`, and every figure is
 | `GET /api/trends/ftp` | `period`, `since`/`until`: per week or month, the set `ftp` and the `estimated` FTP on its last day |
 | `GET /api/trends/efficiency` | `since`/`until`: per ride with power and HR (≥ 20 min), `efficiency` (NP / HR), `np`, `avg_hr`, `decoupling_pct`, `indoor` |
 | `GET /api/trends/curve` | `kind=power\|hr`, `since`/`until`: the best value at each duration with its `ride_id` and `start` |
+| `GET /api/watch` | Watched folders (`state`: watching, missing, error, or stopped with `--no-watch`; `files` found), the latest files that weren't already in the library (`outcome`, `detail`, `ride_id`), files `waiting` to settle, and `last_import` |
+| `POST /api/watch/folders`, `DELETE /api/watch/folders?path=` | Watch a folder (`{"path": "~/Documents/Zwift/Activities"}`; 422 for a path that isn't a folder or holds the library, 409 if watched) or stop watching it |
+| `POST /api/watch/scan` | Look for new files now: in the background with the watcher running, otherwise before answering, with counts |
 | `GET /api/compare` | `ids` (repeat, 2–4, ids or prefixes): each ride's detail and its samples on one shared axis. `align=distance` (metres; with each ride's time `gap` to the first) or `time` (seconds); by default distance when every ride recorded it. `smooth` 0, 10 or 30 s for power and HR; `points` along the axis |
 | `GET /api/rides/{id}/streams` | 1 Hz samples as columns; `fields` to choose (lat/lon only when asked for), `step` to thin out |
 | `PATCH /api/rides/{id}/meta` | Name, notes, rpe, bike_id, tags. Fields left out stay; `null` clears |
@@ -268,6 +278,30 @@ units = "imperial"           # or "metric"; imperial is the default
 Units only affect display (mi, mph, ft, lb vs km, km/h, m, kg). Everything is stored in SI
 units, as in the FIT files themselves.
 
+### Watched folders
+
+While `fitlib serve` runs, it watches the folders added with `fitlib watch add` (or the API)
+and imports new `.fit` and `.zip` files in them, searched recursively, as for `import`:
+
+- A file is imported once it has stopped changing for 10 seconds, so a ride still being
+  written isn't read half done. Zwift's `inProgressActivity.fit` (rewritten all through a
+  ride) and hidden files are ignored.
+- When the server starts, and every 10 minutes, each folder is scanned for files added while
+  nothing was watching. Files already imported with the same size and modification time are
+  passed over without being read, so the scans stay quick; the first scan of a folder you
+  had already imported reads each file once and finds it already in the library.
+- A file that couldn't be read is tried again once it changes. A folder that disappears (an
+  unplugged Garmin at `/Volumes/GARMIN/...`, or a renamed folder) is shown as missing and
+  watched again when it comes back. Folders added from the command line are picked up within
+  30 seconds.
+- The library folder, folders inside it and folders holding it can't be watched (its archive
+  holds `.fit` files). `fitlib serve --no-watch` serves without watching.
+- Watched folders and the files found in them are stored in the library but belong to this
+  computer: their paths mean nothing elsewhere.
+
+On a Mac, watching a folder in Documents needs the same permission (Files and Folders) as
+importing from it.
+
 ### What's stored
 
 ```
@@ -304,8 +338,9 @@ search find rides by their new names (with the start time).
 | `fitlib/store/` | `CatalogStore` / `BlobStore` interfaces; `local/` (SQLite + files) and `memory/` backends; `factory.py` picks one |
 | `fitlib/importer.py` | Hash, dedupe, analyse in worker processes, store |
 | `fitlib/recompute.py` | Rebuild rides from their raw files when calculations change |
+| `fitlib/watcher.py` | Watched folders: which files, settling, scans, and the background watcher the server runs |
 | `fitlib/api/` | FastAPI app: `app.py` builds it, `routers/` one per area, `schemas.py` request/response models, `errors.py` error responses, `static.py` the browser app's files |
-| `fitlib/cli/` | The `fitlib` command: `rides`, `bikes`, `athlete` and `serve` commands, shared `common` helpers and `output` printing |
+| `fitlib/cli/` | The `fitlib` command: `rides`, `bikes`, `athlete`, `timezone`, `trends`, `watch` and `serve` commands, shared `common` helpers and `output` printing |
 | `web/` | The browser app (React, Vite, TanStack Query, ECharts): `src/pages/`, `src/components/`, `src/api/` (typed client; `schema.d.ts` is generated), `src/format.ts` (units and figures, as `display.py`) |
 | `tests/e2e/` | Playwright tests for the browser app; conventions in `.claude/skills/playwright-tests/` |
 
@@ -442,6 +477,16 @@ uv run python -m tests.fixtures.generate
 - **Recompute** (`tests/unit/test_recompute.py`): outdated rides brought up to date with metadata
   kept; streams rewritten; a Zwift ride dated 1989 repaired (its time zone from its name); a Zwift ride without distance
   given it; missing raw files reported.
+- **Watched folders** (`tests/unit/test_watcher.py`): which folders can be watched (full
+  paths, `~`, not the library or near it, inside the temp folder in e2e mode); which files
+  (`.fit`/`.zip`, not Zwift's in-progress file or hidden ones); summing up a file's or a zip's
+  import; scans importing new files once, retrying a failed file once it changes, leaving
+  files still being written; the watcher step by step with a fake clock (catching up, waiting
+  for a file to settle, idle passes leaving the library closed, deleted files, a folder
+  missing then back, folders added and removed, scans on request and every 10 minutes); and
+  with the real file watcher, a dropped-in ride imported, also after a restart. The store's
+  watched folders and files are in the catalog contract tests, with opening a new library
+  from several threads at once.
 - **Importer** (`tests/unit/test_importer.py`): the whole fixture folder (imports, duplicates,
   skips, failures), re-import, stored files and streams, overlapping recordings, the process
   pool, cleanup after a failed write, and no coordinates in logs; time zones from a Zwift
@@ -450,7 +495,9 @@ uv run python -m tests.fixtures.generate
   by route and effort, with nothing to match, and for rides needing a recompute, and `compare`
 side by side, with one ride or the same ride twice refused, and `timezone` shown, set,
 cleared and refused for an unknown zone or a zone with `--clear`, every `trends` view, a
-backwards range and an empty period, and `progress` on the loop, alone and without GPS),
+backwards range and an empty period, `progress` on the loop, alone and without GPS, `serve`
+with and without `--no-watch`, and `watch` add, scan, list and remove, refusals, files still
+being written, and nothing watched),
 **config** and
   **display formatting** (both unit systems).
 - **API** (`tests/api/`): the fixture rides are imported once into a template library;
@@ -472,7 +519,10 @@ backwards range and an empty period, and `progress` on the loop, alone and witho
   with their own untouched, unknown zones refused); trends (the span, weekly and monthly
   volume adding up to the rides, default ranges, fitness from the Zwift ride, FTP before and
   after setting one, efficiency, best efforts naming their rides, an empty period, backwards
-  ranges refused) and route progress (the loop oldest first, rides alone or without GPS,
+  ranges refused); watched folders (added as typed, listed, removed, refusals, a missing
+  folder, a scan without the watcher, the server's watcher importing a new folder's ride and
+  then one copied in, and e2e mode keeping to the temp folder) and route progress (the loop
+  oldest first, rides alone or without GPS,
   unknown rides).
 - **Browser app unit tests** (`web/src/*.test.ts`): durations, distances, speeds, heights and
   weights in both unit systems, and weights typed in either; local versus UTC start times; the

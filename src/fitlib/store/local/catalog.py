@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 import threading
+import time
 from collections.abc import Generator, Iterable
 from contextlib import contextmanager
 from datetime import UTC, date, datetime
@@ -30,6 +31,9 @@ from fitlib.models import (
     SortKey,
     Source,
     TrendRow,
+    WatchedFile,
+    WatchFolder,
+    WatchOutcome,
 )
 from fitlib.store.interfaces import (
     MIN_ID_PREFIX,
@@ -58,6 +62,10 @@ _SUMMARY_COLUMNS = (
     "vi", "decoupling_pct", "utc_offset_source",
 )  # fmt: skip
 _RIDE_COLUMNS = ("id", "sha256", "source_name", "imported_at", "metrics_version", *_SUMMARY_COLUMNS)
+
+
+# How long a connection waits for another to finish writing.
+BUSY_TIMEOUT_S = 5.0
 
 
 def _migrations() -> list[tuple[int, str]]:
@@ -138,6 +146,27 @@ def _dt(value: int) -> datetime:
     return datetime.fromtimestamp(value, UTC)
 
 
+def _watched(row: sqlite3.Row) -> WatchedFile:
+    """Build a watched file from its row.
+
+    Args:
+        row: A ``watch_files`` row.
+
+    Returns:
+        The watched file.
+    """
+    return WatchedFile(
+        path=row["path"],
+        folder=row["folder"],
+        size=row["size"],
+        mtime_ns=row["mtime_ns"],
+        outcome=WatchOutcome(row["outcome"]),
+        detail=row["detail"],
+        ride_id=row["ride_id"],
+        seen_at=_dt(row["seen_at"]),
+    )
+
+
 class SqliteCatalog:
     """The catalog in a SQLite file: WAL mode, numbered migrations, FTS5 text search.
 
@@ -153,22 +182,49 @@ class SqliteCatalog:
         self._db = sqlite3.connect(path, autocommit=True, check_same_thread=False)
         self._db.row_factory = sqlite3.Row
         self._db.execute("PRAGMA foreign_keys = ON")
-        self._db.execute("PRAGMA busy_timeout = 5000")
+        self._db.execute(f"PRAGMA busy_timeout = {int(BUSY_TIMEOUT_S * 1000)}")
         if str(path) != ":memory:":
-            self._db.execute("PRAGMA journal_mode = WAL")
+            self._use_wal()
         self._migrate()
+
+    def _use_wal(self) -> None:
+        """Switch the database to WAL mode, if it isn't already.
+
+        Switching needs a lock SQLite doesn't wait for, so when another connection is opening
+        a new library at the same moment, it's tried again for up to ``BUSY_TIMEOUT_S``.
+        """
+        deadline = time.monotonic() + BUSY_TIMEOUT_S
+        while self._db.execute("PRAGMA journal_mode").fetchone()[0] != "wal":
+            try:
+                self._db.execute("PRAGMA journal_mode = WAL")
+            except sqlite3.OperationalError:
+                if time.monotonic() > deadline:
+                    raise
+                time.sleep(0.01)
 
     # -- schema -----------------------------------------------------------------------------
 
     def _migrate(self) -> None:
-        """Apply every migration newer than the database's ``user_version``, one per transaction."""
+        """Apply every migration newer than the database's ``user_version``, one per transaction.
+
+        Each takes the write lock first and checks the version again, so two connections
+        opening a new library at once (the server's watcher and a request) don't both apply
+        it: the second waits, then finds it done.
+        """
         current = self._db.execute("PRAGMA user_version").fetchone()[0]
         for version, script in _migrations():
-            if version > current:
-                # One script per transaction, so a failed migration leaves the schema as it was.
-                self._db.executescript(
-                    f"BEGIN;\n{script}\nPRAGMA user_version = {version};\nCOMMIT;"
-                )
+            if version <= current:
+                continue
+            # One script per transaction, so a failed migration leaves the schema as it was.
+            self._db.execute("BEGIN IMMEDIATE")
+            try:
+                current = self._db.execute("PRAGMA user_version").fetchone()[0]
+                if version > current:
+                    self._db.executescript(f"{script}\nPRAGMA user_version = {version};")
+                self._db.execute("COMMIT")
+            except BaseException:
+                self._db.execute("ROLLBACK")
+                raise
 
     @property
     def schema_version(self) -> int:
@@ -1196,6 +1252,113 @@ class SqliteCatalog:
                 # The default name (and so the search index) has the ride's local date.
                 row = db.execute("SELECT * FROM rides WHERE id = ?", (ride_id,)).fetchone()
                 self._index(db, self._load(row))
+
+    def watch_folders(self) -> list[WatchFolder]:
+        """List the watched folders.
+
+        Returns:
+            Every watched folder, by path.
+        """
+        with self._lock:
+            rows = self._db.execute("SELECT * FROM watch_folders ORDER BY path").fetchall()
+        return [WatchFolder(r["path"], _dt(r["added_at"])) for r in rows]
+
+    def add_watch_folder(self, folder: WatchFolder) -> bool:
+        """Start watching a folder.
+
+        Args:
+            folder: The folder, with its absolute path.
+
+        Returns:
+            ``False`` if it was already watched (nothing changes).
+        """
+        with self._tx() as db:
+            cursor = db.execute(
+                "INSERT OR IGNORE INTO watch_folders (path, added_at) VALUES (?, ?)",
+                (folder.path, _ts(folder.added_at)),
+            )
+        return cursor.rowcount == 1
+
+    def remove_watch_folder(self, path: str) -> bool:
+        """Stop watching a folder, forgetting the files found in it.
+
+        Args:
+            path: The folder's path, as added.
+
+        Returns:
+            ``False`` if it wasn't watched.
+        """
+        with self._tx() as db:
+            cursor = db.execute("DELETE FROM watch_folders WHERE path = ?", (path,))
+            db.execute("DELETE FROM watch_files WHERE folder = ?", (path,))
+        return cursor.rowcount == 1
+
+    def watched_file(self, path: str) -> WatchedFile | None:
+        """Look up a file found in a watched folder.
+
+        Args:
+            path: The file's absolute path.
+
+        Returns:
+            What was recorded for it, or ``None`` if it has never been imported.
+        """
+        with self._lock:
+            row = self._db.execute("SELECT * FROM watch_files WHERE path = ?", (path,)).fetchone()
+        return _watched(row) if row else None
+
+    def record_watched_file(self, file: WatchedFile) -> None:
+        """Record what importing a watched file did, replacing anything recorded before.
+
+        Args:
+            file: The file, its size and modification time, and the outcome.
+        """
+        with self._tx() as db:
+            db.execute(
+                "INSERT OR REPLACE INTO watch_files "
+                "(path, folder, size, mtime_ns, outcome, detail, ride_id, seen_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    file.path,
+                    file.folder,
+                    file.size,
+                    file.mtime_ns,
+                    file.outcome.value,
+                    file.detail,
+                    file.ride_id,
+                    _ts(file.seen_at),
+                ),
+            )
+
+    def recent_watched_files(self, limit: int = 20) -> list[WatchedFile]:
+        """List the latest files from watched folders that weren't already in the library.
+
+        Args:
+            limit: The most files to list.
+
+        Returns:
+            Imported, skipped and failed files, newest first (duplicates are left out: the
+            first scan of an existing folder finds hundreds).
+        """
+        with self._lock:
+            rows = self._db.execute(
+                # Within a second, the one recorded last first (a replaced row gets a new rowid).
+                "SELECT * FROM watch_files WHERE outcome != 'duplicate' "
+                "ORDER BY seen_at DESC, rowid DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return [_watched(r) for r in rows]
+
+    def watched_file_counts(self) -> dict[str, int]:
+        """Count the files found in each watched folder.
+
+        Returns:
+            Files recorded per folder path; folders with none are left out.
+        """
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT folder, COUNT(*) AS n FROM watch_files GROUP BY folder"
+            ).fetchall()
+        return {r["folder"]: r["n"] for r in rows}
 
     def count(self) -> int:
         """Count the rides in the catalog.
