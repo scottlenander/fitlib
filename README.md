@@ -16,9 +16,10 @@ phase 3b added editing rides, bikes and default bikes, the athlete history, and 
 Phase 4a added route fingerprints and similar rides; phase 4b added comparing 2 to 4 rides.
 Phase 5a added trends on the command line and in the API: volume per week or month,
 fitness/fatigue/form, set and estimated FTP over time, efficiency, best efforts by period, and
-progress on a route; phase 5b added them to the browser app. **Phase 6a (this)** adds
-watched folders: while `fitlib serve` runs, new rides in folders you choose (such as Zwift's
-Activities folder) are imported on their own. Phase 6b adds them to the Settings page.
+progress on a route; phase 5b added them to the browser app. Phase 6a added watched folders:
+while `fitlib serve` runs, new rides in folders you choose (such as Zwift's Activities folder)
+are imported on their own. **Phase 6b (this)** adds them to the Settings page, with a notice
+on every page when new rides arrive.
 
 ## Setup
 
@@ -158,8 +159,17 @@ uv run fitlib serve --open     # http://localhost:8000/ ; --port, --host, --no-w
   retire and bring back. The dated default-bike timeline, and applying the defaults to
   existing rides (Preview, then Apply; bikes chosen by hand are never changed).
 - **Settings** (`/settings`): the theme, the **Metric units** switch, the default **time
-  zone** (a list, or **Use this computer's time zone**; saving says how many rides moved) and
-  the athlete history (FTP, weight in your units, max HR from a date on).
+  zone** (a list, or **Use this computer's time zone**; saving says how many rides moved),
+  **Watched folders** and the athlete history (FTP, weight in your units, max HR from a date
+  on). Watched folders: each with its state (watching, not found, can't be watched, or not
+  watched with `--no-watch`), the files found and **Stop watching**; a folder added by its
+  path (`~` for home), or with one click when Zwift's Activities folder or a Garmin is found
+  on this computer; **Scan now**; and the latest files found that weren't already in the
+  library, linked to their rides.
+- **New rides**: while a page is open, the app checks every 15 s (5 s on Settings; not while
+  the tab is hidden) whether the server's watcher has imported rides. If it has, the library,
+  trends and ride pages refresh, and a notice says how many arrived, with a link (Dismiss
+  hides it).
 - **Light or dark**: one button in the header (and in Settings) showing the mode in use, a sun
   or a moon, named in a hint on hover; clicking switches mode. The theme follows your system
   until you choose; units start from the config. Both choices are remembered in this browser.
@@ -358,6 +368,9 @@ the system temp folder, so they can't touch real rides:
 | `POST /e2e/rides/{id}/reset-meta` | `resetMeta` | Editing rides (`rideEdits.spec.ts`) |
 | `POST /e2e/rides/{id}/delete` | `deleteRide` | Nothing yet: the app can't delete rides |
 | `POST /e2e/reset`, `POST /e2e/import/{file}` | (not used yet) | Importing (`import.spec.ts`) |
+| `GET /api/watch`, `DELETE /api/watch/folders` | `stopWatchingLeftovers` (folders a failed run left) | Watched folders (`watchedFolders.spec.ts`) |
+
+In e2e mode, only folders inside the temp folder can be watched, and no folders are suggested.
 
 ## Tests
 
@@ -405,7 +418,9 @@ time, a 1989 local time inside, the odometer on the first record only), Garmin i
 pause, smart recording (irregular samples), no power meter, an indoor ride without HR or GPS,
 a second recording of the Zwift ride, a ride from another maker (Wahoo) with no time zone and
 no power or heart rate, a run, two rides inside a `.zip`, an exact duplicate and a truncated
-file.
+file. One more ride, outdoor near Arras with heart rate only, is kept in `tests/fixtures/extra/`
+rather than the fixture folder, so it's never in the library at the start: the browser tests
+drop it into a watched folder.
 
 The files in `tests/fixtures/fit/` are generated from the specs and committed. After changing
 the specs or the generator, rebuild them:
@@ -414,7 +429,8 @@ the specs or the generator, rebuild them:
 uv run python -m tests.fixtures.generate
 ```
 
-`tests/unit/test_fixtures_current.py` fails if the committed files are out of date.
+`tests/unit/test_fixtures_current.py` fails if the committed files (in both folders) are out of
+date.
 
 ### What's tested
 
@@ -520,7 +536,7 @@ being written, and nothing watched),
   volume adding up to the rides, default ranges, fitness from the Zwift ride, FTP before and
   after setting one, efficiency, best efforts naming their rides, an empty period, backwards
   ranges refused); watched folders (added as typed, listed, removed, refusals, a missing
-  folder, a scan without the watcher, the server's watcher importing a new folder's ride and
+  folder, Zwift's folder suggested until it's watched, a scan without the watcher, the server's watcher importing a new folder's ride and
   then one copied in, and e2e mode keeping to the temp folder) and route progress (the loop
   oldest first, rides alone or without GPS,
   unknown rides).
@@ -531,7 +547,8 @@ being written, and nothing watched),
   rides to compare (at most four, stored picks read safely) and the compare page's address;
   the stacked charts' spacing and their time (minutes, shown as a clock) and distance axes;
   the trends page's URL state, preset and custom ranges, the comparison ranges for best
-  efforts, the 28-day average, volume figures in both unit systems, and date labels.
+  efforts, the 28-day average, volume figures in both unit systems, and date labels; moments
+  shown on this computer's clock.
 - **Browser tests** (`tests/e2e/`), each written as steps with page objects:
   - *Smoke*: library → open a ride → back → import page → pick two rides and compare them →
     trends over all the rides.
@@ -561,6 +578,12 @@ being written, and nothing watched),
   - *Time zone*: choosing New York moves the ride without a time zone to the evening before;
     clearing returns it to UTC; on a computer in Tokyo, one click picks Asia/Tokyo. The Zwift
     ride is dated by its file name (in *Ride detail*).
+  - *Watched folders*: a new temp folder watched through Settings; the extra ride dropped
+    into it imported once it settles, listed with its link, announced on the page, opened from
+    the notice, and the notice dismissed; stopping watching keeps the ride. Scan now finding a
+    broken file (listed) and a ride already in the library (not listed, not announced); on a
+    phone, long paths wrap. Paths that aren't full, don't exist, or are outside the temp
+    folder refused with the reason. Accessibility scans with the notice and the latest files.
   - *Similar rides*: the other rides on the loop listed as the same route, newest first, and
     opened; the effort tab reached with the arrow keys, closest first, no HR-only rides; the
     indoor ride (no GPS) and the Zwift ride (alone in Watopia) saying why there's nothing;
@@ -568,7 +591,8 @@ being written, and nothing watched),
     the oldest ride, and no progress section for a ride alone on its route.
   - *Ride stats*: switching the charts between time and distance; the zoom bar's label, and
     Show whole ride enabled once zoomed in and resetting it.
-  - *Phone width*: the library, ride, compare and trends pages don't scroll sideways on a 390 px
+  - *Phone width*: the library, ride, compare and trends pages (and Settings, in *Watched
+    folders*) don't scroll sideways on a 390 px
     screen, and pass the accessibility scan there (wide tables scroll in boxes a keyboard
     can reach).
   - *Compare*: two rides picked in the library and compared (figures side by side, lined
