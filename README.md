@@ -14,9 +14,10 @@ default bikes, and tag/bike/effort filters. Phase 2 added a local web API (`fitl
 Phase 3a added the browser app (library, ride detail, import) and its Playwright tests;
 phase 3b added editing rides, bikes and default bikes, the athlete history, and dark mode.
 Phase 4a added route fingerprints and similar rides; phase 4b added comparing 2 to 4 rides.
-**Phase 5a (this)** adds trends on the command line and in the API: volume per week or
-month, fitness/fatigue/form, set and estimated FTP over time, efficiency, best efforts by
-period, and progress on a route. Phase 5b adds a Trends page to the browser app.
+Phase 5a added trends on the command line and in the API: volume per week or month,
+fitness/fatigue/form, set and estimated FTP over time, efficiency, best efforts by period, and
+progress on a route. **Phase 5b (this)** adds them to the browser app: a Trends page, and
+progress on a route on the ride page.
 
 ## Setup
 
@@ -128,6 +129,16 @@ uv run fitlib serve --open     # http://localhost:8000/ ; --port, --host
   efforts; laps. **Edit details** sets the name, notes, effort, bike and tags. **Similar
   rides** lists rides on the same route (newest first, to see progress) and with a similar
   effort, each with a **Compare** link, plus a link comparing the ride with its 3 closest.
+  **Progress on this route** charts every ride on the route by date (average speed by
+  default, or power, heart rate or moving time), this ride marked, with their table.
+- **Trends** (`/trends`): a range (6 weeks, 3 months, 6 months, 1 year, all, or From/To
+  dates) and weeks or months, kept in the URL. Summary figures (fitness, fatigue and form on
+  the last day, TSS in the range, set and estimated FTP); **Fitness and fatigue** over daily
+  TSS, with form below; **Volume** bars (time, distance, climbing, TSS or rides); **FTP**,
+  set and estimated; **Efficiency**, a dot per ride (outdoor and indoor) with its 28-day
+  average (a dot opens its ride); **Best efforts**, power or heart rate, against the past year
+  (by default), all time or the period before. Each chart's numbers are under **Show table**.
+  See "Trends" for how each is worked out.
 - **Compare** (`/compare?ids=a,b,c`): the rides with colour keys (Remove takes one out); their
   figures side by side; Ride Stats (power, heart rate, cadence, speed and altitude overlaid,
   zoomable, with Show whole ride); best efforts overlaid. Rides are lined up by **distance** when they all recorded it, so
@@ -468,9 +479,18 @@ backwards range and an empty period, and `progress` on the loop, alone and witho
   library's URL state (reading, writing, defaults, every filter, turning it into an API
   query); tag parsing; which theme applies (remembered choice, else the system); picking
   rides to compare (at most four, stored picks read safely) and the compare page's address;
-  the stacked charts' spacing and their time (minutes, shown as a clock) and distance axes.
+  the stacked charts' spacing and their time (minutes, shown as a clock) and distance axes;
+  the trends page's URL state, preset and custom ranges, the comparison ranges for best
+  efforts, the 28-day average, volume figures in both unit systems, and date labels.
 - **Browser tests** (`tests/e2e/`), each written as steps with page objects:
-  - *Smoke*: library → open a ride → back → import page → pick two rides and compare them.
+  - *Smoke*: library → open a ride → back → import page → pick two rides and compare them →
+    trends over all the rides.
+  - *Trends* (18 to 31 Aug 2025, rides no other spec changes): the range from the URL;
+    estimated FTP; volume by week as a table, distance instead of time, by month; FTP each
+    Sunday; efficiency of the rides with heart rate, opening one; fitness's table with that
+    day's TSS; best power against the past year and the period before (with the difference),
+    heart rate, opening the ride behind a best and back with choices kept; a preset from the
+    header ending today, kept across a reload; a backwards range refused.
   - *Library*: search and an empty result; each filter and filters combined; sorting both ways;
     paging, kept across a reload; the estimated-TSS mark.
   - *Ride detail*: summary, training with an estimated FTP, zones, best efforts, laps and
@@ -493,10 +513,12 @@ backwards range and an empty period, and `progress` on the loop, alone and witho
     ride is dated by its file name (in *Ride detail*).
   - *Similar rides*: the other rides on the loop listed as the same route, newest first, and
     opened; the effort tab reached with the arrow keys, closest first, no HR-only rides; the
-    indoor ride (no GPS) and the Zwift ride (alone in Watopia) saying why there's nothing.
+    indoor ride (no GPS) and the Zwift ride (alone in Watopia) saying why there's nothing;
+    progress on the loop, oldest first with this ride marked, by speed then power, opening
+    the oldest ride, and no progress section for a ride alone on its route.
   - *Ride stats*: switching the charts between time and distance; the zoom bar's label, and
     Show whole ride enabled once zoomed in and resetting it.
-  - *Phone width*: the library, ride and compare pages don't scroll sideways on a 390 px
+  - *Phone width*: the library, ride, compare and trends pages don't scroll sideways on a 390 px
     screen, and pass the accessibility scan there (wide tables scroll in boxes a keyboard
     can reach).
   - *Compare*: two rides picked in the library and compared (figures side by side, lined
@@ -504,8 +526,9 @@ backwards range and an empty period, and `progress` on the loop, alone and witho
     filtering, cleared; lining up by time, smoothing off and removing rides down to one;
     comparing from Similar rides, with one ride and with the 3 closest.
   - *Accessibility*: axe WCAG 2.2 AA scans of every page (including Bikes, Settings, the
-    ride's edit form, both Similar rides tabs, and the compare page by distance, by time and
-    with too few rides) in light mode, dark mode from the system, and dark mode chosen in the
+    ride's edit form, both Similar rides tabs, route progress with its table, the compare page
+    by distance, by time and with too few rides, and Trends with every table shown and with a
+    backwards range) in light mode, dark mode from the system, and dark mode chosen in the
     app.
 
 ### Performance check
