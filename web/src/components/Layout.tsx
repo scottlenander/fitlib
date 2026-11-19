@@ -16,6 +16,7 @@ export function Layout() {
           <NavLink to="/" end>
             Library
           </NavLink>
+          <NavLink to="/trends">Trends</NavLink>
           <NavLink to="/import">Import</NavLink>
           <NavLink to="/bikes">Bikes</NavLink>
           <NavLink to="/settings">Settings</NavLink>

@@ -32,6 +32,17 @@ export type TimeZoneChange = Schemas['TimeZoneChange']
 export type Comparison = Schemas['Comparison']
 export type ComparedRide = Schemas['ComparedRide']
 export type Align = Comparison['align']
+export type RouteProgress = Schemas['RouteProgress']
+export type Span = Schemas['Span']
+export type Volume = Schemas['Volume']
+export type VolumeBucket = Schemas['VolumeBucketOut']
+export type Fitness = Schemas['FitnessOut']
+export type FitnessDay = Schemas['FitnessDayOut']
+export type Ftp = Schemas['FtpOut']
+export type Efficiency = Schemas['EfficiencyOut']
+export type EfficiencyPoint = Schemas['EfficiencyPointOut']
+export type BestCurve = Schemas['CurveOut']
+export type CurveBest = Schemas['CurveBestOut']
 export type RideQuery = NonNullable<operations['list_rides_api_rides_get']['parameters']['query']>
 
 // An error from the API, with its status and message.
@@ -157,7 +168,12 @@ export function useImport() {
       return request<ImportResult>('/api/imports', { method: 'POST', body })
     },
     // New rides change every list.
-    onSuccess: () => client.invalidateQueries({ queryKey: ['rides'] }),
+    onSuccess: () =>
+      Promise.all(
+        ['rides', 'trends', 'route-progress'].map((key) =>
+          client.invalidateQueries({ queryKey: [key] }),
+        ),
+      ),
   })
 }
 
@@ -180,7 +196,7 @@ export function useUpdateMeta(rideId: string) {
   return useMutation({
     mutationFn: (patch: MetaPatch) =>
       request<RideDetail>(`/api/rides/${encodeURIComponent(rideId)}/meta`, json('PATCH', patch)),
-    onSuccess: () => invalidate('ride', 'rides', 'tags', 'bikes'),
+    onSuccess: () => invalidate('ride', 'rides', 'tags', 'bikes', 'route-progress'),
   })
 }
 
@@ -199,7 +215,8 @@ export function useSetTimeZone() {
   return useMutation({
     mutationFn: (timezone: string | null) =>
       request<TimeZoneChange>('/api/settings/timezone', json('PUT', { timezone })),
-    onSuccess: () => invalidate('settings', 'ride', 'rides', 'similar', 'compare'),
+    onSuccess: () =>
+      invalidate('settings', 'ride', 'rides', 'similar', 'compare', 'trends', 'route-progress'),
   })
 }
 
@@ -212,7 +229,7 @@ export function useSetAthlete() {
   return useMutation({
     mutationFn: ({ from, values }: { from: string; values: AthleteValues }) =>
       request<AthleteEntry>(`/api/athlete/${from}`, json('PUT', values)),
-    onSuccess: () => invalidate('athlete', 'ride', 'rides'),
+    onSuccess: () => invalidate('athlete', 'ride', 'rides', 'trends', 'route-progress'),
   })
 }
 
@@ -220,7 +237,7 @@ export function useDeleteAthlete() {
   const invalidate = useInvalidate()
   return useMutation({
     mutationFn: (from: string) => request<void>(`/api/athlete/${from}`, { method: 'DELETE' }),
-    onSuccess: () => invalidate('athlete', 'ride', 'rides'),
+    onSuccess: () => invalidate('athlete', 'ride', 'rides', 'trends', 'route-progress'),
   })
 }
 
@@ -288,4 +305,52 @@ export function useBackfill() {
       if (!result.dry_run) void invalidate('bikes', 'ride', 'rides')
     },
   })
+}
+
+export function useRouteProgress(rideId: string) {
+  return useQuery({
+    queryKey: ['route-progress', rideId],
+    queryFn: () =>
+      request<RouteProgress>(`/api/rides/${encodeURIComponent(rideId)}/route-progress`),
+  })
+}
+
+// Trends. Each takes local dates (YYYY-MM-DD); the previous answer stays on screen while a
+// new range loads.
+type Range = { since: string; until: string }
+
+function trend<T>(path: string, params: Record<string, string>, enabled = true) {
+  return {
+    queryKey: ['trends', path, params],
+    queryFn: () => request<T>(`/api/trends/${path}${queryString(params)}`),
+    placeholderData: (previous: T | undefined) => previous,
+    enabled,
+  }
+}
+
+export function useTrendSpan() {
+  return useQuery({
+    queryKey: ['trends', 'span'],
+    queryFn: () => request<Span>('/api/trends/span'),
+  })
+}
+
+export function useVolume(range: Range, period: 'week' | 'month', enabled: boolean) {
+  return useQuery(trend<Volume>('volume', { ...range, period }, enabled))
+}
+
+export function useFitness(range: Range, enabled: boolean) {
+  return useQuery(trend<Fitness>('fitness', range, enabled))
+}
+
+export function useFtp(range: Range, period: 'week' | 'month', enabled: boolean) {
+  return useQuery(trend<Ftp>('ftp', { ...range, period }, enabled))
+}
+
+export function useEfficiency(range: Range, enabled: boolean) {
+  return useQuery(trend<Efficiency>('efficiency', range, enabled))
+}
+
+export function useBestCurve(range: Range, kind: 'power' | 'hr', enabled: boolean) {
+  return useQuery(trend<BestCurve>('curve', { ...range, kind }, enabled))
 }

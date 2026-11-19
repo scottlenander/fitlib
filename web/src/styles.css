@@ -628,3 +628,30 @@ textarea {
   margin: 0;
   flex: 1 1 18rem;
 }
+
+/* Trends: the range controls wrap on narrow screens; charts' tables fold under them. */
+.trend-controls .radios {
+  flex-wrap: wrap;
+}
+.inline-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.5rem;
+}
+.inline-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+.show-table {
+  margin-top: 0.5rem;
+}
+.show-table summary {
+  cursor: pointer;
+  color: var(--accent);
+  width: fit-content;
+}
+.show-table[open] summary {
+  margin-bottom: 0.5rem;
+}
