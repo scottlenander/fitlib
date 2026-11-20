@@ -425,6 +425,22 @@ h3 {
   flex-basis: 100%;
   margin-bottom: 0;
 }
+
+/* The library's "Edit rides" panel, under the selection bar. */
+.bulk-edit {
+  background: var(--surface);
+  border-radius: 4px;
+  padding: 0.75rem;
+}
+.bulk-edit h2 {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 1.1rem;
+}
+.bulk-edit .hint {
+  flex-basis: 100%;
+  margin: 0;
+}
 .inline-form label {
   display: flex;
   flex-direction: column;
