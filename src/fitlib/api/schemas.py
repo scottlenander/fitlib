@@ -12,6 +12,7 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from fitlib.analysis.training import Training
+from fitlib.metadata import MAX_BULK_RIDES
 from fitlib.metrics import zones
 from fitlib.models import Bike, BikeKind, BikeSlot, Curve, GeoSummary, Lap, Ride, Source
 
@@ -632,6 +633,38 @@ class MetaPatch(BaseModel):
             The trimmed text, or ``None``.
         """
         return _clean_text(value)
+
+
+class BulkMetaPatch(BaseModel):
+    """The same change to several rides' effort, bike and tags.
+
+    Fields left out stay as they are; ``null`` clears the effort or the bike.
+
+    Attributes:
+        ids: The rides, by id or unique prefix.
+        rpe: Perceived effort, 1-10.
+        bike_id: The rides' bike. Choosing or clearing one here marks it as set by hand.
+        add_tags: Tags to add to each ride.
+        remove_tags: Tags to take off each ride.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    ids: Annotated[list[str], Field(min_length=1, max_length=MAX_BULK_RIDES)]
+    rpe: Annotated[int | None, Field(ge=1, le=10)] = None
+    bike_id: str | None = None
+    add_tags: list[str] = []
+    remove_tags: list[str] = []
+
+
+class BulkMetaResult(BaseModel):
+    """What a change to several rides did.
+
+    Attributes:
+        updated: How many rides were changed.
+    """
+
+    updated: int
 
 
 def _bike_name(value: str) -> str:

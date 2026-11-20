@@ -382,6 +382,41 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/rides/bulk-meta': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * Update Many
+     * @description Change the effort, bike or tags of several rides at once.
+     *
+     *     All the rides change, or none: an unknown ride or bike changes nothing.
+     *
+     *     Args:
+     *         stores: The library's stores.
+     *         patch: The rides and the change.
+     *
+     *     Returns:
+     *         How many rides changed (each ride once, however often it was named).
+     *
+     *     Raises:
+     *         HTTPException: The patch changes nothing (a 422).
+     *         RideNotFound: A ride isn't in the library (a 404).
+     *         BikeNotFound: ``bike_id`` isn't a bike (a 404).
+     *         InvalidTag: A tag is empty, too long or has a comma (a 422).
+     */
+    post: operations['update_many_api_rides_bulk_meta_post']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/rides/{ref}': {
     parameters: {
       query?: never
@@ -1102,6 +1137,48 @@ export interface components {
        * @description .fit files and .zip archives.
        */
       files: string[]
+    }
+    /**
+     * BulkMetaPatch
+     * @description The same change to several rides' effort, bike and tags.
+     *
+     *     Fields left out stay as they are; ``null`` clears the effort or the bike.
+     *
+     *     Attributes:
+     *         ids: The rides, by id or unique prefix.
+     *         rpe: Perceived effort, 1-10.
+     *         bike_id: The rides' bike. Choosing or clearing one here marks it as set by hand.
+     *         add_tags: Tags to add to each ride.
+     *         remove_tags: Tags to take off each ride.
+     */
+    BulkMetaPatch: {
+      /**
+       * Add Tags
+       * @default []
+       */
+      add_tags: string[]
+      /** Bike Id */
+      bike_id?: string | null
+      /** Ids */
+      ids: string[]
+      /**
+       * Remove Tags
+       * @default []
+       */
+      remove_tags: string[]
+      /** Rpe */
+      rpe?: number | null
+    }
+    /**
+     * BulkMetaResult
+     * @description What a change to several rides did.
+     *
+     *     Attributes:
+     *         updated: How many rides were changed.
+     */
+    BulkMetaResult: {
+      /** Updated */
+      updated: number
     }
     /**
      * ComparedRide
@@ -2663,6 +2740,39 @@ export interface operations {
         }
         content: {
           'application/json': components['schemas']['RidePage']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  update_many_api_rides_bulk_meta_post: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['BulkMetaPatch']
+      }
+    }
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['BulkMetaResult']
         }
       }
       /** @description Validation Error */

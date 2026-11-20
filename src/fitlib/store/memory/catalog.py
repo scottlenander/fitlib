@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import replace
 from datetime import date, datetime
 
@@ -163,6 +163,23 @@ class MemoryCatalog:
         if meta.bike_id is not None:
             self.get_bike(meta.bike_id)
         self._rides[ride_id] = replace(ride, meta=_stored(meta))
+
+    def update_metas(self, metas: Mapping[str, RideMeta]) -> None:
+        """Replace what the user added to several rides, all or none of them.
+
+        Args:
+            metas: Each ride's id and its new metadata.
+
+        Raises:
+            RideNotFound: A ride id isn't a ride; nothing is changed.
+            BikeNotFound: A ``bike_id`` isn't a bike; nothing is changed.
+        """
+        rides = {ride_id: self.get_ride(ride_id) for ride_id in metas}
+        for meta in metas.values():
+            if meta.bike_id is not None:
+                self.get_bike(meta.bike_id)
+        for ride_id, meta in metas.items():
+            self._rides[ride_id] = replace(rides[ride_id], meta=_stored(meta))
 
     def _check_name_free(self, bike: Bike) -> None:
         """Make sure no other bike has this bike's name.

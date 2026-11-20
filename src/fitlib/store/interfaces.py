@@ -9,7 +9,7 @@ Methods are added as phases need them.
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from datetime import date, datetime
 from typing import Protocol
 
@@ -278,6 +278,18 @@ class CatalogStore(Protocol):
         Raises:
             RideNotFound: No ride has this id.
             BikeNotFound: ``meta.bike_id`` isn't a bike.
+        """
+        ...
+
+    def update_metas(self, metas: Mapping[str, RideMeta]) -> None:
+        """Replace what the user added to several rides, all or none of them.
+
+        Args:
+            metas: Each ride's id and its new metadata (tags already normalized).
+
+        Raises:
+            RideNotFound: A ride id isn't a ride; nothing is changed.
+            BikeNotFound: A ``bike_id`` isn't a bike; nothing is changed.
         """
         ...
 

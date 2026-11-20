@@ -16,6 +16,8 @@ from fitlib.analysis.training import training
 from fitlib.analysis.trends import route_progress
 from fitlib.api.deps import StoresDep
 from fitlib.api.schemas import (
+    BulkMetaPatch,
+    BulkMetaResult,
     MetaPatch,
     RideDetail,
     RideItem,
@@ -28,8 +30,8 @@ from fitlib.api.schemas import (
     ride_item,
 )
 from fitlib.ingest.normalize import VALUE_COLUMNS
-from fitlib.metadata import normalize_tag
-from fitlib.models import Filters, Ride, RideMeta, SortKey, Source
+from fitlib.metadata import KEEP, MetaEdit, apply_edit, normalize_tags
+from fitlib.models import Filters, Ride, SortKey, Source
 from fitlib.store.factory import Stores
 
 router = APIRouter(prefix="/rides", tags=["rides"])
@@ -130,7 +132,7 @@ def list_rides(
         min_duration_s=min_duration_s,
         max_duration_s=max_duration_s,
         has_power=has_power,
-        tags=tuple(dict.fromkeys(normalize_tag(t) for t in tag)),
+        tags=normalize_tags(tag),
         bike_id=bike_id,
         has_bike=has_bike,
         min_rpe=min_rpe,
@@ -307,20 +309,45 @@ def update_meta(stores: StoresDep, ref: str, patch: MetaPatch) -> RideDetail:
     catalog = stores.catalog
     ride = find_ride(stores, ref)
     sent = patch.model_fields_set
-    m = ride.meta
-    if "bike_id" in sent and patch.bike_id is not None:
-        catalog.get_bike(patch.bike_id)
-    tags = m.tags
-    if "tags" in sent:
-        tags = tuple(dict.fromkeys(normalize_tag(t) for t in patch.tags or ()))
-    meta = RideMeta(
-        name=patch.name if "name" in sent else m.name,
-        notes=patch.notes if "notes" in sent else m.notes,
-        rpe=patch.rpe if "rpe" in sent else m.rpe,
-        bike_id=patch.bike_id if "bike_id" in sent else m.bike_id,
-        tags=tags,
-        # A bike chosen here is the user's; otherwise keep where the bike came from.
-        bike_from_default=m.bike_from_default and "bike_id" not in sent,
+    change = MetaEdit(
+        name=patch.name if "name" in sent else KEEP,
+        notes=patch.notes if "notes" in sent else KEEP,
+        rpe=patch.rpe if "rpe" in sent else KEEP,
+        bike_id=patch.bike_id if "bike_id" in sent else KEEP,
+        tags=normalize_tags(patch.tags or ()) if "tags" in sent else KEEP,
     )
-    catalog.update_meta(ride.id, meta)
+    catalog.update_meta(ride.id, apply_edit(ride.meta, change))
     return get_ride(stores, ride.id)
+
+
+@router.post("/bulk-meta")
+def update_many(stores: StoresDep, patch: BulkMetaPatch) -> BulkMetaResult:
+    """Change the effort, bike or tags of several rides at once.
+
+    All the rides change, or none: an unknown ride or bike changes nothing.
+
+    Args:
+        stores: The library's stores.
+        patch: The rides and the change.
+
+    Returns:
+        How many rides changed (each ride once, however often it was named).
+
+    Raises:
+        HTTPException: The patch changes nothing (a 422).
+        RideNotFound: A ride isn't in the library (a 404).
+        BikeNotFound: ``bike_id`` isn't a bike (a 404).
+        InvalidTag: A tag is empty, too long or has a comma (a 422).
+    """
+    sent = patch.model_fields_set
+    change = MetaEdit(
+        rpe=patch.rpe if "rpe" in sent else KEEP,
+        bike_id=patch.bike_id if "bike_id" in sent else KEEP,
+        add_tags=normalize_tags(patch.add_tags),
+        remove_tags=normalize_tags(patch.remove_tags),
+    )
+    if change.is_empty:
+        raise HTTPException(422, "Choose an effort, a bike or tags to change.")
+    rides = {ride.id: ride for ride in (find_ride(stores, ref) for ref in patch.ids)}
+    stores.catalog.update_metas({i: apply_edit(r.meta, change) for i, r in rides.items()})
+    return BulkMetaResult(updated=len(rides))

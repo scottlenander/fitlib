@@ -18,7 +18,7 @@ from rich.console import Console
 
 from fitlib.config import Config, ConfigError, load_config
 from fitlib.ingest.summarize import METRICS_VERSION
-from fitlib.metadata import InvalidTag, normalize_tag
+from fitlib.metadata import InvalidTag, normalize_tags
 from fitlib.models import (
     Bike,
     Ride,
@@ -208,6 +208,6 @@ def tags_from(raw: list[str] | None) -> tuple[str, ...]:
         typer.Exit: A tag is empty, too long, or contains a comma (code 2).
     """
     try:
-        return tuple(dict.fromkeys(normalize_tag(t) for t in raw or ()))
+        return normalize_tags(raw or ())
     except InvalidTag as exc:
         raise fail(str(exc)) from None

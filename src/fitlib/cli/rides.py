@@ -32,10 +32,10 @@ from fitlib.cli.output import print_report, print_ride, section
 from fitlib.importer import Importer
 from fitlib.ingest.scanner import scan
 from fitlib.ingest.summarize import METRICS_VERSION
+from fitlib.metadata import KEEP, MetaEdit, apply_edit
 from fitlib.metrics.curves import best_at
 from fitlib.models import (
     Filters,
-    RideMeta,
     SortKey,
     Source,
 )
@@ -455,21 +455,17 @@ def edit(
 
     with library(ctx) as lib:
         catalog = lib.stores.catalog
-        found = [find_ride(catalog, ref) for ref in rides]
+        found = list({r.id: r for r in (find_ride(catalog, ref) for ref in rides)}.values())
         bike_id = find_bike(catalog, bike).id if bike is not None else None
-        for ride in found:
-            m = ride.meta
-            tags = [t for t in m.tags if t not in remove] + [t for t in add if t not in m.tags]
-            meta = RideMeta(
-                name=None if clear_name else (name if name is not None else m.name),
-                notes=None if clear_note else (note if note is not None else m.notes),
-                rpe=None if clear_rpe else (rpe if rpe is not None else m.rpe),
-                bike_id=None if clear_bike else (bike_id if bike_id is not None else m.bike_id),
-                tags=tuple(tags),
-                # A bike chosen here is the user's; otherwise keep where the bike came from.
-                bike_from_default=m.bike_from_default and bike_id is None and not clear_bike,
-            )
-            catalog.update_meta(ride.id, meta)
+        change = MetaEdit(
+            name=None if clear_name else (KEEP if name is None else name),
+            notes=None if clear_note else (KEEP if note is None else note),
+            rpe=None if clear_rpe else (KEEP if rpe is None else rpe),
+            bike_id=None if clear_bike else (KEEP if bike_id is None else bike_id),
+            add_tags=add,
+            remove_tags=remove,
+        )
+        catalog.update_metas({r.id: apply_edit(r.meta, change) for r in found})
         updated = [catalog.get_ride(r.id) for r in found]
         bikes = {b.id: b.name for b in catalog.list_bikes()}
 
