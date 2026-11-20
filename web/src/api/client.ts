@@ -24,6 +24,8 @@ export type BikePatch = Schemas['BikePatch']
 export type DefaultEntry = Schemas['DefaultOut']
 export type BackfillResult = Schemas['BackfillResult']
 export type MetaPatch = Schemas['MetaPatch']
+export type BulkMetaPatch = Schemas['BulkMetaPatch']
+export type BulkMetaResult = Schemas['BulkMetaResult']
 export type TagCount = Schemas['TagCount']
 export type SimilarRides = Schemas['SimilarRides']
 export type SimilarRide = Schemas['SimilarRide']
@@ -200,6 +202,16 @@ export function useUpdateMeta(rideId: string) {
   return useMutation({
     mutationFn: (patch: MetaPatch) =>
       request<RideDetail>(`/api/rides/${encodeURIComponent(rideId)}/meta`, json('PATCH', patch)),
+    onSuccess: () => invalidate('ride', 'rides', 'tags', 'bikes', 'route-progress'),
+  })
+}
+
+// Changes the effort, bike or tags of several rides at once (all of them, or none).
+export function useBulkEdit() {
+  const invalidate = useInvalidate()
+  return useMutation({
+    mutationFn: (patch: BulkMetaPatch) =>
+      request<BulkMetaResult>('/api/rides/bulk-meta', json('POST', patch)),
     onSuccess: () => invalidate('ride', 'rides', 'tags', 'bikes', 'route-progress'),
   })
 }

@@ -1,3 +1,4 @@
+import fs from 'node:fs'
 import { basename } from 'node:path'
 import { expect, type APIRequestContext } from '@playwright/test'
 
@@ -44,6 +45,22 @@ export class TestData {
   // Deletes a ride and its files, so the same file can be imported again.
   async deleteRide(rideId: string) {
     await this.post(`rides/${rideId}/delete`)
+  }
+
+  // Imports a file through the app's own import (as the Import page does), for rides kept
+  // out of the library at start-up. Returns the ride's id.
+  async importFile(path: string): Promise<string> {
+    const response = await this.request.post('/api/imports', {
+      multipart: {
+        files: {
+          name: basename(path),
+          mimeType: 'application/octet-stream',
+          buffer: fs.readFileSync(path),
+        },
+      },
+    })
+    this.check(response.ok(), 'POST /api/imports', response.status())
+    return this.rideId(basename(path))
   }
 
   // Removes the library's default time zone (the time zone spec owns this setting).

@@ -128,8 +128,11 @@ uv run fitlib serve --open     # http://localhost:8000/ ; --port, --host, --no-w
 - **Library** (`/`): search (name, notes, tags, bike, device), filters (source, indoor/outdoor,
   power, dates, minimum riding time, tag, bike, effort), sortable columns and paging. All of it is kept in the
   URL, so reloads, the back button and links keep the view. TSS from an estimated FTP is
-  marked with `*`. Tick 2 to 4 rides (from any page or filter; the picks last for the browser
-  tab) and press **Compare**.
+  marked with `*`. Tick rides (from any page or filter, or every ride on a page with the
+  header box; the selection lasts for the browser tab, up to 500 rides), then press
+  **Compare** (2 to 4 rides) or **Edit** to set the effort, bike or tags of them all at
+  once: fields left on Keep stay as each ride has them, and tags are added or taken off
+  without touching a ride's other tags. Name and notes are edited on the ride's page.
 - **Ride** (`/rides/<id>`): summary and training figures; **Ride Stats**: power, heart rate,
   cadence, speed and altitude stacked on one axis, shown over **time** or **distance**, zoomed
   by dragging the bar's ends or scrolling, and **Show whole ride** to zoom back out; time in
@@ -206,6 +209,7 @@ Interactive docs are at `/docs`. Everything is under `/api`, and every figure is
 | `GET /api/compare` | `ids` (repeat, 2–4, ids or prefixes): each ride's detail and its samples on one shared axis. `align=distance` (metres; with each ride's time `gap` to the first) or `time` (seconds); by default distance when every ride recorded it. `smooth` 0, 10 or 30 s for power and HR; `points` along the axis |
 | `GET /api/rides/{id}/streams` | 1 Hz samples as columns; `fields` to choose (lat/lon only when asked for), `step` to thin out |
 | `PATCH /api/rides/{id}/meta` | Name, notes, rpe, bike_id, tags. Fields left out stay; `null` clears |
+| `POST /api/rides/bulk-meta` | `ids` (1–500, ids or prefixes) plus rpe, bike_id, add_tags, remove_tags for all of them: fields left out stay, `null` clears. All the rides change or none (an unknown ride or bike is a 404); returns `updated` |
 | `GET /api/tags` | Tags with ride counts |
 | `GET/POST /api/bikes`, `PATCH /api/bikes/{id}` | Bikes with totals; add; rename, kind, retire |
 | `GET /api/bikes/defaults`, `PUT/DELETE /api/bikes/defaults/{slot}/{date}` | Dated default bikes |
@@ -368,6 +372,7 @@ the system temp folder, so they can't touch real rides:
 | `POST /e2e/rides/{id}/reset-meta` | `resetMeta` | Editing rides (`rideEdits.spec.ts`) |
 | `POST /e2e/rides/{id}/delete` | `deleteRide` | Nothing yet: the app can't delete rides |
 | `POST /e2e/reset`, `POST /e2e/import/{file}` | (not used yet) | Importing (`import.spec.ts`) |
+| `POST /api/imports` | `importFile` (extra rides kept out of the library at start-up) | Importing (`import.spec.ts`) |
 | `GET /api/watch`, `DELETE /api/watch/folders` | `stopWatchingLeftovers` (folders a failed run left) | Watched folders (`watchedFolders.spec.ts`) |
 
 In e2e mode, only folders inside the temp folder can be watched, and no folders are suggested.
@@ -442,7 +447,8 @@ date.
 - **Storage contracts** (`tests/unit/store/`): one suite runs against every catalog (SQLite, memory)
   and blob store (filesystem, memory): round trips, duplicate hashes, id prefixes, time
   windows, every search filter, text search, sorting with missing values last, paging,
-  replacing summaries, best efforts in a window, athlete history, editing metadata, bikes
+  replacing summaries, best efforts in a window, athlete history, editing metadata (one ride,
+  or several at once with nothing changed if one fails), bikes
   (unique names ignoring case, name/prefix lookup, renames refreshing search, totals), tag
   counts, default-bike entries and the tag/bike/effort filters, invalid blob keys, Parquet
   streams; library settings; listing rides by where their time zone came from, and changing
@@ -488,7 +494,8 @@ date.
   and with a 60 s step at a stop; no distance refused; smoothing that flattens spikes but
   never fills a pause; only recorded channels returned.
 - **Metadata** (`tests/unit/test_metadata.py`, `tests/unit/analysis/test_bikes.py`): tag
-  normalization; ride kinds; dated default bikes by local date; backfill never overwriting a
+  normalization; edits (kept, set and cleared fields, tags added and removed, a bike chosen
+  by hand); ride kinds; dated default bikes by local date; backfill never overwriting a
   bike set by hand, dry runs, and repeat runs.
 - **Recompute** (`tests/unit/test_recompute.py`): outdated rides brought up to date with metadata
   kept; streams rewritten; a Zwift ride dated 1989 repaired (its time zone from its name); a Zwift ride without distance
@@ -521,7 +528,8 @@ being written, and nothing watched),
   list filter, sorting and paging, bad parameters; ride detail by id and prefix, ambiguous
   prefixes, training figures with estimated and set FTP, zones and curves; streams (default
   columns, location only on request, thinning, unknown fields); metadata edits (partial,
-  clearing, validation leaving the ride unchanged); tags, bikes, default-bike timeline and
+  clearing, validation leaving the ride unchanged), and of several rides at once (repeats
+  counted once, the name left alone, bad values or an unknown ride changing nothing); tags, bikes, default-bike timeline and
   backfill keeping hand-set bikes; athlete history; uploads (`.fit`, `.zip`, duplicates, bad
   and non-FIT files, unsafe file names, default bikes, no coordinates in logs); settings; the
   placeholder page, app-route fallback and 404s for unknown API paths and missing assets;
@@ -544,7 +552,8 @@ being written, and nothing watched),
   weights in both unit systems, and weights typed in either; local versus UTC start times; the
   library's URL state (reading, writing, defaults, every filter, turning it into an API
   query); tag parsing; which theme applies (remembered choice, else the system); picking
-  rides to compare (at most four, stored picks read safely) and the compare page's address;
+  rides to compare or edit (up to 500, a whole page at once, stored selections read safely),
+  what the bulk edit form sends, and the compare page's address;
   the stacked charts' spacing and their time (minutes, shown as a clock) and distance axes;
   the trends page's URL state, preset and custom ranges, the comparison ranges for best
   efforts, the 28-day average, volume figures in both unit systems, and date labels; moments
@@ -567,6 +576,11 @@ being written, and nothing watched),
     overlapping recording and a broken file reported.
   - *Ride edits*: every detail edited, shown on the ride and found in the library by name,
     tag, bike and effort; clearing details; a too-long tag refused with nothing saved; Cancel.
+  - *Bulk edits* (two extra rides on 3 and 4 Aug, imported by the spec): both selected with
+    the page checkbox and given an effort, a new bike and two tags; one unselected (the page
+    box part-ticked), the other's effort cleared and a tag taken off; the library's filters
+    finding the edits; Close and Clear selection. A too-long tag refused with neither ride
+    changed. An accessibility scan with the form open.
   - *Bikes*: add (a duplicate name refused), rename and change kind, retire and bring back;
     the default timeline (set, no bike, remove); Preview and Apply, giving the indoor ride
     its default bike.
@@ -596,8 +610,8 @@ being written, and nothing watched),
     screen, and pass the accessibility scan there (wide tables scroll in boxes a keyboard
     can reach).
   - *Compare*: two rides picked in the library and compared (figures side by side, lined
-    up by distance with a time gap, zoomed in and back out), picks kept back in the library; four at most, kept while
-    filtering, cleared; lining up by time, smoothing off and removing rides down to one;
+    up by distance with a time gap, zoomed in and back out), picks kept back in the library; a fifth ride selected but not
+    compared, picks kept while filtering, cleared; lining up by time, smoothing off and removing rides down to one;
     comparing from Similar rides, with one ride and with the 3 closest.
   - *Accessibility*: axe WCAG 2.2 AA scans of every page (including Bikes, Settings, the
     ride's edit form, both Similar rides tabs, route progress with its table, the compare page

@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 import threading
 import time
-from collections.abc import Generator, Iterable
+from collections.abc import Generator, Iterable, Mapping
 from contextlib import contextmanager
 from datetime import UTC, date, datetime
 from importlib import resources
@@ -489,6 +489,26 @@ class SqliteCatalog:
                 self._require_bike(db, meta.bike_id)
             self._write_meta(db, ride_id, meta)
             self._index(db, self._load(row))
+
+    def update_metas(self, metas: Mapping[str, RideMeta]) -> None:
+        """Replace what the user added to several rides in one transaction.
+
+        Args:
+            metas: Each ride's id and its new metadata (tags already normalized).
+
+        Raises:
+            RideNotFound: A ride id isn't a ride; nothing is changed.
+            BikeNotFound: A ``bike_id`` isn't a bike; nothing is changed.
+        """
+        with self._tx() as db:
+            for bike_id in {m.bike_id for m in metas.values()} - {None}:
+                self._require_bike(db, bike_id)
+            for ride_id, meta in metas.items():
+                row = db.execute("SELECT * FROM rides WHERE id = ?", (ride_id,)).fetchone()
+                if row is None:
+                    raise RideNotFound(ride_id)
+                self._write_meta(db, ride_id, meta)
+                self._index(db, self._load(row))
 
     def _require_bike(self, db: sqlite3.Connection, bike_id: str) -> None:
         """Make sure a bike exists.

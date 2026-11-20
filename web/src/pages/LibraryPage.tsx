@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
 import { useBikes, useHealth, useRides, useTags, type RideItem, type SortKey } from '../api/client'
-import { MAX_RIDES, MIN_RIDES, compareUrl, usePicked, type Picked } from '../compare'
+import { rideCount } from '../bulkEdit'
+import { BulkEdit } from '../components/BulkEdit'
+import { MAX_RIDES, MIN_RIDES, compareUrl } from '../compare'
 import * as f from '../format'
 import { useUnits } from '../units'
+import { MAX_SELECTED, usePicked, type Picked } from '../selection'
 import { usePageTitle } from '../usePageTitle'
 import {
   NO_FILTERS,
@@ -36,6 +39,7 @@ export function LibraryPage() {
   const { units } = useUnits()
   const outdated = health.data?.outdated_rides ?? 0
   const selection = usePicked()
+  const [editing, setEditing] = useState(false)
 
   // The URL state as last set, which may be ahead of this render: two quick changes (such
   // as "Clear filters" then a new filter) must build on each other, not on the same render.
@@ -93,7 +97,17 @@ export function LibraryPage() {
               Your library is empty. <Link to="/import">Import some rides</Link>.
             </p>
           )}
-          {page.total > 0 && <SelectionBar picked={selection.picked} onClear={selection.clear} />}
+          {page.total > 0 && (
+            <SelectionBar
+              picked={selection.picked}
+              editing={editing}
+              onEdit={() => setEditing(!editing)}
+              onClear={selection.clear}
+            />
+          )}
+          {editing && selection.picked.length > 0 && (
+            <BulkEdit ids={selection.picked.map((p) => p.id)} onClose={() => setEditing(false)} />
+          )}
           {page.items.length > 0 && (
             <div className="table-scroll">
               <table className="wide" data-testid="ride-table">
@@ -101,7 +115,12 @@ export function LibraryPage() {
                 <thead>
                   <tr>
                     <th scope="col">
-                      <span className="visually-hidden">Compare</span>
+                      <PageCheckbox
+                        rides={page.items.map((r) => ({ id: r.id, name: r.name }))}
+                        picked={selection.picked}
+                        onSelect={selection.selectAll}
+                        onUnselect={selection.unselectAll}
+                      />
                     </th>
                     {[
                       'Date',
@@ -186,31 +205,68 @@ export function LibraryPage() {
   )
 }
 
-// What's picked for comparing (from any page of the library), and the button to compare.
-function SelectionBar({ picked, onClear }: { picked: Picked[]; onClear: () => void }) {
+// What's selected (from any page of the library): compare 2 to 4 rides, or edit them.
+type BarProps = { picked: Picked[]; editing: boolean; onEdit: () => void; onClear: () => void }
+
+function SelectionBar({ picked, editing, onEdit, onClear }: BarProps) {
   const navigate = useNavigate()
   const count = picked.length
-  let hint = `Tick ${MIN_RIDES} to ${MAX_RIDES} rides to compare them.`
-  if (count >= MAX_RIDES) hint = `${MAX_RIDES} rides is the most you can compare at once.`
-  else if (count > 0) hint = `Selected: ${picked.map((p) => p.name).join(', ')}.`
+  let status = `Tick ${MIN_RIDES} to ${MAX_RIDES} rides to compare them, or any number to edit them together.`
+  if (count >= MAX_SELECTED) status = `${MAX_SELECTED} rides is the most you can select at once.`
+  else if (count > MAX_RIDES)
+    status = `${count} rides selected. Compare takes ${MIN_RIDES} to ${MAX_RIDES}.`
+  else if (count > 0) status = `Selected: ${picked.map((p) => p.name).join(', ')}.`
   return (
     <div className="selection-bar" data-testid="selection-bar">
       <p aria-live="polite" data-testid="selection-status">
-        {count >= MAX_RIDES ? `Selected: ${picked.map((p) => p.name).join(', ')}. ${hint}` : hint}
+        {status}
       </p>
       <button
         type="button"
-        disabled={count < MIN_RIDES}
+        disabled={count < MIN_RIDES || count > MAX_RIDES}
         onClick={() => void navigate(compareUrl(picked.map((p) => p.id)))}
       >
         Compare ({count})
       </button>
       {count > 0 && (
-        <button type="button" onClick={onClear}>
-          Clear selection
-        </button>
+        <>
+          <button type="button" aria-expanded={editing} onClick={onEdit}>
+            Edit {rideCount(count)}
+          </button>
+          <button type="button" onClick={onClear}>
+            Clear selection
+          </button>
+        </>
       )}
     </div>
+  )
+}
+
+type PageCheckboxProps = {
+  rides: Picked[]
+  picked: Picked[]
+  onSelect: (rides: Picked[]) => void
+  onUnselect: (rides: Picked[]) => void
+}
+
+// Selects every ride on this page, or unselects them all; part-ticked when some are.
+function PageCheckbox({ rides, picked, onSelect, onUnselect }: PageCheckboxProps) {
+  const ref = useRef<HTMLInputElement>(null)
+  const ids = new Set(picked.map((p) => p.id))
+  const onPage = rides.filter((r) => ids.has(r.id)).length
+  const all = onPage === rides.length
+  useEffect(() => {
+    if (ref.current) ref.current.indeterminate = onPage > 0 && !all
+  }, [onPage, all])
+  return (
+    <input
+      ref={ref}
+      type="checkbox"
+      aria-label="Select all rides on this page"
+      checked={all}
+      disabled={!all && picked.length >= MAX_SELECTED}
+      onChange={() => (all ? onUnselect(rides) : onSelect(rides))}
+    />
   )
 }
 
@@ -405,7 +461,7 @@ function RideRow({ ride, units, picked, onPick }: RowProps) {
           type="checkbox"
           aria-label={`Select ${ride.name}`}
           checked={checked}
-          disabled={!checked && picked.length >= MAX_RIDES}
+          disabled={!checked && picked.length >= MAX_SELECTED}
           onChange={() => onPick({ id: ride.id, name: ride.name })}
         />
       </td>

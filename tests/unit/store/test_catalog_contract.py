@@ -689,6 +689,47 @@ def test_update_meta_errors(catalog: CatalogStore):
         catalog.update_meta(ride.id, RideMeta(bike_id="no-such-bike"))
 
 
+def test_update_metas_changes_several_rides_and_their_search(catalog: CatalogStore):
+    """Several rides can be edited together.
+
+    Given: two rides with no metadata; both get RPE 6, the Giant and tag "cobbles", the
+    first also a name.
+    Expect: each has its new metadata; searching "cobbles" finds both.
+    """
+    add_bikes(catalog)
+    first = make_ride()
+    second = make_ride(start=DEFAULT_START + timedelta(days=1))
+    for ride in (first, second):
+        catalog.add_ride(ride)
+    shared = RideMeta(rpe=6, bike_id=GIANT.id, tags=("cobbles",))
+
+    catalog.update_metas({first.id: replace(shared, name="Arenberg"), second.id: shared})
+
+    assert catalog.get_ride(first.id).meta == replace(shared, name="Arenberg")
+    assert catalog.get_ride(second.id).meta == shared
+    assert set(ids(catalog.search(Filters(text="cobbles")))) == {first.id, second.id}
+
+
+@pytest.mark.parametrize("bad", ["ride", "bike"])
+def test_update_metas_changes_nothing_when_one_fails(catalog: CatalogStore, bad: str):
+    """Editing several rides is all or nothing.
+
+    Given: two rides edited together, the second edit naming an unknown ride or bike.
+    Expect: ``RideNotFound`` or ``BikeNotFound``, and the first ride unchanged.
+    """
+    first = make_ride()
+    second = make_ride(start=DEFAULT_START + timedelta(days=1))
+    for ride in (first, second):
+        catalog.add_ride(ride)
+    other = "00000000-0000-0000-0000-000000000000" if bad == "ride" else second.id
+    other_meta = RideMeta(bike_id="no-such-bike" if bad == "bike" else None)
+
+    with pytest.raises(RideNotFound if bad == "ride" else BikeNotFound):
+        catalog.update_metas({first.id: RideMeta(rpe=3), other: other_meta})
+
+    assert catalog.get_ride(first.id).meta == RideMeta(), "the first ride should be unchanged"
+
+
 def test_bikes_are_listed_by_name_and_retired_ones_can_be_hidden(catalog: CatalogStore):
     """Bikes are listed alphabetically; retired bikes can be left out.
 
