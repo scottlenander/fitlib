@@ -1,4 +1,5 @@
 import type { Locator, Page } from '@playwright/test'
+import { BulkEdit } from './components/bulkEdit'
 import { Header } from './components/header'
 
 // The ride library (/): search, filters, the rides table and paging. Filters, sort and
@@ -30,11 +31,17 @@ export class LibraryPage {
   readonly previous: Locator
   readonly next: Locator
   readonly perPage: Locator
-  // Above the table: what's picked to compare ("Selected: …" or how many to tick).
+  // Above the table: what's selected ("Selected: …", "12 rides selected. …" or how many
+  // to tick).
   readonly selectionStatus: Locator
-  // "Compare (n)": disabled until 2 rides are picked.
+  // "Compare (n)": only enabled with 2 to 4 rides selected.
   readonly compareButton: Locator
+  // "Edit 2 rides": opens the bulk edit form for the selected rides.
+  readonly editButton: Locator
   readonly clearSelection: Locator
+  // The header checkbox that selects every ride on the page.
+  readonly selectPage: Locator
+  readonly bulkEdit: BulkEdit
 
   constructor(page: Page) {
     this.page = page
@@ -63,8 +70,11 @@ export class LibraryPage {
     this.next = this.pager.getByRole('button', { name: 'Next' })
     this.perPage = this.pager.getByLabel('Rides per page')
     this.selectionStatus = page.getByTestId('selection-status')
-    this.compareButton = page.getByRole('button', { name: /^Compare \(\d\)$/ })
+    this.compareButton = page.getByRole('button', { name: /^Compare \(\d+\)$/ })
+    this.editButton = page.getByRole('button', { name: /^Edit \d+ rides?$/ })
     this.clearSelection = page.getByRole('button', { name: 'Clear selection' })
+    this.selectPage = this.table.getByRole('checkbox', { name: 'Select all rides on this page' })
+    this.bulkEdit = new BulkEdit(page)
   }
 
   // Opens the library, optionally with URL parameters: { since: '2025-08-10', limit: '2' }.
@@ -83,7 +93,7 @@ export class LibraryPage {
     return this.rows.filter({ has: this.page.getByRole('link', { name, exact: true }) })
   }
 
-  // The checkbox that picks a ride to compare.
+  // The checkbox that selects a ride, to compare or edit.
   pick(name: string): Locator {
     return this.table.getByRole('checkbox', { name: `Select ${name}`, exact: true })
   }

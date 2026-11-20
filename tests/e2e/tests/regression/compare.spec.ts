@@ -74,20 +74,29 @@ test('pick two rides in the library and compare them', async ({ page }) => {
   })
 })
 
-test('at most four rides, kept while filtering, until cleared', async ({ page }) => {
+test('two to four rides compare; picks are kept while filtering, until cleared', async ({
+  page,
+}) => {
   const library = new LibraryPage(page)
 
   await test.step('Pick four rides', async () => {
     await library.goto()
     for (const ride of [ZWIFT, INTERVALS, EXPORT_A, EXPORT_B]) await library.pick(ride.name).check()
     await expect(library.compareButton).toHaveText('Compare (4)')
-    await expect(library.selectionStatus).toContainText('4 rides is the most you can compare')
+    await expect(library.selectionStatus).toHaveText(
+      `Selected: ${[ZWIFT, INTERVALS, EXPORT_A, EXPORT_B].map((r) => r.name).join(', ')}.`,
+    )
   })
 
-  await test.step('A fifth ride cannot be picked', async () => {
-    await expect(library.pick(HR_ONLY.name), {
-      message: 'Other rides should be disabled once 4 are picked',
+  await test.step('A fifth ride can be selected (to edit), but not compared', async () => {
+    await library.pick(HR_ONLY.name).check()
+    await expect(library.selectionStatus).toHaveText('5 rides selected. Compare takes 2 to 4.')
+    await expect(library.compareButton, {
+      message: 'Compare should be off with more than 4 rides selected',
     }).toBeDisabled()
+    await expect(library.editButton).toHaveText('Edit 5 rides')
+    await library.pick(HR_ONLY.name).uncheck()
+    await expect(library.compareButton).toBeEnabled()
   })
 
   await test.step('Picks stay when the list is filtered', async () => {
