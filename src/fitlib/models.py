@@ -208,7 +208,7 @@ class RideSummary:
 
 @dataclass(frozen=True)
 class AthleteEntry:
-    """One dated change to the athlete's FTP, weight or max heart rate.
+    """One dated change to the athlete's FTP, weight, max or threshold heart rate.
 
     Each value carries forward on its own until a later entry sets it again, so an entry can
     change just one of them.
@@ -218,12 +218,15 @@ class AthleteEntry:
         ftp: Functional threshold power in watts, or ``None`` to leave it unchanged.
         weight_kg: Body weight in kilograms, or ``None`` to leave it unchanged.
         max_hr: Maximum heart rate in bpm, or ``None`` to leave it unchanged.
+        threshold_hr: Threshold (lactate threshold) heart rate in bpm, or ``None`` to leave
+            it unchanged.
     """
 
     effective_from: date
     ftp: int | None = None
     weight_kg: float | None = None
     max_hr: int | None = None
+    threshold_hr: int | None = None
 
 
 @dataclass(frozen=True)
@@ -389,6 +392,8 @@ class TrendRow:
         avg_hr: Average heart rate, if the ride has heart rate.
         decoupling_pct: Aerobic decoupling, if worked out.
         best_20min_power: Best 20-minute average power, if the ride has one.
+        hr_squared_s: Riding seconds times heart rate squared, summed (bpm² · s), for
+            heart-rate TSS; ``None`` without heart rate.
     """
 
     id: str
@@ -404,6 +409,7 @@ class TrendRow:
     avg_hr: float | None
     decoupling_pct: float | None
     best_20min_power: float | None
+    hr_squared_s: float | None = None
 
     @property
     def local_date(self) -> date:

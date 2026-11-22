@@ -15,7 +15,7 @@ from fitlib.analysis.compare import (
     align,
     has_distance,
 )
-from fitlib.analysis.training import training
+from fitlib.analysis.training import athlete_profile, training
 from fitlib.api.deps import StoresDep
 from fitlib.api.routers.rides import find_ride
 from fitlib.api.schemas import ComparedRide, Comparison, ride_detail
@@ -90,7 +90,7 @@ def compare(
             "can't be lined up by it; line them up by time instead",
         ) from exc
     bikes = {b.id: b for b in stores.catalog.list_bikes()}
-    history = stores.catalog.athlete_history()
+    athlete = athlete_profile(stores.catalog)
     return Comparison(
         align=aligned.align,
         smooth=smooth,
@@ -98,7 +98,7 @@ def compare(
         x=aligned.x,
         rides=[
             ComparedRide(
-                ride=ride_detail(ride, training(stores.catalog, ride, history), bikes),
+                ride=ride_detail(ride, training(stores.catalog, ride, athlete), bikes),
                 series=series,
                 gap=aligned.gap[i] if aligned.gap is not None else None,
             )

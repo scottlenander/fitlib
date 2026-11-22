@@ -446,6 +446,7 @@ class MemoryCatalog:
                 avg_hr=s.avg_hr,
                 decoupling_pct=s.decoupling_pct,
                 best_20min_power=dict(s.power_curve).get(1200),
+                hr_squared_s=sum(sec * bpm * bpm for bpm, sec in s.hr_histogram) or None,
             )
             for ride in rides
             if (s := ride.summary)

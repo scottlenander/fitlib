@@ -582,6 +582,19 @@ def test_trend_rows(catalog: CatalogStore):
     assert row.local_date == date(2025, 8, 2)
     assert (window[1].np, window[1].kj, window[1].best_20min_power) == (None, None, None)
     assert window[1].indoor
+    # 120² x 600 s + 140² x 1800 s + 160² x 1100 s + 171² x 1 s, from the factory's histogram.
+    assert window[1].hr_squared_s == 72_109_241, "heart rate squared, summed over the ride"
+
+
+def test_trend_rows_without_heart_rate(catalog: CatalogStore):
+    """A ride without heart rate has nothing to give heart-rate TSS.
+
+    Given: a ride with an empty heart-rate histogram.
+    Expect: its trend row's ``hr_squared_s`` is ``None``.
+    """
+    catalog.add_ride(make_ride(hr_histogram=()))
+
+    assert catalog.trend_rows(None, None)[0].hr_squared_s is None
 
 
 def test_best_curve_between(catalog: CatalogStore):
@@ -613,11 +626,11 @@ def test_best_curve_between(catalog: CatalogStore):
 def test_athlete_history_entries(catalog: CatalogStore):
     """Athlete history entries are kept by date, oldest first; a date can be replaced or removed.
 
-    Given: entries for 1 Mar (FTP 250) and 1 Jan (FTP 240, 72 kg, max HR 188), then a new
-    1 Mar entry (FTP 255), then 1 Jan removed.
+    Given: entries for 1 Mar (FTP 250) and 1 Jan (FTP 240, 72 kg, max HR 188, threshold HR
+    165), then a new 1 Mar entry (FTP 255), then 1 Jan removed.
     Expect: after each step, the entries in date order with the latest values.
     """
-    january = AthleteEntry(date(2025, 1, 1), ftp=240, weight_kg=72.0, max_hr=188)
+    january = AthleteEntry(date(2025, 1, 1), ftp=240, weight_kg=72.0, max_hr=188, threshold_hr=165)
     march = AthleteEntry(date(2025, 3, 1), ftp=250)
     catalog.set_athlete_entry(march)
     catalog.set_athlete_entry(january)
@@ -1022,7 +1035,7 @@ def test_sqlite_catalog_persists_and_is_migrated(tmp_path: Path):
     """A SQLite catalog keeps its rides after being closed and reopened, at the latest schema.
 
     Given: a catalog file with one ride, closed and opened again.
-    Expect: the ride is still there and the schema version is 6 (the latest migration).
+    Expect: the ride is still there and the schema version is 7 (the latest migration).
     """
     path = tmp_path / "catalog.sqlite3"
     ride = make_ride(start=datetime(2025, 8, 2, tzinfo=UTC))
@@ -1036,7 +1049,7 @@ def test_sqlite_catalog_persists_and_is_migrated(tmp_path: Path):
     reopened.close()
 
     assert loaded == ride, "the ride should survive closing and reopening the catalog"
-    assert version == 6
+    assert version == 7
 
 
 def test_new_library_opened_twice_at_once(tmp_path: Path):
@@ -1067,7 +1080,7 @@ def test_new_library_opened_twice_at_once(tmp_path: Path):
         thread.join()
 
     assert errors == []
-    assert versions == [6] * 8
+    assert versions == [7] * 8
 
 
 def test_phase_1a_database_is_upgraded(tmp_path: Path):
@@ -1098,7 +1111,7 @@ def test_phase_1a_database_is_upgraded(tmp_path: Path):
     version = catalog.schema_version
     catalog.close()
 
-    assert version == 6
+    assert version == 7
     assert ride.metrics_version == 1, "the old ride should be marked for recompute"
     assert ride.summary.np is None and ride.summary.power_curve == ()
 
@@ -1208,6 +1221,36 @@ def test_changing_a_rides_time_zone_keeps_the_rest_and_moves_its_date(catalog: C
     assert [r.id for r in catalog.search(Filters(text="2025-08-01")).items] == [ride.id]
     with pytest.raises(RideNotFound):
         catalog.set_utc_offsets({"no-such-ride": (0, OffsetSource.DEFAULT)})
+
+
+def test_athlete_entries_survive_the_threshold_hr_upgrade(tmp_path: Path):
+    """Upgrading adds threshold heart rate without touching existing athlete entries.
+
+    Given: a catalog at schema version 6 with an athlete entry (FTP 250, max HR 188).
+    Expect: after opening it, the entry is unchanged with no threshold heart rate, and one
+        can be saved.
+    """
+    path = tmp_path / "catalog.sqlite3"
+    folder = resources.files("fitlib.store.local") / "migrations"
+    scripts = sorted(
+        (entry.name, entry.read_text()) for entry in folder.iterdir() if entry.name < "0007"
+    )
+    db = sqlite3.connect(path)
+    for _, script in scripts:
+        db.executescript(script)
+    db.execute("PRAGMA user_version = 6")
+    db.execute("INSERT INTO athlete_history VALUES ('2025-01-01', 250, NULL, 188)")
+    db.commit()
+    db.close()
+
+    catalog = SqliteCatalog(path)
+    before = catalog.athlete_history()
+    catalog.set_athlete_entry(AthleteEntry(date(2025, 2, 1), threshold_hr=165))
+    after = catalog.athlete_history()
+    catalog.close()
+
+    assert before == [AthleteEntry(date(2025, 1, 1), ftp=250, max_hr=188)]
+    assert after[1] == AthleteEntry(date(2025, 2, 1), threshold_hr=165)
 
 
 def test_existing_rides_keep_their_time_zone_as_from_their_file(tmp_path: Path):

@@ -450,8 +450,15 @@ class SqliteCatalog:
         """
         with self._tx() as db:
             db.execute(
-                "INSERT OR REPLACE INTO athlete_history VALUES (?, ?, ?, ?)",
-                (entry.effective_from.isoformat(), entry.ftp, entry.weight_kg, entry.max_hr),
+                "INSERT OR REPLACE INTO athlete_history "
+                "(effective_from, ftp, weight_kg, max_hr, threshold_hr) VALUES (?, ?, ?, ?, ?)",
+                (
+                    entry.effective_from.isoformat(),
+                    entry.ftp,
+                    entry.weight_kg,
+                    entry.max_hr,
+                    entry.threshold_hr,
+                ),  # fmt: skip
             )
 
     def delete_athlete_entry(self, effective_from: date) -> bool:
@@ -999,8 +1006,11 @@ class SqliteCatalog:
         query = (
             "SELECT r.id, r.start_ts, r.utc_offset_s, r.source, r.indoor, r.moving_s, "
             "r.distance_m, r.ascent_m, r.kj, r.np, r.avg_hr, r.decoupling_pct, "
-            "c.value AS best_20min_power FROM rides r LEFT JOIN ride_curves c "
-            "ON c.ride_id = r.id AND c.kind = 'power' AND c.duration_s = 1200 WHERE 1 = 1"
+            "c.value AS best_20min_power, h.hr_squared_s FROM rides r LEFT JOIN ride_curves c "
+            "ON c.ride_id = r.id AND c.kind = 'power' AND c.duration_s = 1200 "
+            "LEFT JOIN (SELECT ride_id, SUM(seconds * value * value) AS hr_squared_s "
+            "FROM ride_bins WHERE kind = 'hr' GROUP BY ride_id) h ON h.ride_id = r.id "
+            "WHERE 1 = 1"
         )
         params: list[int] = []
         if start is not None:
@@ -1026,6 +1036,7 @@ class SqliteCatalog:
                 avg_hr=r["avg_hr"],
                 decoupling_pct=r["decoupling_pct"],
                 best_20min_power=r["best_20min_power"],
+                hr_squared_s=r["hr_squared_s"],
             )
             for r in rows
         ]
@@ -1072,6 +1083,7 @@ class SqliteCatalog:
                 ftp=r["ftp"],
                 weight_kg=r["weight_kg"],
                 max_hr=r["max_hr"],
+                threshold_hr=r["threshold_hr"],
             )
             for r in rows
         ]

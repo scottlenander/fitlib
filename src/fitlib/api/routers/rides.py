@@ -12,7 +12,7 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, HTTPException, Query
 
 from fitlib.analysis.similar import similar_efforts, similar_routes
-from fitlib.analysis.training import training
+from fitlib.analysis.training import athlete_profile, training
 from fitlib.analysis.trends import route_progress
 from fitlib.api.deps import StoresDep
 from fitlib.api.schemas import (
@@ -140,10 +140,10 @@ def list_rides(
     )
     catalog = stores.catalog
     page = catalog.search(filters, sort=sort, descending=desc, offset=offset, limit=limit)
-    history = catalog.athlete_history()
+    athlete = athlete_profile(catalog)
     bikes = {b.id: b for b in catalog.list_bikes()}
     return RidePage(
-        items=[ride_item(r, training(catalog, r, history), bikes) for r in page.items],
+        items=[ride_item(r, training(catalog, r, athlete), bikes) for r in page.items],
         total=page.total,
         offset=page.offset,
         limit=page.limit,
@@ -230,7 +230,7 @@ def get_similar(
     """
     catalog = stores.catalog
     ride = find_ride(stores, ref)
-    history = catalog.athlete_history()
+    athlete = athlete_profile(catalog)
     bikes = {b.id: b for b in catalog.list_bikes()}
 
     def item(other: Ride) -> RideItem:
@@ -242,7 +242,7 @@ def get_similar(
         Returns:
             Its list entry, with TSS.
         """
-        return ride_item(other, training(catalog, other, history), bikes)
+        return ride_item(other, training(catalog, other, athlete), bikes)
 
     has_route = bool(catalog.route_cells(ride.id))
     if kind == "route":
@@ -276,12 +276,12 @@ def get_route_progress(stores: StoresDep, ref: str) -> RouteProgress:
     """
     catalog = stores.catalog
     ride = find_ride(stores, ref)
-    history = catalog.athlete_history()
+    athlete = athlete_profile(catalog)
     bikes = {b.id: b for b in catalog.list_bikes()}
     return RouteProgress(
         has_route=bool(catalog.route_cells(ride.id)),
         items=[
-            ride_item(r, training(catalog, r, history), bikes)
+            ride_item(r, training(catalog, r, athlete), bikes)
             for r in route_progress(catalog, ride)
         ],
     )

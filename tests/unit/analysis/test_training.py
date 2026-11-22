@@ -1,4 +1,4 @@
-"""FTP-based figures for imported rides, from the athlete history or an estimated FTP."""
+"""Training figures for imported rides: set or estimated FTP, and heart-rate TSS."""
 
 from __future__ import annotations
 
@@ -6,7 +6,8 @@ from datetime import date
 
 import pytest
 
-from fitlib.analysis.training import training
+from fitlib.analysis.training import BadBirthYear, athlete_profile, set_birth_year, training
+from fitlib.metrics.load import TssSource
 from fitlib.models import AthleteEntry
 from tests.unit.conftest import ImportedLibrary
 
@@ -72,7 +73,8 @@ def test_estimate_uses_the_best_ride_in_the_window(imported: ImportedLibrary):
 def test_ride_without_power_has_no_power_figures(imported: ImportedLibrary):
     """Without a power meter there is no FTP to apply, but heart-rate zones still work.
 
-    Given: FTP 250 and max HR 190 from 1 Aug; the 16 Aug ride with heart rate but no power.
+    Given: FTP 250 and max HR 190 from 1 Aug, no threshold heart rate or year of birth; the
+    16 Aug ride with heart rate but no power.
     Expect: no IF, TSS or power zones; HR zones for all 2700 s.
     """
     imported.catalog.set_athlete_entry(AthleteEntry(date(2025, 8, 1), ftp=250, max_hr=190))
@@ -80,6 +82,7 @@ def test_ride_without_power_has_no_power_figures(imported: ImportedLibrary):
     figures = training(imported.catalog, imported.ride(NO_POWER))
 
     assert (figures.intensity_factor, figures.tss, figures.power_zones) == (None, None, None)
+    assert (figures.tss_source, figures.threshold_hr) == (None, None)
     assert figures.hr_zones is not None and sum(figures.hr_zones) == 2700
 
 
@@ -98,3 +101,89 @@ def test_changing_ftp_applies_without_recomputing(imported: ImportedLibrary):
 
     assert before == pytest.approx(25.92)
     assert after == pytest.approx(40.5), "the new FTP should apply immediately"
+
+
+def test_ride_without_power_gets_tss_from_heart_rate(imported: ImportedLibrary):
+    """A ride without power gets its TSS from heart rate and the threshold heart rate.
+
+    Given: threshold HR 165 from 1 Aug; the 16 Aug ride, 45 min at 132 bpm, no power.
+    Expect: TSS 0.75 h x (132 / 165)² x 100 = 48, from heart rate, threshold not estimated;
+    still no IF.
+    """
+    imported.catalog.set_athlete_entry(AthleteEntry(date(2025, 8, 1), threshold_hr=165))
+
+    figures = training(imported.catalog, imported.ride(NO_POWER))
+
+    assert figures.tss == pytest.approx(48)
+    assert figures.tss_source is TssSource.HEART_RATE
+    assert (figures.threshold_hr, figures.threshold_hr_estimated) == (165, False)
+    assert figures.intensity_factor is None, "IF is a power figure"
+
+
+def test_threshold_hr_is_estimated_from_age(imported: ImportedLibrary):
+    """With no threshold heart rate set, it's estimated from the rider's age.
+
+    Given: born 1980 (45 in 2025), no athlete history; the 16 Aug ride at 132 bpm for 45 min.
+    Expect: threshold 159 bpm, marked estimated; TSS 0.75 x (132 / 159)² x 100.
+    """
+    set_birth_year(imported.catalog, 1980)
+
+    figures = training(imported.catalog, imported.ride(NO_POWER))
+
+    assert (figures.threshold_hr, figures.threshold_hr_estimated) == (159, True)
+    assert figures.tss == pytest.approx(75 * (132 / 159) ** 2)
+
+
+def test_a_set_threshold_hr_wins_over_the_age_estimate(imported: ImportedLibrary):
+    """A threshold heart rate set in the history is used rather than the estimate.
+
+    Given: born 1980 and threshold HR 165 from 1 Aug.
+    Expect: threshold 165, not estimated.
+    """
+    set_birth_year(imported.catalog, 1980)
+    imported.catalog.set_athlete_entry(AthleteEntry(date(2025, 8, 1), threshold_hr=165))
+
+    figures = training(imported.catalog, imported.ride(NO_POWER))
+
+    assert (figures.threshold_hr, figures.threshold_hr_estimated) == (165, False)
+
+
+def test_rides_with_power_keep_power_tss(imported: ImportedLibrary):
+    """Heart rate doesn't change the TSS of a ride with power.
+
+    Given: FTP 250 and threshold HR 120 (far below the ride's heart rate) from 10 Aug; the
+    12 Aug ride, 30 min at 180 W.
+    Expect: the power TSS of 25.9, from power.
+    """
+    imported.catalog.set_athlete_entry(AthleteEntry(date(2025, 8, 10), ftp=250, threshold_hr=120))
+
+    figures = training(imported.catalog, imported.ride(SMART))
+
+    assert figures.tss == pytest.approx(25.92)
+    assert figures.tss_source is TssSource.POWER
+
+
+@pytest.mark.parametrize("year", [1899, 2026], ids=["too-early", "future"])
+def test_impossible_birth_years_are_refused(imported: ImportedLibrary, year: int):
+    """Years of birth before 1900 or in the future are refused, and nothing is saved.
+
+    Given: today in 2025; a year before 1900, then next year.
+    Expect: ``BadBirthYear``, and still no year of birth.
+    """
+    with pytest.raises(BadBirthYear, match="from 1900 to 2025"):
+        set_birth_year(imported.catalog, year, today=date(2025, 6, 1))
+
+    assert athlete_profile(imported.catalog).birth_year is None
+
+
+def test_birth_year_can_be_cleared(imported: ImportedLibrary):
+    """A year of birth can be set and cleared.
+
+    Given: 1980 set, then cleared.
+    Expect: 1980, then none.
+    """
+    set_birth_year(imported.catalog, 1980)
+    saved = athlete_profile(imported.catalog).birth_year
+    set_birth_year(imported.catalog, None)
+
+    assert (saved, athlete_profile(imported.catalog).birth_year) == (1980, None)

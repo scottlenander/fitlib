@@ -10,10 +10,10 @@ from rich.table import Table
 
 from fitlib import display
 from fitlib.analysis import trends
-from fitlib.analysis.training import training
+from fitlib.analysis.training import athlete_profile, training
 from fitlib.analysis.trends import BadRange, Period, View, resolve_range
 from fitlib.cli.common import UnitsOption, app, fail, find_ride, library, out
-from fitlib.cli.output import section
+from fitlib.cli.output import print_tss_notes, section, tss_text
 
 trends_app = typer.Typer(
     help="Trends: volume, fitness, FTP, efficiency and best efforts over time.",
@@ -80,7 +80,10 @@ def _without_tss(count: int) -> None:
     """
     if count:
         rides = "ride has" if count == 1 else "rides have"
-        out.print(f"{count} {rides} no TSS (no power, or no FTP) and count as 0.")
+        out.print(
+            f"{count} {rides} no TSS (no power or FTP, and no heart rate or threshold heart "
+            "rate) and count as 0."
+        )
 
 
 @trends_app.command(
@@ -286,8 +289,8 @@ def progress(
         chosen = lib.units(units)
         has_route = bool(catalog.route_cells(found.id))
         rides = trends.route_progress(catalog, found)
-        history = catalog.athlete_history()
-        figures = {r.id: training(catalog, r, history) for r in rides}
+        athlete = athlete_profile(catalog)
+        figures = {r.id: training(catalog, r, athlete) for r in rides}
     if not has_route:
         out.print(f"{found.display_name} has no GPS positions, so it has no route to follow.")
         return
@@ -308,9 +311,10 @@ def progress(
             display.watts(s.avg_power),
             display.watts(s.np),
             display.bpm(s.avg_hr),
-            display.tss(figures[r.id].tss),
+            tss_text(figures[r.id]),
             "this ride" if r.id == found.id else "",
         )
     out.print(table)
+    print_tss_notes(figures.values())
     if len(rides) == 1:
         out.print("No other rides on this route yet.")

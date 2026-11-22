@@ -14,8 +14,10 @@ from datetime import UTC, date, datetime, time, timedelta
 from enum import StrEnum
 
 from fitlib.analysis.similar import similar_routes
+from fitlib.analysis.training import AthleteProfile, athlete_profile, threshold_hr_on
 from fitlib.metrics import load
-from fitlib.models import AthleteEntry, CurveBest, Ride, TrendRow
+from fitlib.metrics.load import TssSource
+from fitlib.models import CurveBest, Ride, TrendRow
 from fitlib.store.interfaces import CatalogStore
 
 # Fitness (CTL) and fatigue (ATL): exponentially weighted averages of daily TSS over these.
@@ -82,13 +84,16 @@ class RideLoad:
         row: The ride's trend figures.
         ftp: The FTP used for its TSS, or ``None``.
         ftp_estimated: Whether ``ftp`` was estimated from recent rides.
-        tss: Training Stress Score, or ``None`` (no power, or no FTP to compare with).
+        tss: Training Stress Score, or ``None`` (no power TSS, and no heart rate or no
+            threshold heart rate to compare with).
+        tss_source: Whether ``tss`` came from power or heart rate.
     """
 
     row: TrendRow
     ftp: float | None
     ftp_estimated: bool
     tss: float | None
+    tss_source: TssSource | None = None
 
 
 @dataclass(frozen=True)
@@ -103,7 +108,7 @@ class VolumeBucket:
         ascent_m: Climbing in metres.
         kj: Work in kilojoules.
         tss: Total Training Stress Score.
-        rides_without_tss: Rides that add no TSS (no power, or no FTP).
+        rides_without_tss: Rides that add no TSS (no power TSS and no heart-rate TSS).
     """
 
     start: date
@@ -142,7 +147,8 @@ class Fitness:
 
     Attributes:
         days: One entry per day, oldest first.
-        rides_without_tss: Rides in the range that add no TSS (no power, or no FTP).
+        rides_without_tss: Rides in the range that add no TSS (neither from power nor heart
+            rate).
     """
 
     days: list[FitnessDay]
@@ -319,24 +325,25 @@ def ride_loads(
     catalog: CatalogStore,
     since: date | None,
     until: date | None,
-    history: Sequence[AthleteEntry] | None = None,
+    athlete: AthleteProfile | None = None,
 ) -> list[RideLoad]:
     """Work out TSS for every ride in a local date range, as the ride page does.
 
     The FTP is the one set in the athlete history on the ride's date, or else estimated from
-    the six weeks before the ride.
+    the six weeks before the ride. Rides without power TSS use heart rate, with the
+    threshold heart rate set on that date or estimated from the rider's age.
 
     Args:
         catalog: The library's catalog.
         since: First local date, or ``None`` for the first ride.
         until: Last local date, or ``None`` for the latest ride.
-        history: The athlete history, if already loaded.
+        athlete: The athlete's profile, if already loaded.
 
     Returns:
         The rides in the range, oldest first.
     """
-    if history is None:
-        history = catalog.athlete_history()
+    if athlete is None:
+        athlete = athlete_profile(catalog)
     start, end = utc_bounds(since, until)
     if start is not None:
         start -= timedelta(days=load.EFTP_LOOKBACK_DAYS)  # the first rides' estimates need these
@@ -345,12 +352,13 @@ def ride_loads(
     for row, estimate in zip(rows, _estimates(rows), strict=True):
         if not _in_range(row.local_date, since, until):
             continue
-        ftp: float | None = load.values_on(history, row.local_date).ftp
+        ftp: float | None = load.values_on(athlete.history, row.local_date).ftp
         estimated = False
         if ftp is None and row.np is not None:
             ftp, estimated = estimate, estimate is not None
-        tss = load.training_stress_score(row.moving_s, row.np, ftp)
-        loads.append(RideLoad(row, ftp, estimated, tss))
+        threshold_hr, _ = threshold_hr_on(athlete, row.local_date)
+        tss, source = load.ride_tss(row.moving_s, row.np, ftp, row.hr_squared_s, threshold_hr)
+        loads.append(RideLoad(row, ftp, estimated, tss, source))
     return loads
 
 
