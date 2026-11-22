@@ -14,6 +14,7 @@ from rich.table import Table
 from fitlib import display
 from fitlib.analysis.compare import MAX_RIDES, MIN_RIDES
 from fitlib.analysis.similar import similar_efforts, similar_routes
+from fitlib.analysis.timezone import default_zone
 from fitlib.analysis.training import athlete_profile, training
 from fitlib.cli.common import (
     EXIT_IMPORT_FAILURES,
@@ -34,6 +35,7 @@ from fitlib.ingest.scanner import scan
 from fitlib.ingest.summarize import METRICS_VERSION
 from fitlib.metadata import KEEP, MetaEdit, apply_edit
 from fitlib.metrics.curves import best_at
+from fitlib.metrics.zwift import UnknownWorld, WorldNeedsZwift, in_world
 from fitlib.models import (
     Filters,
     SortKey,
@@ -132,6 +134,10 @@ def list_(
     ] = None,
     min_rpe: Annotated[int | None, typer.Option(min=1, max=10, help="Effort at least.")] = None,
     max_rpe: Annotated[int | None, typer.Option(min=1, max=10, help="Effort at most.")] = None,
+    world: Annotated[
+        str | None,
+        typer.Option(help="Only Zwift rides in this world, e.g. watopia or makuri-islands."),
+    ] = None,
     units: UnitsOption = None,
 ) -> None:
     """Print one page of rides matching the filters as a table.
@@ -153,7 +159,11 @@ def list_(
         bike: Only rides on this bike.
         min_rpe: Only rides with a perceived effort of at least this.
         max_rpe: Only rides with a perceived effort of at most this.
+        world: Only Zwift rides in this world.
         units: Units to show distance in; the config's by default.
+
+    Raises:
+        typer.Exit: An unknown world, or a world with a source other than Zwift (code 2).
     """
     filters = Filters(
         text=text,
@@ -167,6 +177,11 @@ def list_(
         min_rpe=min_rpe,
         max_rpe=max_rpe,
     )
+    if world is not None:
+        try:
+            filters = in_world(filters, world)
+        except (UnknownWorld, WorldNeedsZwift) as exc:
+            raise fail(str(exc)) from None
     with library(ctx) as lib:
         catalog = lib.stores.catalog
         if bike is not None:
@@ -225,7 +240,8 @@ def show(
         figures = training(catalog, found)
         bike = catalog.get_bike(found.meta.bike_id) if found.meta.bike_id else None
         chosen = lib.units(units)
-    print_ride(found, figures, chosen, bike)
+        zone = default_zone(catalog)
+    print_ride(found, figures, chosen, bike, zone)
 
 
 @app.command(help="List rides on the same route as a ride, or with a similar effort (--effort).")

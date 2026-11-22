@@ -22,7 +22,9 @@ from fitlib.models import (
     BikeDefault,
     BikeKind,
     BikeSlot,
+    Box,
     Filters,
+    GeoSummary,
     OffsetSource,
     RideMeta,
     SortKey,
@@ -700,6 +702,27 @@ def test_update_meta_errors(catalog: CatalogStore):
         catalog.update_meta("00000000-0000-0000-0000-000000000000", RideMeta())
     with pytest.raises(BikeNotFound):
         catalog.update_meta(ride.id, RideMeta(bike_id="no-such-bike"))
+
+
+def test_rides_starting_in_a_box(catalog: CatalogStore):
+    """Rides can be filtered on where they start.
+
+    Given: a ride starting in northern France (the factory's), a ride starting at
+    -11.64, 166.95, and a ride without positions.
+    Expect: a box around the second finds only it; a box around France only the first.
+    """
+    france = make_ride()
+    island = make_ride(start=DEFAULT_START + timedelta(days=1),
+                       geo=GeoSummary(-11.64, 166.95, -11.65, 166.94, -11.63, 166.96))  # fmt: skip
+    nowhere = make_ride(start=DEFAULT_START + timedelta(days=2), geo=None, has_gps=False)
+    for ride in (france, island, nowhere):
+        catalog.add_ride(ride)
+
+    near_island = catalog.search(Filters(starts_in=Box(-11.7, 166.9, -11.6, 167.0)))
+    near_france = catalog.search(Filters(starts_in=Box(50.0, 3.0, 51.0, 4.0)))
+
+    assert ids(near_island) == [island.id]
+    assert ids(near_france) == [france.id]
 
 
 def test_update_metas_changes_several_rides_and_their_search(catalog: CatalogStore):

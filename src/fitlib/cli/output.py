@@ -13,6 +13,7 @@ from fitlib.importer import ImportReport
 from fitlib.metrics import zones
 from fitlib.metrics.curves import best_at
 from fitlib.metrics.load import TssSource
+from fitlib.metrics.zwift import zwift_world
 from fitlib.models import (
     Bike,
     Ride,
@@ -38,19 +39,29 @@ def print_report(report: ImportReport) -> None:
             out.print(table)
 
 
-def print_ride(ride: Ride, figures: Training, units: Units, bike: Bike | None = None) -> None:
+def print_ride(
+    ride: Ride,
+    figures: Training,
+    units: Units,
+    bike: Bike | None = None,
+    default_zone: str | None = None,
+) -> None:
     """Print a ride: name, when and where, main figures, training, zones, efforts and laps.
 
     Args:
         ride: The ride to print.
-        figures: Its FTP-based figures.
+        figures: Its training figures.
         units: Units for distance, speed and height.
         bike: The ride's bike, if it has one.
+        default_zone: The library's default time zone, for saying where the time came from.
     """
     r = ride.summary
     out.print(f"[bold]{ride.display_name}[/bold]  ({ride.short_id})")
     where = "indoor" if r.indoor else "outdoor"
-    out.print(f"{display.start_time(r)} · {r.device or r.source.label} · {where}")
+    world = zwift_world(r)
+    world_part = f" · {world.name}" if world else ""
+    out.print(f"{display.start_time(r)} · {r.device or r.source.label}{world_part} · {where}")
+    out.print(f"[dim]{display.time_zone_note(r, default_zone)}[/dim]")
     extras = []
     if bike is not None:
         extras.append(f"Bike: {bike.name}" + (" (default)" if ride.meta.bike_from_default else ""))

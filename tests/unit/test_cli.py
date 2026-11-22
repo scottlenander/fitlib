@@ -409,6 +409,74 @@ def test_rides_without_power_show_tss_from_heart_rate(imported: Path):
     assert re.search(r"Threshold heart rate\s+159 bpm \(estimated from age\)", shown.output)
 
 
+def test_show_names_the_zwift_world_and_where_the_time_came_from(imported: Path):
+    """``show`` gives a Zwift ride's world, and says where each ride's local time came from.
+
+    Given: the 2 Aug Zwift ride (Watopia, dated by its file name) and the 12 Aug Garmin ride.
+    Expect: "Watopia" and "Local time from the file name." for the first; "Local time from the
+    device." and no world for the second.
+    """
+    zwift = run(imported, "show", ride_prefix(imported, "2025-08-02", "2025-08-03"))
+    garmin = run(imported, "show", ride_prefix(imported, "2025-08-12", "2025-08-13"))
+
+    assert " · Watopia · indoor" in zwift.output
+    assert "Local time from the file name." in zwift.output
+    assert "Local time from the device." in garmin.output
+    assert "Watopia" not in garmin.output
+
+
+def test_show_explains_utc_and_the_default_time_zone(imported: Path):
+    """A ride without a time zone is in UTC until a default is set, which ``show`` names.
+
+    Given: the ride whose file has no time zone (02:00 UTC on 11 Aug); then the default set
+    to New York.
+    Expect: first the UTC note pointing at ``fitlib timezone``; then the default named.
+    """
+    prefix = ride_prefix(imported, "2025-08-11", "2025-08-12")
+
+    before = run(imported, "show", prefix)
+    run(imported, "timezone", "America/New_York")
+    after = run(imported, "show", prefix)
+
+    assert "Shown in UTC: the file doesn't say where it was ridden." in before.output
+    assert "Time zone: your default (America/New York), as the file doesn't say." in after.output
+
+
+@pytest.mark.parametrize(
+    ("args", "found"),
+    [(["--world", "watopia"], True), (["--world", "london"], False)],
+    ids=["watopia", "london"],
+)
+def test_list_by_world(imported: Path, args: list[str], found: bool):
+    """``list --world`` finds Zwift rides in that world.
+
+    Given: the fixture library, whose one Zwift ride is in Watopia.
+    Expect: the 2 Aug ride for Watopia; no rides for London.
+    """
+    result = run(imported, "list", *args)
+
+    assert ("2025-08-02" in result.output) is found
+    assert ("No rides found." in result.output) is not found
+
+
+@pytest.mark.parametrize(
+    ("args", "message"),
+    [(["--world", "atlantis"], "No Zwift world called 'atlantis'"),
+     (["--world", "watopia", "--source", "garmin"], "Zwift worlds are for Zwift rides")],
+    ids=["unknown", "other-source"],
+)  # fmt: skip
+def test_list_refuses_bad_worlds(imported: Path, args: list[str], message: str):
+    """An unknown world, or a world with another source, is an error.
+
+    Given: "atlantis"; Watopia with ``--source garmin``.
+    Expect: the reason, and exit code 2.
+    """
+    result = run(imported, "list", *args)
+
+    assert message in result.output
+    assert result.exit_code == EXIT_ERROR
+
+
 def test_recompute_when_up_to_date_and_for_one_ride(imported: Path):
     """``fitlib recompute`` does nothing when every ride is current, and can redo one ride.
 

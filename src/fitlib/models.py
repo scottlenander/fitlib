@@ -89,6 +89,35 @@ class Lap:
 
 
 @dataclass(frozen=True)
+class Box:
+    """An area between two latitudes and two longitudes (not across the date line).
+
+    Attributes:
+        min_lat: Southern edge, in degrees.
+        min_lon: Western edge, in degrees.
+        max_lat: Northern edge, in degrees.
+        max_lon: Eastern edge, in degrees.
+    """
+
+    min_lat: float
+    min_lon: float
+    max_lat: float
+    max_lon: float
+
+    def contains(self, lat: float, lon: float) -> bool:
+        """Whether a position is inside the box (edges included).
+
+        Args:
+            lat: Latitude in degrees.
+            lon: Longitude in degrees.
+
+        Returns:
+            ``True`` if it is.
+        """
+        return self.min_lat <= lat <= self.max_lat and self.min_lon <= lon <= self.max_lon
+
+
+@dataclass(frozen=True)
 class GeoSummary:
     """Where an outdoor ride happened.
 
@@ -467,6 +496,7 @@ class Filters:
         has_bike: Only rides with (``True``) or without (``False``) a bike set.
         min_rpe: Only rides with a perceived effort of at least this.
         max_rpe: Only rides with a perceived effort of at most this.
+        starts_in: Only rides whose first position is inside this box (e.g. a Zwift world).
     """
 
     text: str | None = None
@@ -482,6 +512,7 @@ class Filters:
     has_bike: bool | None = None
     min_rpe: int | None = None
     max_rpe: int | None = None
+    starts_in: Box | None = None
 
 
 @dataclass(frozen=True)

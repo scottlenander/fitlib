@@ -344,3 +344,81 @@ def test_tags_are_empty_before_any_are_added(reader: Api):
     response = reader.client.get("/api/tags")
 
     assert response.json() == []
+
+
+def test_rides_say_where_their_time_zone_came_from(reader: Api):
+    """Each ride says where its local time came from.
+
+    Given: a Garmin ride (its file's local time), the Zwift ride (dated by its file name) and
+    the ride with no time zone (no default set).
+    Expect: "device", "file_name" and "none", in the list and in the detail.
+    """
+    items = {
+        r["id"]: r for r in reader.client.get("/api/rides", params={"limit": 200}).json()["items"]
+    }
+
+    for name, source in ((INTERVALS, "device"), (ZWIFT, "file_name"), (NO_TIME_ZONE, "none")):
+        detail = reader.client.get(f"/api/rides/{reader.ids[name]}").json()
+        assert items[reader.ids[name]]["time_zone_source"] == source
+        assert detail["time_zone_source"] == source
+
+
+def test_zwift_rides_name_their_world(reader: Api):
+    """Zwift rides name the world they were ridden in; other rides have none.
+
+    Given: the Zwift ride (on the fixture's Watopia loop) and a Garmin ride.
+    Expect: "Watopia" for the Zwift ride; nothing for the Garmin ride.
+    """
+    zwift = reader.client.get(f"/api/rides/{reader.ids[ZWIFT]}").json()
+    garmin = reader.client.get(f"/api/rides/{reader.ids[INTERVALS]}").json()
+
+    assert zwift["zwift_world"] == "Watopia"
+    assert garmin["zwift_world"] is None
+
+
+@pytest.mark.parametrize(
+    ("params", "expected"),
+    [({"world": "watopia"}, {ZWIFT}), ({"world": "London"}, set()),
+     ({"world": "watopia", "source": "zwift"}, {ZWIFT})],
+    ids=["watopia", "london", "with-zwift-source"],
+)  # fmt: skip
+def test_list_filters_by_world(reader: Api, params: dict, expected: set[str]):
+    """The world filter finds Zwift rides ridden there.
+
+    Given: the fixture library (one Zwift ride, in Watopia).
+    Expect: Watopia finds it; London (any case) finds nothing; with the Zwift source too.
+    """
+    items = reader.client.get("/api/rides", params=params).json()["items"]
+
+    assert {r["id"] for r in items} == {reader.ids[name] for name in expected}
+
+
+@pytest.mark.parametrize(
+    ("params", "message"),
+    [({"world": "atlantis"}, "No Zwift world called 'atlantis'"),
+     ({"world": "watopia", "source": "garmin"}, "Zwift worlds are for Zwift rides")],
+    ids=["unknown", "other-source"],
+)  # fmt: skip
+def test_list_refuses_bad_worlds(reader: Api, params: dict, message: str):
+    """An unknown world, or a world with another source, is refused with the reason.
+
+    Given: "atlantis"; Watopia with the Garmin source.
+    Expect: 422 saying why.
+    """
+    response = reader.client.get("/api/rides", params=params)
+
+    assert response.status_code == 422
+    assert message in response.json()["detail"]
+
+
+def test_zwift_worlds_are_listed(reader: Api):
+    """The worlds the filter takes are listed with their names.
+
+    Given: the API.
+    Expect: 12 worlds, Watopia first, Makuri Islands among them.
+    """
+    worlds = reader.client.get("/api/zwift-worlds").json()
+
+    assert len(worlds) == 12
+    assert worlds[0] == {"slug": "watopia", "name": "Watopia"}
+    assert {"slug": "makuri-islands", "name": "Makuri Islands"} in worlds

@@ -13,6 +13,7 @@ from fitlib.analysis.training import BadBirthYear
 from fitlib.analysis.trends import BadRange
 from fitlib.ingest.localtime import UnknownTimeZone
 from fitlib.metadata import InvalidTag
+from fitlib.metrics.zwift import UnknownWorld, WorldNeedsZwift
 from fitlib.store.interfaces import (
     AmbiguousBike,
     AmbiguousRideId,
@@ -34,6 +35,8 @@ STATUS: dict[type[Exception], int] = {
     UnknownTimeZone: 422,
     BadRange: 422,
     BadBirthYear: 422,
+    UnknownWorld: 422,
+    WorldNeedsZwift: 422,
     BadWatchFolder: 422,
     AlreadyWatched: 409,
     NotWatched: 404,

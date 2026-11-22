@@ -31,6 +31,7 @@ from fitlib.api.schemas import (
 )
 from fitlib.ingest.normalize import VALUE_COLUMNS
 from fitlib.metadata import KEEP, MetaEdit, apply_edit, normalize_tags
+from fitlib.metrics.zwift import in_world
 from fitlib.models import Filters, Ride, SortKey, Source
 from fitlib.store.factory import Stores
 
@@ -93,6 +94,9 @@ def list_rides(
     has_bike: bool | None = None,
     min_rpe: Annotated[int | None, Query(ge=1, le=10)] = None,
     max_rpe: Annotated[int | None, Query(ge=1, le=10)] = None,
+    world: Annotated[
+        str | None, Query(description="Zwift rides in this world, e.g. watopia.")
+    ] = None,
     sort: SortKey = SortKey.START,
     desc: bool = True,
     offset: Annotated[int, Query(ge=0)] = 0,
@@ -115,6 +119,7 @@ def list_rides(
         has_bike: Only rides with (or without) a bike.
         min_rpe: Lowest perceived effort.
         max_rpe: Highest perceived effort.
+        world: Only Zwift rides in this world (by short name).
         sort: What to sort by.
         desc: Largest or newest first.
         offset: Matching rides to skip.
@@ -122,6 +127,10 @@ def list_rides(
 
     Returns:
         The page of rides, with the total that match.
+
+    Raises:
+        UnknownWorld: ``world`` isn't a Zwift world (a 422).
+        WorldNeedsZwift: ``world`` with a source other than Zwift (a 422).
     """
     filters = Filters(
         text=q,
@@ -138,6 +147,8 @@ def list_rides(
         min_rpe=min_rpe,
         max_rpe=max_rpe,
     )
+    if world:
+        filters = in_world(filters, world)
     catalog = stores.catalog
     page = catalog.search(filters, sort=sort, descending=desc, offset=offset, limit=limit)
     athlete = athlete_profile(catalog)
