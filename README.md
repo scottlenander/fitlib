@@ -356,11 +356,13 @@ and imports new `.fit` and `.zip` files in them, searched recursively, as for `i
 On a Mac, watching a folder in Documents needs the same permission (Files and Folders) as
 importing from it.
 
-### Encrypted sync
+### Encrypted backup (optional)
 
-`fitlib sync` keeps an encrypted copy of the library in a folder of your choice: iCloud
-Drive, Dropbox, a NAS or a USB drive. Everything is encrypted on this computer before it is
-written there; reading, search and analysis stay local.
+Nothing leaves this computer unless you set this up. `fitlib sync` keeps an encrypted copy of
+the library in a folder you choose, typically a USB drive or NAS (a cloud-synced folder works
+too). Everything is encrypted on this computer before it is written there; reading, search
+and analysis stay local. The same encrypted format is the groundwork for a possible web
+version later.
 
 ```bash
 mkdir -p ~/Library/Mobile\ Documents/com~apple~CloudDocs/fitlib
@@ -392,6 +394,27 @@ fitlib sync restore ~/Library/Mobile\ Documents/com~apple~CloudDocs/fitlib
 - **Restoring** only writes into an empty library, checks every object against the manifest,
   and writes the catalog last, so an interrupted restore can be run again. A copy from a
   newer fitlib is refused.
+
+### Security on this computer
+
+fitlib has no login: it's meant for the account that runs it.
+
+- `fitlib serve` listens on 127.0.0.1 only, so other computers can't reach it (`--host`
+  can change that, with a warning).
+- Web pages in your own browser can send requests to `localhost`, so the server also checks
+  where requests come from:
+  - It only answers requests addressed to `localhost`, `127.0.0.1` or `[::1]`, so a site
+    that points its own domain at your computer ("DNS rebinding") can't read the library.
+  - Anything that changes the library (POST, PUT, PATCH, DELETE) is only accepted from
+    fitlib's own pages: a browser's `Origin` must match, and a `Sec-Fetch-Site` naming
+    another site is refused. The command line, scripts and `curl` send neither and work as
+    before.
+- Every response tells the browser not to embed it in other sites, not to guess file types,
+  not to send referrers, and (Content-Security-Policy) to run only fitlib's own scripts and
+  talk only to fitlib. The API docs at `/docs` load from a CDN, so they go without the
+  policy.
+- The library folder is readable only by your account (mode 700). Existing libraries are
+  tightened the next time they're opened.
 
 ### What's stored
 
@@ -430,8 +453,8 @@ search find rides by their new names (with the start time).
 | `fitlib/importer.py` | Hash, dedupe, analyse in worker processes, store |
 | `fitlib/recompute.py` | Rebuild rides from their raw files when calculations change |
 | `fitlib/watcher.py` | Watched folders: which files, settling, scans, and the background watcher the server runs |
-| `fitlib/sync/` | Encrypted sync: `crypto.py` (sealed objects, object names, the passphrase keyfile), `keys.py` (Keychain), `engine.py` (setup, push, status, restore) |
-| `fitlib/api/` | FastAPI app: `app.py` builds it, `routers/` one per area, `schemas.py` request/response models, `errors.py` error responses, `static.py` the browser app's files |
+| `fitlib/sync/` | Optional encrypted backup: `crypto.py` (sealed objects, object names, the passphrase keyfile), `keys.py` (Keychain), `engine.py` (setup, push, status, restore) |
+| `fitlib/api/` | FastAPI app: `app.py` builds it, `routers/` one per area, `schemas.py` request/response models, `errors.py` error responses, `security.py` refusing other sites and adding security headers, `static.py` the browser app's files |
 | `fitlib/cli/` | The `fitlib` command: `rides`, `bikes`, `athlete`, `timezone`, `trends`, `watch`, `sync` and `serve` commands, shared `common` helpers and `output` printing |
 | `web/` | The browser app (React, Vite, TanStack Query, ECharts): `src/pages/`, `src/components/`, `src/api/` (typed client; `schema.d.ts` is generated), `src/format.ts` (units and figures, as `display.py`) |
 | `tests/e2e/` | Playwright tests for the browser app; conventions in `.claude/skills/playwright-tests/` |
@@ -592,7 +615,7 @@ date.
 - **Recompute** (`tests/unit/test_recompute.py`): outdated rides brought up to date with metadata
   kept; streams rewritten; a Zwift ride dated 1989 repaired (its time zone from its name); a Zwift ride without distance
   given it; missing raw files reported.
-- **Encrypted sync** (`tests/unit/sync/`, `tests/unit/store/test_snapshot.py`): sealed objects
+- **Encrypted backup** (`tests/unit/sync/`, `tests/unit/store/test_snapshot.py`): sealed objects
   round trip; a changed byte in any part, another key, or another object's place refused;
   object names stable and revealing nothing; the keyfile opening only with its passphrase,
   its settings authenticated, short passphrases refused. Push then restore giving the same
@@ -605,6 +628,15 @@ date.
   is written; status; passphrase changes; no ride details in the logs. Snapshots leave out
   this computer's data and are byte-identical when nothing changed. The commands run end to
   end with an in-memory keychain; the Keychain store against a stand-in keyring backend.
+- **Security** (`tests/api/test_security.py`, `tests/unit/store/test_private_library.py`):
+  loopback hosts answered and other hosts (DNS rebinding) refused on pages and API; writes
+  of every method and multipart uploads from another site, another port, `Origin: null` or a
+  cross-site `Sec-Fetch-Site` refused with nothing changed; the app's own pages, same-origin
+  and typed-in requests, and tools without browser headers accepted; reads sent without
+  CORS permission; security headers on pages, API answers, errors and refusals, and no CSP
+  on the API docs; any host answered (writes still checked) when serving on a network
+  address; `fitlib serve` refusing other hosts by default. Library folders created or
+  tightened to 0700, including by restore.
 - **Watched folders** (`tests/unit/test_watcher.py`): which folders can be watched (full
   paths, `~`, not the library or near it, inside the temp folder in e2e mode); which files
   (`.fit`/`.zip`, not Zwift's in-progress file or hidden ones); summing up a file's or a zip's
@@ -723,6 +755,12 @@ being written, and nothing watched),
     section for a ride alone on its route.
   - *Ride stats*: switching the charts between time and distance; the zoom bar's label, and
     Show whole ride enabled once zoomed in and resetting it.
+  - *Security*: the app served with its Content-Security-Policy, and the library, a ride
+    with its charts, Trends, Bikes and Settings working under it with no violations; a
+    remembered theme applied by the theme script alone, before the app's code runs. A page
+    on another site (served by the test on another local port, since Chromium already
+    keeps public sites away from localhost) uploading to the import: fitlib answers 403,
+    read from the browser's network log, and the page can't see the answer.
   - *Phone width*: the library, ride, compare and trends pages (and Settings, in *Watched
     folders*) don't scroll sideways on a 390 px
     screen, and pass the accessibility scan there (wide tables scroll in boxes a keyboard

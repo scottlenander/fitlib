@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import tempfile
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterable
 from contextlib import asynccontextmanager
 from functools import partial
 from pathlib import Path
@@ -26,6 +26,7 @@ from fitlib.api.routers import (
     worlds,
 )
 from fitlib.api.routers import watch as watch_routes
+from fitlib.api.security import LOOPBACK_HOSTS, LocalOnly
 from fitlib.api.static import default_static_dir, mount_app
 from fitlib.config import Config
 from fitlib.store.factory import open_stores
@@ -39,6 +40,7 @@ def create_app(
     e2e_fixtures: Path | None = None,
     watch: bool = False,
     watcher: Watcher | None = None,
+    allowed_hosts: Iterable[str] | None = LOOPBACK_HOSTS,
 ) -> FastAPI:
     """Build the app for one library.
 
@@ -53,6 +55,8 @@ def create_app(
             Watched folders must then be inside the temp folder too.
         watch: Import new rides from the watched folders while the app runs.
         watcher: The watcher to run instead of a new one (for tests); implies ``watch``.
+        allowed_hosts: Host names requests may name (loopback by default, against DNS
+            rebinding); ``None`` allows any, for serving on a network address.
 
     Returns:
         The app, ready for uvicorn or a test client.
@@ -84,6 +88,8 @@ def create_app(
     )
     app.state.workers = workers
     errors.install(app)
+    # Outermost: refuse other sites' requests before anything else runs.
+    app.add_middleware(LocalOnly, allowed_hosts=allowed_hosts)
 
     api = APIRouter(prefix="/api")
     api.include_router(health.router)

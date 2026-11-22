@@ -47,6 +47,7 @@ export const RIDES = {
     date: '2025-08-05',
     changes: false,
     usedBy: [
+      'regression/security.spec.ts',
       'regression/phoneWidth.spec.ts',
       'regression/rideStats.spec.ts',
       'regression/compare.spec.ts',

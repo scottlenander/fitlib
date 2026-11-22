@@ -16,6 +16,7 @@ from fitlib.cli import EXIT_ERROR, EXIT_IMPORT_FAILURES, app
 from fitlib.config import Config
 from fitlib.store.factory import open_stores
 from fitlib.watcher import Watcher
+from tests.clients import LOCAL
 from tests.fixtures.generate import FIT_DIR
 
 # Wide output so tables don't wrap and assertions can match whole rows.
@@ -736,7 +737,7 @@ def status(web, path: str) -> int:
     Returns:
         The response's status code.
     """
-    with TestClient(web) as client:
+    with TestClient(web, base_url=LOCAL) as client:
         return client.get(path).status_code
 
 
@@ -754,6 +755,8 @@ def test_serve_runs_the_app_on_localhost(config: Path, tmp_path: Path, served: d
     assert served["app"].state.config.library == tmp_path / "library"
     assert status(served["app"], "/api/health") == 200
     assert status(served["app"], "/e2e/rides") == 404, "no test shortcuts outside e2e mode"
+    with TestClient(served["app"], base_url="http://rebind.example") as client:
+        assert client.get("/api/health").status_code == 421, "should answer only localhost"
     assert "http://localhost:8000/" in result.output
 
 
@@ -775,11 +778,14 @@ def test_serve_warns_when_listening_beyond_this_computer(config: Path, served: d
     """Listening on a non-local address prints a warning, since there is no login.
 
     Given: ``--host 0.0.0.0 --port 9000``.
-    Expect: the server runs there, after a warning.
+    Expect: the server runs there, after a warning, answering requests for any host name
+    (it can't know which names reach it).
     """
     result = run(config, "serve", "--host", "0.0.0.0", "--port", "9000")
 
     assert (served["host"], served["port"]) == ("0.0.0.0", 9000)
+    with TestClient(served["app"], base_url="http://192.168.1.5:9000") as client:
+        assert client.get("/api/health").status_code == 200
     assert "anyone who can reach this address" in result.output
 
 

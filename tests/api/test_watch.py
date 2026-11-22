@@ -16,6 +16,7 @@ from fitlib.api.app import create_app
 from fitlib.config import Config
 from fitlib.store.factory import open_stores
 from fitlib.watcher import Watcher
+from tests.clients import LOCAL
 from tests.fixtures.generate import FIT_DIR
 
 ZWIFT = "2025-08-02-08-29-42.fit"
@@ -192,7 +193,7 @@ def watching(config: Config) -> Generator[TestClient]:
         The client; the watcher runs while it's open.
     """
     watcher = Watcher(partial(open_stores, config), stable_s=0.3, tick_s=0.05)
-    with TestClient(create_app(config, workers=1, watcher=watcher)) as test_client:
+    with TestClient(create_app(config, workers=1, watcher=watcher), base_url=LOCAL) as test_client:
         yield test_client
 
 
@@ -251,7 +252,7 @@ def test_e2e_mode_keeps_watched_folders_in_the_temp_folder(tmp_path: Path, folde
     config = Config(library=tmp_path / "library")
     app = create_app(config, workers=1, e2e_fixtures=FIT_DIR)
 
-    with TestClient(app) as client:
+    with TestClient(app, base_url=LOCAL) as client:
         inside = client.post("/api/watch/folders", json={"path": str(folder)})
         outside = client.post("/api/watch/folders", json={"path": str(Path(__file__).parent)})
 

@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 from fitlib.api import create_app
 from fitlib.api.routers.e2e import UnsafeLibrary
 from fitlib.config import Config
+from tests.clients import LOCAL
 from tests.fixtures.generate import FIT_DIR
 
 PAUSE = "garmin_nord_pause_10min.fit"
@@ -29,7 +30,7 @@ def e2e(config: Config) -> Generator[TestClient]:
     Yields:
         The client; closed after the test.
     """
-    with TestClient(create_app(config, workers=1, e2e_fixtures=FIT_DIR)) as client:
+    with TestClient(create_app(config, workers=1, e2e_fixtures=FIT_DIR), base_url=LOCAL) as client:
         yield client
 
 

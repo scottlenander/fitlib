@@ -30,9 +30,29 @@ class Stores:
     streams: StreamStore
 
 
+# The library holds where you ride: only its owner may read it.
+PRIVATE_MODE = 0o700
+
+
+def private_folder(folder: Path) -> None:
+    """Create a library folder readable by its owner only, or make an existing one so.
+
+    Other accounts on the computer then can't read anything inside, whatever the modes of
+    the files in it.
+
+    Args:
+        folder: The library folder.
+    """
+    folder.mkdir(mode=PRIVATE_MODE, parents=True, exist_ok=True)
+    if folder.stat().st_mode & 0o777 != PRIVATE_MODE:
+        folder.chmod(PRIVATE_MODE)
+
+
 @contextmanager
 def open_stores(config: Config) -> Generator[Stores]:
     """Open the library a config describes, creating it if needed, and close it afterwards.
+
+    The library folder is made readable by its owner only (see ``private_folder``).
 
     Args:
         config: Which library and backend to use.
@@ -48,7 +68,7 @@ def open_stores(config: Config) -> Generator[Stores]:
 
     from fitlib.store.local import FsBlobStore, SqliteCatalog
 
-    config.library.mkdir(parents=True, exist_ok=True)
+    private_folder(config.library)
     catalog = SqliteCatalog(config.library / CATALOG_FILE)
     blobs = FsBlobStore(config.library / BLOBS_DIR)
     try:
@@ -140,6 +160,7 @@ def restore_catalog(config: Config, data: bytes) -> None:
     """
     from fitlib.store.local.catalog import restore_snapshot
 
+    private_folder(config.library)
     restore_snapshot(catalog_path(config), data)
 
 
@@ -165,6 +186,7 @@ def library_blobs(config: Config) -> BlobStore:
     """
     from fitlib.store.local import FsBlobStore
 
+    private_folder(config.library)
     return FsBlobStore(config.library / BLOBS_DIR)
 
 
