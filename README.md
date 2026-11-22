@@ -356,6 +356,43 @@ and imports new `.fit` and `.zip` files in them, searched recursively, as for `i
 On a Mac, watching a folder in Documents needs the same permission (Files and Folders) as
 importing from it.
 
+### Encrypted sync
+
+`fitlib sync` keeps an encrypted copy of the library in a folder of your choice: iCloud
+Drive, Dropbox, a NAS or a USB drive. Everything is encrypted on this computer before it is
+written there; reading, search and analysis stay local.
+
+```bash
+mkdir -p ~/Library/Mobile\ Documents/com~apple~CloudDocs/fitlib
+fitlib sync setup ~/Library/Mobile\ Documents/com~apple~CloudDocs/fitlib   # asks for a passphrase
+fitlib sync push            # uploads what changed
+fitlib sync status          # the latest copy, and what a push would upload
+fitlib sync passphrase      # change the passphrase
+
+# On another computer, with `library` in its config pointing at an empty folder:
+fitlib sync restore ~/Library/Mobile\ Documents/com~apple~CloudDocs/fitlib
+```
+
+- **Keys.** Each library has a random 256-bit key, kept in the macOS Keychain. The sync
+  folder's `keyfile` holds a copy encrypted with your passphrase (Argon2id, 64 MiB), so a new
+  computer needs only the folder and the passphrase. fitlib can't recover the passphrase: if
+  you lose it and every computer's Keychain copy, the sync folder can't be read.
+- **What the folder shows.** `keyfile`, `manifest` and files named
+  `objects/<2 hex>/<64 hex>`. Names are keyed hashes, so they don't reveal dates, ride ids or
+  file hashes. Each object is AES-256-GCM encrypted and bound to its place in the library, so
+  objects can't be swapped or edited without restore noticing. Original files and the
+  catalog are compressed first. Sizes are not hidden.
+- **What's copied.** Original files, streams and a snapshot of the catalog (rides, your
+  notes, tags, bikes, athlete history, settings). Watched folders and sync settings belong to
+  this computer and stay behind.
+- **Pushing.** Only changed files are uploaded. Writing the manifest is the last step, so an
+  interrupted push leaves the previous copy whole; objects no longer needed are removed after
+  it. One computer pushes at a time: if another pushed since this library last pushed or
+  restored, `push` stops and `--force` replaces that copy.
+- **Restoring** only writes into an empty library, checks every object against the manifest,
+  and writes the catalog last, so an interrupted restore can be run again. A copy from a
+  newer fitlib is refused.
+
 ### What's stored
 
 ```
@@ -393,14 +430,16 @@ search find rides by their new names (with the start time).
 | `fitlib/importer.py` | Hash, dedupe, analyse in worker processes, store |
 | `fitlib/recompute.py` | Rebuild rides from their raw files when calculations change |
 | `fitlib/watcher.py` | Watched folders: which files, settling, scans, and the background watcher the server runs |
+| `fitlib/sync/` | Encrypted sync: `crypto.py` (sealed objects, object names, the passphrase keyfile), `keys.py` (Keychain), `engine.py` (setup, push, status, restore) |
 | `fitlib/api/` | FastAPI app: `app.py` builds it, `routers/` one per area, `schemas.py` request/response models, `errors.py` error responses, `static.py` the browser app's files |
-| `fitlib/cli/` | The `fitlib` command: `rides`, `bikes`, `athlete`, `timezone`, `trends`, `watch` and `serve` commands, shared `common` helpers and `output` printing |
+| `fitlib/cli/` | The `fitlib` command: `rides`, `bikes`, `athlete`, `timezone`, `trends`, `watch`, `sync` and `serve` commands, shared `common` helpers and `output` printing |
 | `web/` | The browser app (React, Vite, TanStack Query, ECharts): `src/pages/`, `src/components/`, `src/api/` (typed client; `schema.d.ts` is generated), `src/format.ts` (units and figures, as `display.py`) |
 | `tests/e2e/` | Playwright tests for the browser app; conventions in `.claude/skills/playwright-tests/` |
 
 Only `store/factory.py` chooses a backend; everything else depends on the interfaces. The API
 opens the stores per request. `import-linter` enforces this and the layering
-(`models ← metrics ← ingest ← importer | recompute | analysis ← api ← cli`).
+(`models ← metrics ← ingest ← importer | recompute | analysis | sync ← api ← cli`; sync gets
+the catalog snapshot through the factory, never SQLite itself).
 
 **E2E mode** (for the browser tests): with `FITLIB_E2E=1` and `FITLIB_E2E_FIXTURES` pointing
 at a fixtures folder, `fitlib serve` adds `/e2e` shortcuts. It only runs over a library inside
@@ -553,6 +592,19 @@ date.
 - **Recompute** (`tests/unit/test_recompute.py`): outdated rides brought up to date with metadata
   kept; streams rewritten; a Zwift ride dated 1989 repaired (its time zone from its name); a Zwift ride without distance
   given it; missing raw files reported.
+- **Encrypted sync** (`tests/unit/sync/`, `tests/unit/store/test_snapshot.py`): sealed objects
+  round trip; a changed byte in any part, another key, or another object's place refused;
+  object names stable and revealing nothing; the keyfile opening only with its passphrase,
+  its settings authenticated, short passphrases refused. Push then restore giving the same
+  rides, metadata and files byte for byte, without watched folders; the folder listing only
+  opaque names; **no plaintext in any byte of the folder** (ride ids, file hashes, notes,
+  tags, devices, file names, the SQLite and Parquet headers, each ride's first GPS point as
+  float64, float32 and FIT semicircles); second pushes uploading only changes; a push failing
+  part way keeping the last copy; another computer's push needing `--force`; a tampered or
+  swapped object, a newer schema and a wrong passphrase stopping a restore before the catalog
+  is written; status; passphrase changes; no ride details in the logs. Snapshots leave out
+  this computer's data and are byte-identical when nothing changed. The commands run end to
+  end with an in-memory keychain; the Keychain store against a stand-in keyring backend.
 - **Watched folders** (`tests/unit/test_watcher.py`): which folders can be watched (full
   paths, `~`, not the library or near it, inside the temp folder in e2e mode); which files
   (`.fit`/`.zip`, not Zwift's in-progress file or hidden ones); summing up a file's or a zip's
@@ -689,7 +741,8 @@ being written, and nothing watched),
 
 Not part of CI. Generates synthetic rides over six years, imports them into a temporary
 library and times some searches, similar rides and every trend over the six years (each
-under 0.2 s for 2,000 rides):
+under 0.2 s for 2,000 rides), then an encrypted sync to a local folder (setup, first push,
+an unchanged push and a restore):
 
 ```bash
 uv run python scripts/perf_import.py --rides 2000
