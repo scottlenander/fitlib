@@ -26,6 +26,8 @@ def test_empty_history(client: TestClient):
         "today": {"ftp": None, "weight_kg": None, "max_hr": None, "threshold_hr": None},
         "birth_year": None,
         "estimated_threshold_hr": None,
+        "threshold_hr_today": None,
+        "threshold_hr_source_today": None,
     }
 
 
@@ -177,15 +179,23 @@ def test_a_ride_without_power_gets_tss_from_heart_rate(writer: Api):
     )
 
 
-def test_a_ride_without_power_uses_the_age_estimate(writer: Api):
-    """With only a year of birth, the threshold is estimated from age on the ride's date.
+def test_your_rides_give_the_threshold_before_your_age(writer: Api):
+    """Without a set threshold, rides with power and heart rate give one, ahead of the age.
 
-    Given: born 1980 (45 in 2025); the 16 Aug 2025 ride.
-    Expect: threshold 159, estimated; TSS 0.75 x (132 / 159)² x 100.
+    Given: born 1980; the fixture rides with power and heart rate from 2 to 12 Aug 2025, and
+    the 16 Aug ride without power.
+    Expect: that ride's threshold 145 bpm from your rides, and its TSS from it; today (no
+    rides in the last 90 days), the threshold from age.
     """
     writer.client.put("/api/athlete/birth-year", json={"birth_year": 1980})
 
     training = writer.client.get(f"/api/rides/{writer.ids[HR_ONLY]}").json()["training"]
+    athlete = writer.client.get("/api/athlete").json()
 
-    assert (training["threshold_hr"], training["threshold_hr_estimated"]) == (159, True)
-    assert training["tss"] == pytest.approx(75 * (132 / 159) ** 2)
+    assert (training["threshold_hr"], training["threshold_hr_source"]) == (145, "rides")
+    assert training["tss"] == pytest.approx(75 * (132 / 145) ** 2)
+    age = date.today().year - 1980
+    assert (athlete["threshold_hr_today"], athlete["threshold_hr_source_today"]) == (
+        round(0.9 * (208 - 0.7 * age)),
+        "age",
+    )

@@ -7,10 +7,10 @@ effect on its date and the rider's year of birth.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 
 from fitlib.metrics import load, zones
-from fitlib.metrics.load import TssSource
+from fitlib.metrics.load import CalibrationRide, ThresholdSource, TssSource
 from fitlib.models import AthleteEntry, Ride
 from fitlib.store.interfaces import CatalogStore
 
@@ -30,10 +30,13 @@ class AthleteProfile:
     Attributes:
         history: The dated FTP, weight, max and threshold heart rate entries.
         birth_year: The year the rider was born, for estimating threshold heart rate.
+        calibration: Rides with power and heart rate, oldest first, for the threshold heart
+            rate from your rides.
     """
 
     history: tuple[AthleteEntry, ...] = ()
     birth_year: int | None = None
+    calibration: tuple[CalibrationRide, ...] = ()
 
 
 def athlete_profile(catalog: CatalogStore) -> AthleteProfile:
@@ -46,7 +49,14 @@ def athlete_profile(catalog: CatalogStore) -> AthleteProfile:
         The profile (load it once when working through many rides).
     """
     year = catalog.get_setting(BIRTH_YEAR_KEY)
-    return AthleteProfile(tuple(catalog.athlete_history()), int(year) if year else None)
+    rides = (
+        load.calibration_ride(row.local_date, row.moving_s, row.np, row.hr_squared_s)
+        for row in catalog.trend_rows(None, None)
+    )
+    calibration = sorted((r for r in rides if r is not None), key=lambda r: r.day)
+    return AthleteProfile(
+        tuple(catalog.athlete_history()), int(year) if year else None, tuple(calibration)
+    )
 
 
 def set_birth_year(catalog: CatalogStore, year: int | None, today: date | None = None) -> None:
@@ -66,22 +76,54 @@ def set_birth_year(catalog: CatalogStore, year: int | None, today: date | None =
     catalog.set_setting(BIRTH_YEAR_KEY, str(year) if year is not None else None)
 
 
-def threshold_hr_on(athlete: AthleteProfile, day: date) -> tuple[int | None, bool]:
-    """The threshold heart rate for a day: as set in the history, else estimated from age.
+def threshold_hr_on(
+    athlete: AthleteProfile, day: date, ftp: float | None
+) -> tuple[int | None, ThresholdSource | None]:
+    """The threshold heart rate for a day, and where it came from.
+
+    The one set in the history; else from your rides: the FTP on the day times your heart
+    rate per watt over recent rides with power and heart rate; else estimated from age.
 
     Args:
         athlete: The athlete's profile.
         day: The rider's local date.
+        ftp: The FTP on that day (set or estimated), if any.
 
     Returns:
-        The threshold heart rate (or ``None`` if neither set nor estimable), and whether it
-        is estimated.
+        The threshold heart rate in whole bpm and its source, or ``(None, None)``.
     """
     set_value = load.values_on(athlete.history, day).threshold_hr
     if set_value is not None:
-        return set_value, False
+        return set_value, ThresholdSource.SET
+    per_watt = load.hr_per_watt(athlete.calibration, day)
+    if ftp and per_watt:
+        return round(ftp * per_watt), ThresholdSource.RIDES
     estimate = load.estimated_threshold_hr(athlete.birth_year, day)
-    return estimate, estimate is not None
+    return (estimate, ThresholdSource.AGE) if estimate is not None else (None, None)
+
+
+def threshold_today(
+    catalog: CatalogStore, athlete: AthleteProfile, today: date | None = None
+) -> tuple[int | None, ThresholdSource | None]:
+    """Today's threshold heart rate and where it comes from, as a ride today would use it.
+
+    Args:
+        catalog: The library's catalog (for today's FTP estimate).
+        athlete: The athlete's profile.
+        today: The day (for tests); the real date by default.
+
+    Returns:
+        The threshold heart rate and its source, or ``(None, None)``.
+    """
+    day = today or date.today()
+    ftp: float | None = load.values_on(athlete.history, day).ftp
+    if ftp is None:
+        end = datetime.combine(day + timedelta(days=1), time(), tzinfo=UTC)
+        best = catalog.best_effort_between(
+            "power", EFTP_DURATION_S, end - timedelta(days=load.EFTP_LOOKBACK_DAYS), end
+        )
+        ftp = load.estimated_ftp(best)
+    return threshold_hr_on(athlete, day, ftp)
 
 
 @dataclass(frozen=True)
@@ -93,9 +135,9 @@ class Training:
         ftp_estimated: Whether ``ftp`` is estimated from recent rides rather than set.
         weight_kg: Body weight on the ride's date, if set.
         max_hr: Max heart rate on the ride's date, if set.
-        threshold_hr: Threshold heart rate on the ride's date, set or estimated from age, if
-            either; used for TSS when the ride has no power TSS.
-        threshold_hr_estimated: Whether ``threshold_hr`` is estimated from age.
+        threshold_hr: Threshold heart rate on the ride's date, set, from your rides or from
+            your age; used for TSS when the ride has no power TSS.
+        threshold_hr_source: Where ``threshold_hr`` came from, or ``None`` without one.
         intensity_factor: NP / FTP, or ``None``.
         tss: Training Stress Score, or ``None``.
         tss_source: Whether ``tss`` came from power or heart rate, or ``None`` without one.
@@ -111,7 +153,7 @@ class Training:
     weight_kg: float | None
     max_hr: int | None
     threshold_hr: int | None
-    threshold_hr_estimated: bool
+    threshold_hr_source: ThresholdSource | None
     intensity_factor: float | None
     tss: float | None
     tss_source: TssSource | None
@@ -119,6 +161,11 @@ class Training:
     np_per_kg: float | None
     power_zones: tuple[int, ...] | None
     hr_zones: tuple[int, ...] | None
+
+    @property
+    def threshold_hr_estimated(self) -> bool:
+        """Whether the threshold heart rate is worked out (from rides or age), not set."""
+        return self.threshold_hr_source in (ThresholdSource.RIDES, ThresholdSource.AGE)
 
 
 def ride_date(ride: Ride) -> date:
@@ -157,7 +204,8 @@ def training(catalog: CatalogStore, ride: Ride, athlete: AthleteProfile | None =
 
     The FTP, weight, max and threshold heart rate are those in effect on the ride's local
     date. When no FTP had been set by then, it is estimated from recent rides; when no
-    threshold heart rate had, from the rider's age. TSS comes from power when the ride has
+    threshold heart rate had, it comes from your rides with power and heart rate, or else
+    your age. TSS comes from power when the ride has
     power and an FTP, else from heart rate.
 
     Args:
@@ -187,7 +235,11 @@ def training(catalog: CatalogStore, ride: Ride, athlete: AthleteProfile | None =
     hr_zones = None
     if values.max_hr and s.hr_histogram:
         hr_zones = zones.zone_times(s.hr_histogram, values.max_hr, zones.HR_ZONE_BOUNDS)
-    threshold_hr, threshold_estimated = threshold_hr_on(athlete, day)
+    # A ride without power still has an FTP on its day, for the threshold from your rides.
+    day_ftp = ftp
+    if day_ftp is None and athlete.calibration and load.hr_per_watt(athlete.calibration, day):
+        day_ftp = estimated_ftp(catalog, ride)
+    threshold_hr, threshold_source = threshold_hr_on(athlete, day, day_ftp)
     tss, source = load.ride_tss(
         s.moving_s, s.np, ftp, load.hr_squared_seconds(s.hr_histogram), threshold_hr
     )
@@ -198,7 +250,7 @@ def training(catalog: CatalogStore, ride: Ride, athlete: AthleteProfile | None =
         weight_kg=values.weight_kg,
         max_hr=values.max_hr,
         threshold_hr=threshold_hr,
-        threshold_hr_estimated=threshold_estimated,
+        threshold_hr_source=threshold_source,
         intensity_factor=load.intensity_factor(s.np, ftp),
         tss=tss,
         tss_source=source,

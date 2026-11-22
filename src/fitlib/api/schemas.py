@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from fitlib.analysis.training import Training
 from fitlib.metadata import MAX_BULK_RIDES
 from fitlib.metrics import zones
-from fitlib.metrics.load import TssSource
+from fitlib.metrics.load import ThresholdSource, TssSource
 from fitlib.metrics.zwift import zwift_world
 from fitlib.models import (
     Bike,
@@ -69,8 +69,8 @@ class RideItem(BaseModel):
             threshold heart rate.
         tss_source: ``"power"`` or ``"hr"`` (heart rate), or ``null`` without a TSS.
         ftp_estimated: Whether the TSS uses an estimated FTP.
-        threshold_hr_estimated: Whether a heart-rate TSS uses a threshold heart rate
-            estimated from age.
+        threshold_hr_estimated: Whether a heart-rate TSS uses a threshold heart rate worked
+            out (from your rides or your age) rather than set.
         rpe: Perceived effort, 1-10, if set.
         bike: The ride's bike, if any.
         tags: The ride's tags.
@@ -205,7 +205,9 @@ class TrainingOut(BaseModel):
         weight_kg: Body weight on the day, if set.
         max_hr: Max heart rate on the day, if set.
         threshold_hr: Threshold heart rate on the day, set or estimated from age.
-        threshold_hr_estimated: Whether ``threshold_hr`` is estimated from age.
+        threshold_hr_estimated: Whether ``threshold_hr`` is worked out rather than set.
+        threshold_hr_source: ``"set"``, ``"rides"`` (your rides with power and heart rate,
+            and the day's FTP) or ``"age"``; ``null`` without a threshold.
         intensity_factor: NP / FTP.
         tss: Training Stress Score.
         tss_source: ``"power"`` or ``"hr"`` (heart rate, for rides without power TSS).
@@ -219,6 +221,7 @@ class TrainingOut(BaseModel):
     max_hr: int | None
     threshold_hr: int | None
     threshold_hr_estimated: bool
+    threshold_hr_source: ThresholdSource | None
     intensity_factor: float | None
     tss: float | None
     tss_source: TssSource | None
@@ -590,6 +593,7 @@ def ride_detail(ride: Ride, figures: Training, bikes: dict[str, Bike]) -> RideDe
             max_hr=figures.max_hr,
             threshold_hr=figures.threshold_hr,
             threshold_hr_estimated=figures.threshold_hr_estimated,
+            threshold_hr_source=figures.threshold_hr_source,
             intensity_factor=figures.intensity_factor,
             tss=figures.tss,
             tss_source=figures.tss_source,
@@ -879,14 +883,19 @@ class Athlete(BaseModel):
         today: FTP, weight, max and threshold heart rate in effect today, each from the
             latest entry that sets it.
         birth_year: The rider's year of birth, if given.
-        estimated_threshold_hr: Today's threshold heart rate estimated from age, used when
-            none is set; ``null`` without a year of birth.
+        estimated_threshold_hr: Today's threshold heart rate estimated from age; ``null``
+            without a year of birth.
+        threshold_hr_today: The threshold heart rate a ride today would use: set, from your
+            rides, or from your age.
+        threshold_hr_source_today: Where ``threshold_hr_today`` comes from.
     """
 
     history: list[AthleteEntryOut]
     today: AthleteValuesIn
     birth_year: int | None
     estimated_threshold_hr: int | None
+    threshold_hr_today: int | None
+    threshold_hr_source_today: ThresholdSource | None
 
 
 class BirthYearIn(BaseModel):

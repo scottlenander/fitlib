@@ -59,14 +59,15 @@ def test_route_matches_come_with_list_figures(reader: Api):
     """Each match carries the same figures as the library list, for showing in a table.
 
     Given: the interval ride's route matches.
-    Expect: each has a name, start, moving time and an estimated TSS (or none without power).
+    Expect: each has a name, start, moving time and a TSS (none with neither power nor heart
+    rate).
     """
     response = reader.client.get(f"/api/rides/{reader.ids[INTERVALS]}/similar")
 
     for item in response.json()["items"]:
         ride = item["ride"]
         assert ride["name"] and ride["start"] and ride["moving_s"] > 0
-        assert (ride["tss"] is None) == (ride["avg_power"] is None)
+        assert (ride["tss"] is None) == (ride["avg_power"] is None and ride["avg_hr"] is None)
 
 
 @pytest.mark.parametrize(

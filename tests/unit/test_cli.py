@@ -388,25 +388,26 @@ def test_athlete_born_refuses_bad_input(config: Path, args: list[str], message: 
 
 
 def test_rides_without_power_show_tss_from_heart_rate(imported: Path):
-    """``list`` and ``show`` mark TSS from heart rate, and starred when estimated from age.
+    """``list`` and ``show`` mark TSS from heart rate, starred when the threshold isn't set.
 
-    Given: born 1980, no threshold set; the 16 Aug ride (no power, 45 min at 132 bpm).
-    Expect: ``list`` shows "52 HR*" (0.75 x (132 / 159)² x 100 = 51.7) with the note;
-    ``show`` gives the threshold 159 bpm, estimated from age.
+    Given: born 1980, no threshold set; the 16 Aug ride (no power, 45 min at 132 bpm), after
+    rides with power and heart rate that give a threshold of 145 bpm (ahead of the age's 159).
+    Expect: ``list`` shows "62 HR*" (0.75 x (132 / 145)² x 100 = 62.2) with the note;
+    ``show`` gives the threshold 145 bpm, from your rides.
     """
     run(imported, "athlete", "born", "1980")
 
     listed = run(imported, "list")
     shown = run(imported, "show", ride_prefix(imported, "2025-08-16", "2025-08-17"))
 
-    assert re.search(r"2025-08-16 .* 52 HR\* ", listed.output)
+    assert re.search(r"2025-08-16 .* 62 HR\* ", listed.output)
     assert (
-        "HR: TSS from heart rate, as the ride has no power (* threshold estimated from age)."
-        in (listed.output)
+        "HR: TSS from heart rate, as the ride has no power (* threshold heart rate not set: "
+        "from your rides or your age)." in listed.output
     )
-    assert re.search(r"TSS\s+52\b", shown.output)
+    assert re.search(r"TSS\s+62\b", shown.output)
     assert "Training (from heart rate, no power)" in shown.output
-    assert re.search(r"Threshold heart rate\s+159 bpm \(estimated from age\)", shown.output)
+    assert re.search(r"Threshold heart rate\s+145 bpm \(from your rides\)", shown.output)
 
 
 def test_show_names_the_zwift_world_and_where_the_time_came_from(imported: Path):
@@ -1049,7 +1050,7 @@ def test_trends_volume_by_week_and_month(imported: Path):
     ]
     assert table_rows(monthly.output, "Aug 2025")[0].split()[2] == "9"
     for result in (weekly, monthly):
-        assert "2 rides have no TSS" in result.output
+        assert "1 ride has no TSS" in result.output
 
 
 def test_trends_fitness_shows_sundays_or_every_day(imported: Path):

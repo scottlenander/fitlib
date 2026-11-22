@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from fitlib.metrics.load import ThresholdSource
 from fitlib.models import OffsetSource, RideSummary, Units
 
 DASH = "–"
@@ -250,6 +251,24 @@ def time_zone_note(summary: RideSummary, default_zone: str | None) -> str:
                 "Shown in UTC: the file doesn't say where it was ridden. "
                 "Set a default time zone with `fitlib timezone`."
             )
+
+
+def threshold_source(source: ThresholdSource | None) -> str:
+    """Say where a threshold heart rate came from, for after its value.
+
+    Args:
+        source: Where it came from.
+
+    Returns:
+        " (from your rides)", " (estimated from age)", or "" for one that was set.
+    """
+    match source:
+        case ThresholdSource.RIDES:
+            return " (from your rides)"
+        case ThresholdSource.AGE:
+            return " (estimated from age)"
+        case _:
+            return ""
 
 
 def date(value: datetime) -> str:

@@ -2,14 +2,23 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import UTC, date, datetime
 
 import pytest
 
-from fitlib.analysis.training import BadBirthYear, athlete_profile, set_birth_year, training
-from fitlib.metrics.load import TssSource
+from fitlib.analysis.training import (
+    AthleteProfile,
+    BadBirthYear,
+    athlete_profile,
+    set_birth_year,
+    threshold_today,
+    training,
+)
+from fitlib.metrics.load import ThresholdSource, TssSource
 from fitlib.models import AthleteEntry
+from fitlib.store.memory import MemoryCatalog
 from tests.unit.conftest import ImportedLibrary
+from tests.unit.factories import make_ride
 
 ZWIFT = "2025-08-02-08-29-42.fit"  # 2 Aug, 60 min at 200 W
 SMART = "garmin_nord_smart_recording.fit"  # 12 Aug, 30 min at 180 W
@@ -73,13 +82,14 @@ def test_estimate_uses_the_best_ride_in_the_window(imported: ImportedLibrary):
 def test_ride_without_power_has_no_power_figures(imported: ImportedLibrary):
     """Without a power meter there is no FTP to apply, but heart-rate zones still work.
 
-    Given: FTP 250 and max HR 190 from 1 Aug, no threshold heart rate or year of birth; the
-    16 Aug ride with heart rate but no power.
+    Given: FTP 250 and max HR 190 from 1 Aug, and nothing to give a threshold heart rate (none
+    set, no year of birth, no rides to work one out from); the 16 Aug ride with heart rate but
+    no power.
     Expect: no IF, TSS or power zones; HR zones for all 2700 s.
     """
-    imported.catalog.set_athlete_entry(AthleteEntry(date(2025, 8, 1), ftp=250, max_hr=190))
+    entry = AthleteEntry(date(2025, 8, 1), ftp=250, max_hr=190)
 
-    figures = training(imported.catalog, imported.ride(NO_POWER))
+    figures = training(imported.catalog, imported.ride(NO_POWER), AthleteProfile((entry,)))
 
     assert (figures.intensity_factor, figures.tss, figures.power_zones) == (None, None, None)
     assert (figures.tss_source, figures.threshold_hr) == (None, None)
@@ -123,14 +133,13 @@ def test_ride_without_power_gets_tss_from_heart_rate(imported: ImportedLibrary):
 def test_threshold_hr_is_estimated_from_age(imported: ImportedLibrary):
     """With no threshold heart rate set, it's estimated from the rider's age.
 
-    Given: born 1980 (45 in 2025), no athlete history; the 16 Aug ride at 132 bpm for 45 min.
-    Expect: threshold 159 bpm, marked estimated; TSS 0.75 x (132 / 159)² x 100.
+    Given: born 1980 (45 in 2025), no athlete history and no rides to work a threshold out
+    from; the 16 Aug ride at 132 bpm for 45 min.
+    Expect: threshold 159 bpm, from age; TSS 0.75 x (132 / 159)² x 100.
     """
-    set_birth_year(imported.catalog, 1980)
+    figures = training(imported.catalog, imported.ride(NO_POWER), AthleteProfile(birth_year=1980))
 
-    figures = training(imported.catalog, imported.ride(NO_POWER))
-
-    assert (figures.threshold_hr, figures.threshold_hr_estimated) == (159, True)
+    assert (figures.threshold_hr, figures.threshold_hr_source) == (159, ThresholdSource.AGE)
     assert figures.tss == pytest.approx(75 * (132 / 159) ** 2)
 
 
@@ -187,3 +196,136 @@ def test_birth_year_can_be_cleared(imported: ImportedLibrary):
     set_birth_year(imported.catalog, None)
 
     assert (saved, athlete_profile(imported.catalog).birth_year) == (1980, None)
+
+
+# -- threshold heart rate from your rides ------------------------------------------------------
+
+FTP_240 = AthleteEntry(date(2025, 1, 1), ftp=240)
+
+
+def steady(day: int, *, np: float | None = 200.0, bpm: int = 150, minutes: int = 60, month=8):
+    """A ride of one steady heart rate (and power, unless ``np`` is ``None``) in 2025.
+
+    Args:
+        day: Day of the month.
+        np: Normalized Power, or ``None`` for a ride without power.
+        bpm: Its heart rate throughout.
+        minutes: Its riding time.
+        month: Its month.
+
+    Returns:
+        The ride.
+    """
+    seconds = minutes * 60
+    power = {} if np else {"has_power": False, "avg_power": None, "power_curve": (),
+                           "power_histogram": (), "kj": None}  # fmt: skip
+    return make_ride(start=datetime(2025, month, day, 8, tzinfo=UTC), moving_s=seconds, np=np,
+                     hr_histogram=((bpm, seconds),), **power)  # fmt: skip
+
+
+def library(*rides, entries=(FTP_240,)) -> MemoryCatalog:
+    """A library holding some rides and athlete entries.
+
+    Args:
+        *rides: The rides.
+        entries: Athlete history entries.
+
+    Returns:
+        The catalog.
+    """
+    catalog = MemoryCatalog()
+    for ride in rides:
+        catalog.add_ride(ride)
+    for entry in entries:
+        catalog.set_athlete_entry(entry)
+    return catalog
+
+
+def test_threshold_from_your_rides_matches_their_power_tss():
+    """Rides with power and heart rate give a threshold that makes the two TSS agree.
+
+    Given: FTP 240; three hours at NP 200 W and 150 bpm (0.75 bpm per watt) on 1-3 Aug, then
+    an hour without power at 162 bpm on 4 Aug.
+    Expect: threshold 240 x 0.75 = 180 bpm, from your rides; TSS (162 / 180)² x 100 = 81.
+    A power ride's own heart-rate TSS at that threshold equals its power TSS, (200/240)² x 100.
+    """
+    rides = [steady(1), steady(2), steady(3), steady(4, np=None, bpm=162)]
+    catalog = library(*rides)
+
+    figures = training(catalog, rides[3])
+    power_ride = training(catalog, rides[2])
+
+    assert (figures.threshold_hr, figures.threshold_hr_source) == (180, ThresholdSource.RIDES)
+    assert figures.tss == pytest.approx(81)
+    assert power_ride.tss == pytest.approx(100 * (200 / 240) ** 2)
+    assert power_ride.tss == pytest.approx(100 * (150 / 180) ** 2), "the two TSS should agree"
+
+
+@pytest.mark.parametrize(
+    "others",
+    [
+        [steady(1), steady(2)],
+        [steady(1), steady(2), steady(3, minutes=19)],
+        [steady(1, month=4), steady(2, month=4), steady(3)],
+        [steady(1), steady(2), steady(3, np=None)],
+    ],
+    ids=["two-rides", "one-too-short", "two-too-old", "one-without-power"],
+)
+def test_threshold_from_your_rides_needs_three_recent_rides(others):
+    """It takes three rides with power and heart rate, of 20 minutes or more, in 90 days.
+
+    Given: born 1980; only two such rides (another under 20 minutes, two in April more than 90
+    days before, or one without power) before an hour without power on 4 Aug.
+    Expect: the threshold from age instead (159).
+    """
+    ride = steady(4, np=None, bpm=162)
+    catalog = library(*others, ride)
+    set_birth_year(catalog, 1980)
+
+    figures = training(catalog, ride)
+
+    assert (figures.threshold_hr, figures.threshold_hr_source) == (159, ThresholdSource.AGE)
+
+
+def test_threshold_from_your_rides_uses_the_estimated_ftp():
+    """Without an FTP set, the day's estimated FTP gives the threshold.
+
+    Given: no athlete history; three hours at NP 200 W and 150 bpm, whose best 20 minutes is
+    the factory's 250 W (estimated FTP 237.5), then a ride without power.
+    Expect: threshold round(237.5 x 0.75) = 178.
+    """
+    rides = [steady(1), steady(2), steady(3), steady(4, np=None, bpm=162)]
+    catalog = library(*rides, entries=())
+
+    figures = training(catalog, rides[3])
+
+    assert (figures.threshold_hr, figures.threshold_hr_source) == (178, ThresholdSource.RIDES)
+
+
+def test_a_set_threshold_wins_over_your_rides():
+    """A threshold set in the history is used rather than one from your rides.
+
+    Given: three calibrating rides and threshold HR 170 set from 1 Jan.
+    Expect: 170, set.
+    """
+    ride = steady(4, np=None, bpm=162)
+    entries = (FTP_240, AthleteEntry(date(2025, 1, 2), threshold_hr=170))
+    catalog = library(steady(1), steady(2), steady(3), ride, entries=entries)
+
+    figures = training(catalog, ride)
+
+    assert (figures.threshold_hr, figures.threshold_hr_source) == (170, ThresholdSource.SET)
+
+
+def test_threshold_today():
+    """Today's threshold is worked out as a ride today would.
+
+    Given: FTP 240 and three calibrating rides on 1-3 Aug 2025; today 10 Aug, then 1 Dec.
+    Expect: 180 from your rides on 10 Aug; nothing on 1 Dec (no rides in 90 days, no year of
+    birth).
+    """
+    catalog = library(steady(1), steady(2), steady(3))
+    athlete = athlete_profile(catalog)
+
+    assert threshold_today(catalog, athlete, date(2025, 8, 10)) == (180, ThresholdSource.RIDES)
+    assert threshold_today(catalog, athlete, date(2025, 12, 1)) == (None, None)

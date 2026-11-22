@@ -71,7 +71,9 @@ def test_weekly_volume(reader: Api):
     assert sum(b["tss"] for b in buckets) == pytest.approx(sum(i["tss"] or 0 for i in items)), (
         "trend TSS should add up the rides' TSS"
     )
-    assert sum(b["rides_without_tss"] for b in buckets) == 2
+    assert sum(b["rides_without_tss"] for b in buckets) == 1, (
+        "only the ride with neither power nor heart rate should be without TSS"
+    )
 
 
 def test_monthly_volume_defaults_to_twelve_months(reader: Api):
@@ -128,7 +130,7 @@ def test_fitness(reader: Api):
 
     Given: August 2025; the first ride is the Zwift ride on 2 Aug.
     Expect: 31 days; 1 Aug all zero; 2 Aug with the Zwift ride's TSS, fitness TSS/42 and
-    fatigue TSS/7; the 2 rides without power counted.
+    fatigue TSS/7; the 1 ride with neither power nor heart rate counted.
     """
     response = reader.client.get("/api/trends/fitness", params=AUGUST)
 
@@ -140,7 +142,7 @@ def test_fitness(reader: Api):
     assert days[1]["tss"] == pytest.approx(tss)
     assert days[1]["fitness"] == pytest.approx(tss / 42)
     assert days[1]["fatigue"] == pytest.approx(tss / 7)
-    assert body["rides_without_tss"] == 2
+    assert body["rides_without_tss"] == 1
 
 
 def test_ftp_by_month_and_after_setting_one(writer: Api):
