@@ -7,6 +7,7 @@ import { MAX_RIDES, MIN_RIDES, compareUrl } from '../compare'
 import * as f from '../format'
 import { useUnits } from '../units'
 import { MAX_SELECTED, usePicked, type Picked } from '../selection'
+import { tssMarks, tssNotes } from '../tss'
 import { usePageTitle } from '../usePageTitle'
 import {
   NO_FILTERS,
@@ -66,7 +67,7 @@ export function LibraryPage() {
 
   const page = rides.data
   const pages = page ? Math.max(1, Math.ceil(page.total / page.limit)) : 1
-  const anyEstimated = page?.items.some((r) => r.ftp_estimated && r.tss !== null)
+  const notes = tssNotes(page?.items ?? [])
 
   return (
     <>
@@ -160,9 +161,11 @@ export function LibraryPage() {
               </table>
             </div>
           )}
-          {anyEstimated && (
-            <p className="footnote">* TSS from an estimated FTP (no FTP set for that date).</p>
-          )}
+          {notes.map((note) => (
+            <p key={note} className="footnote">
+              {note}
+            </p>
+          ))}
           {page.total > 0 && (
             <nav aria-label="Pages" className="pager">
               <button
@@ -452,7 +455,7 @@ type RowProps = {
 }
 
 function RideRow({ ride, units, picked, onPick }: RowProps) {
-  const estimated = ride.ftp_estimated && ride.tss !== null
+  const marks = tssMarks(ride)
   const checked = picked.some((p) => p.id === ride.id)
   return (
     <tr data-testid="ride-row">
@@ -480,7 +483,23 @@ function RideRow({ ride, units, picked, onPick }: RowProps) {
       <td className="num">{f.watts(ride.np)}</td>
       <td className="num">
         {f.tss(ride.tss)}
-        {estimated && <abbr title="TSS from an estimated FTP">*</abbr>}
+        {marks.fromHeartRate && (
+          <>
+            {' '}
+            <abbr title="TSS from heart rate (no power)">HR</abbr>
+          </>
+        )}
+        {marks.estimated && (
+          <abbr
+            title={
+              marks.fromHeartRate
+                ? 'Threshold heart rate estimated from age'
+                : 'TSS from an estimated FTP'
+            }
+          >
+            *
+          </abbr>
+        )}
       </td>
       <td className="num">{f.bpm(ride.avg_hr)}</td>
       <td>{ride.bike?.name ?? f.DASH}</td>

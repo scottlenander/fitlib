@@ -50,7 +50,8 @@ uv run fitlib trends ftp --month            # set and estimated FTP, last year
 uv run fitlib trends efficiency             # NP / heart rate per ride, last year
 uv run fitlib trends curve --since 2025-01-01   # best power by duration (--hr: heart rate)
 uv run fitlib show 3f2a9c --units metric    # override the configured units once
-uv run fitlib athlete set --from 2025-01-01 --ftp 250 --weight 165 --max-hr 188
+uv run fitlib athlete set --from 2025-01-01 --ftp 250 --weight 165 --max-hr 188 --lthr 165
+uv run fitlib athlete born 1980             # threshold heart rate estimated from age
 uv run fitlib athlete show                  # history, and today's values
 uv run fitlib timezone America/New_York     # default time zone (or --clear; none shows it)
 uv run fitlib watch add ~/Documents/Zwift/Activities   # import new rides while serving
@@ -74,9 +75,11 @@ uv run fitlib --help                        # every command and option
   skipped; its original is still archived. Exit code 1 means some files couldn't be read.
 - **list** filters by text (name, notes, tags, source, device), dates (UTC), source,
   indoor/outdoor and riding time, and sorts by start, duration, distance or power. It shows
-  each ride's TSS; a `*` marks TSS from an estimated FTP.
+  each ride's TSS; `HR` marks TSS from heart rate (rides without power), and a `*` TSS from
+  an estimated FTP or threshold heart rate.
 - **show** prints one ride: local start time, device, times, distance, climbing, speed, power,
-  heart rate and cadence; a **Training** block (NP, IF, TSS, VI, work, W/kg, decoupling);
+  heart rate and cadence; a **Training** block (NP, IF, TSS, VI, work, W/kg, decoupling, or
+  for a ride without power, its TSS from heart rate and the threshold heart rate used);
   time in **power zones** (7 Coggan zones) and **heart-rate zones** (5 zones by % of max HR);
   **best efforts** (5 s to 60 min); and laps.
 - **similar** lists rides on the same route as a ride, with how much of its route each
@@ -91,9 +94,11 @@ uv run fitlib --help                        # every command and option
 - **trends** `volume`, `fitness`, `ftp`, `efficiency` and `curve` (see "Trends"). Each takes
   `--since`/`--until` (local dates); `volume` and `ftp` take `--month`; `fitness` shows each
   Sunday and the last day, or every day with `--daily`; `curve --hr` shows heart rate.
-- **athlete** records FTP, weight and max HR from a date on. Each value carries forward until
-  changed, so `--ftp 260` alone keeps the earlier weight. Weight is entered and shown in your
-  display units and stored in kg. `athlete remove DATE` deletes an entry.
+- **athlete** records FTP, weight, max HR and threshold HR (`--lthr`) from a date on. Each
+  value carries forward until changed, so `--ftp 260` alone keeps the earlier weight. Weight
+  is entered and shown in your display units and stored in kg. `athlete remove DATE` deletes
+  an entry. `athlete born YEAR` (or `--clear`) sets the year of birth that threshold heart
+  rate is estimated from when none is set.
 - **timezone** shows or sets the library's default time zone (see "Dates and time zones").
 - **watch** `add FOLDER`, `remove FOLDER`, `list` and `scan`: folders whose new rides are
   imported while `fitlib serve` runs (see "Watched folders"). `scan` imports what's new in
@@ -127,8 +132,8 @@ uv run fitlib serve --open     # http://localhost:8000/ ; --port, --host, --no-w
 
 - **Library** (`/`): search (name, notes, tags, bike, device), filters (source, indoor/outdoor,
   power, dates, minimum riding time, tag, bike, effort), sortable columns and paging. All of it is kept in the
-  URL, so reloads, the back button and links keep the view. TSS from an estimated FTP is
-  marked with `*`. Tick rides (from any page or filter, or every ride on a page with the
+  URL, so reloads, the back button and links keep the view. TSS from heart rate (rides
+  without power) is marked `HR`, and TSS from an estimated FTP or threshold heart rate `*`. Tick rides (from any page or filter, or every ride on a page with the
   header box; the selection lasts for the browser tab, up to 500 rides), then press
   **Compare** (2 to 4 rides) or **Edit** to set the effort, bike or tags of them all at
   once: fields left on Keep stay as each ride has them, and tags are added or taken off
@@ -163,8 +168,9 @@ uv run fitlib serve --open     # http://localhost:8000/ ; --port, --host, --no-w
   existing rides (Preview, then Apply; bikes chosen by hand are never changed).
 - **Settings** (`/settings`): the theme, the **Metric units** switch, the default **time
   zone** (a list, or **Use this computer's time zone**; saving says how many rides moved),
-  **Watched folders** and the athlete history (FTP, weight in your units, max HR from a date
-  on). Watched folders: each with its state (watching, not found, can't be watched, or not
+  **Watched folders**, the athlete history (FTP, weight in your units, max and threshold
+  heart rate from a date on) and the year of birth (today's estimated threshold heart rate is
+  shown when none is set). Watched folders: each with its state (watching, not found, can't be watched, or not
   watched with `--no-watch`), the files found and **Stop watching**; a folder added by its
   path (`~` for home), or with one click when Zwift's Activities folder or a Garmin is found
   on this computer; **Scan now**; and the latest files found that weren't already in the
@@ -214,7 +220,8 @@ Interactive docs are at `/docs`. Everything is under `/api`, and every figure is
 | `GET/POST /api/bikes`, `PATCH /api/bikes/{id}` | Bikes with totals; add; rename, kind, retire |
 | `GET /api/bikes/defaults`, `PUT/DELETE /api/bikes/defaults/{slot}/{date}` | Dated default bikes |
 | `POST /api/bikes/backfill?dry_run=` | Re-apply default bikes, as `bikes backfill` |
-| `GET /api/athlete`, `PUT/DELETE /api/athlete/{date}` | Athlete history and today's values |
+| `GET /api/athlete`, `PUT/DELETE /api/athlete/{date}` | Athlete history (FTP, weight, max and threshold HR), today's values, the year of birth and today's threshold estimated from it |
+| `PUT /api/athlete/birth-year` | `birth_year` (1900 to this year, or `null` to clear) |
 | `POST /api/imports` | Upload `.fit`/`.zip` files (multipart `files`); returns what happened to each |
 | `GET /api/settings` | Default display units, library folder, default time zone |
 | `GET /api/settings/time-zones` | The time zones the default can be set to (IANA names) |
@@ -254,6 +261,15 @@ effect on the ride's date. Changing your FTP history applies everywhere immediat
 For rides before your first FTP entry, FTP is **estimated** as 0.95 × the best 20 minutes in
 the six weeks up to the ride, and marked as estimated.
 
+Rides **without power** get a TSS from heart rate: each riding second adds
+(heart rate ÷ threshold heart rate)², and an hour at threshold scores 100, as an hour at FTP
+does. It's worked out from the seconds stored at each bpm, so it needs no recompute. The
+threshold heart rate is the one set in the athlete history on the ride's date or, without
+one, **estimated from your age** that year: 90 % of 208 − 0.7 × age (Tanaka's age-predicted
+maximum), marked as estimated. With neither a threshold nor a year of birth, the ride has no
+TSS. Rides with power always use power TSS (heart rate is used only when there's no FTP to
+compare with).
+
 ### Trends
 
 Trends use the figures stored per ride, never the 1 Hz samples, so they're quick over years
@@ -267,9 +283,9 @@ included. Left out, a range ends today.
   TSS over 42 days, fatigue (ATL) over 7 days, and form (TSB) is yesterday's fitness minus
   fatigue. They're built up from your first ride, so a day's values don't depend on the range
   shown. Default: 90 days.
-- **TSS** is the same as on each ride: from the FTP set on its date, or estimated. Rides
-  without power (or with no FTP to compare with) add 0 and are counted, so you can see what's
-  missing.
+- **TSS** is the same as on each ride: from power and the FTP set on its date, or estimated;
+  for rides without power, from heart rate. Rides with neither add 0 and are counted, so you
+  can see what's missing.
 - **FTP over time**: at the end of each week or month, the FTP set in the athlete history and
   the estimate (0.95 × the best 20 minutes in the six weeks up to that day). Default: a year.
 - **Efficiency**: Normalized Power / average heart rate (W per bpm) for each ride with power
@@ -447,13 +463,15 @@ date.
 - **Storage contracts** (`tests/unit/store/`): one suite runs against every catalog (SQLite, memory)
   and blob store (filesystem, memory): round trips, duplicate hashes, id prefixes, time
   windows, every search filter, text search, sorting with missing values last, paging,
-  replacing summaries, best efforts in a window, athlete history, editing metadata (one ride,
+  replacing summaries, best efforts in a window (and each ride's heart rate squared, summed,
+  for heart-rate TSS), athlete history, editing metadata (one ride,
   or several at once with nothing changed if one fails), bikes
   (unique names ignoring case, name/prefix lookup, renames refreshing search, totals), tag
   counts, default-bike entries and the tag/bike/effort filters, invalid blob keys, Parquet
   streams; library settings; listing rides by where their time zone came from, and changing
-  it (name and search follow the new date); plus upgrading a phase 1a database and marking
-  existing rides' time zones as from their file.
+  it (name and search follow the new date); plus upgrading a phase 1a database, marking
+  existing rides' time zones as from their file, and keeping athlete entries when threshold
+  heart rate is added.
 - **Ingest** (`tests/unit/ingest/`): scanning folders, files and zips (skipping hidden files and
   macOS zip junk); decoding device, sport, local time, records and laps; local times used only
   when real (Zwift's 1989-12-31, seconds since power-on and impossible offsets ignored;
@@ -467,13 +485,17 @@ date.
 - **Metrics** (`tests/unit/metrics/`): elapsed and moving time, distance, speed, climbing, power,
   heart rate, cadence, location box and laps; NP (against a step-by-step reference), kJ, VI,
   best efforts (incl. never across a pause), decoupling, histograms, zone boundaries, IF/TSS,
-  estimated FTP and athlete values carrying forward. Expected values are worked out from the
+  TSS from heart rate (an hour at threshold scoring 100, mixed rides summing their parts,
+  power preferred), threshold heart rate estimated from age, estimated FTP and athlete
+  values carrying forward. Expected values are worked out from the
   specs (e.g. 200 W for an hour at FTP 250 → IF 0.80, TSS 64).
 - **Default time zone** (`tests/unit/analysis/test_timezone.py`): only rides without their own
   follow it, with daylight saving; changing and clearing it; an unknown zone changing
   nothing; rides moved to another day with a default bike counted.
 - **Training** (`tests/unit/analysis/`): FTP, weight and max HR from the history; estimated FTP
-  from the best ride in the window; FTP changes applying without a recompute.
+  from the best ride in the window; FTP changes applying without a recompute; a ride without
+  power getting TSS from a set threshold heart rate or one estimated from age (a set one
+  winning); power TSS kept for rides with power; impossible years of birth refused.
 - **Routes and similar rides** (`tests/unit/metrics/test_route.py`,
   `tests/unit/analysis/test_similar.py`): geohash cells against published values,
   neighbours (including across the date line), the fixture loops' fingerprints (same loop
@@ -482,7 +504,8 @@ date.
   power rides kept apart from HR-only ones, and a ride with a one-minute stop still a
   similar effort. Import and recompute store fingerprints.
 - **Trends** (`tests/unit/analysis/test_trends.py`): TSS equal to the ride page's for every
-  fixture ride, with set and estimated FTP, including estimates looking back before the
+  fixture ride, with set and estimated FTP and from heart rate; rides without power adding
+  heart-rate TSS to volume and fitness; including estimates looking back before the
   range; volume by week and month by local date (a ride late on Sunday UTC counted on Monday,
   empty weeks as zeros); fitness, fatigue and form by hand and independent of the range;
   FTP per week and month, and an estimate expiring after six weeks; efficiency only for rides
@@ -530,7 +553,9 @@ being written, and nothing watched),
   columns, location only on request, thinning, unknown fields); metadata edits (partial,
   clearing, validation leaving the ride unchanged), and of several rides at once (repeats
   counted once, the name left alone, bad values or an unknown ride changing nothing); tags, bikes, default-bike timeline and
-  backfill keeping hand-set bikes; athlete history; uploads (`.fit`, `.zip`, duplicates, bad
+  backfill keeping hand-set bikes; athlete history (with threshold heart rate), the year of
+  birth and its estimate, impossible years refused, and heart-rate TSS on rides and the
+  library list; uploads (`.fit`, `.zip`, duplicates, bad
   and non-FIT files, unsafe file names, default bikes, no coordinates in logs); settings; the
   placeholder page, app-route fallback and 404s for unknown API paths and missing assets;
   `/e2e` shortcuts (including deleting a ride so it can be imported again) only in e2e mode
@@ -584,8 +609,10 @@ being written, and nothing watched),
   - *Bikes*: add (a duplicate name refused), rename and change kind, retire and bring back;
     the default timeline (set, no bike, remove); Preview and Apply, giving the indoor ride
     its default bike.
-  - *Athlete*: save, carry forward, replace and remove values; weight in lb and kg; an empty
-    entry refused.
+  - *Athlete*: save (including threshold heart rate), carry forward, replace and remove
+    values; weight in lb and kg; an empty entry refused. A year of birth (this year, so no
+    fixture ride changes) saved with its estimate, kept across a reload, 1899 refused, and
+    cleared.
   - *Settings*: the theme button showing the system's mode until clicked, its hover hint,
     switching and staying switched across reloads and pages, header and Settings in sync;
     metric units switched in Settings only and applying everywhere.

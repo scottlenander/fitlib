@@ -89,6 +89,17 @@ function Ride({ ride }: { ride: RideDetail }) {
           { label: 'VI', value: f.ratio(ride.vi) },
         ]
       : []),
+    // Without power, TSS comes from heart rate against the threshold heart rate.
+    ...(!ride.has_power && t.tss_source === 'hr'
+      ? [
+          { label: 'TSS', value: f.tss(t.tss), note: '(from heart rate)' },
+          {
+            label: 'Threshold HR',
+            value: f.bpm(t.threshold_hr),
+            note: t.threshold_hr_estimated ? '(estimated from age)' : undefined,
+          },
+        ]
+      : []),
     ...(t.watts_per_kg !== null ? [{ label: 'W/kg', value: f.wattsPerKg(t.watts_per_kg) }] : []),
     ...(ride.decoupling_pct !== null
       ? [{ label: 'Decoupling', value: f.signedPercent(ride.decoupling_pct) }]

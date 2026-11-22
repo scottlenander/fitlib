@@ -437,7 +437,7 @@ h3 {
   margin: 0;
   font-size: 1.1rem;
 }
-.bulk-edit .hint {
+.inline-form > p.hint {
   flex-basis: 100%;
   margin: 0;
 }
