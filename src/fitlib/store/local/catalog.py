@@ -953,6 +953,12 @@ class SqliteCatalog:
         if f.max_rpe is not None:
             clauses.append(f"{meta.format('rpe')} <= ?")
             params.append(f.max_rpe)
+        if (box := f.starts_in) is not None:
+            clauses.append(
+                "r.id IN (SELECT ride_id FROM ride_geo WHERE start_lat BETWEEN ? AND ? "
+                "AND start_lon BETWEEN ? AND ?)"
+            )
+            params += [box.min_lat, box.max_lat, box.min_lon, box.max_lon]
         return " AND ".join(clauses), params
 
     def ride_ids(self, below_version: int | None = None) -> list[str]:

@@ -39,6 +39,7 @@ uv run fitlib import ~/Documents/Zwift/Activities ~/Downloads/garmin_export.zip
 uv run fitlib list                          # newest first
 uv run fitlib list --source zwift --since 2025-01-01 --sort power
 uv run fitlib list --text "arenberg" --outdoor --min-minutes 60
+uv run fitlib list --world watopia               # Zwift rides in one world
 uv run fitlib show 3f2a9c                   # a ride by id prefix (4+ characters)
 uv run fitlib similar 3f2a9c                # rides on the same route
 uv run fitlib similar 3f2a9c --effort       # rides with a similar effort
@@ -131,7 +132,7 @@ uv run fitlib serve --open     # http://localhost:8000/ ; --port, --host, --no-w
 ```
 
 - **Library** (`/`): search (name, notes, tags, bike, device), filters (source, indoor/outdoor,
-  power, dates, minimum riding time, tag, bike, effort), sortable columns and paging. All of it is kept in the
+  power, dates, minimum riding time, tag, bike, effort, Zwift world), sortable columns and paging. All of it is kept in the
   URL, so reloads, the back button and links keep the view. TSS from heart rate (rides
   without power) is marked `HR`, and TSS from an estimated FTP or threshold heart rate `*`. Tick rides (from any page or filter, or every ride on a page with the
   header box; the selection lasts for the browser tab, up to 500 rides), then press
@@ -199,7 +200,8 @@ Interactive docs are at `/docs`. Everything is under `/api`, and every figure is
 | Endpoint | What |
 |---|---|
 | `GET /api/health` | Status, version, ride count and how many rides need `fitlib recompute` |
-| `GET /api/rides` | The library: `q` text search, `since`/`until`, `source`, `indoor`, `min_duration_s`/`max_duration_s`, `has_power`, `tag` (repeat for all of several), `bike_id`, `has_bike`, `min_rpe`/`max_rpe`, `sort`, `desc`, `offset`, `limit` (≤ 200) |
+| `GET /api/rides` | The library: `q` text search, `since`/`until`, `source`, `indoor`, `min_duration_s`/`max_duration_s`, `has_power`, `tag` (repeat for all of several), `bike_id`, `has_bike`, `min_rpe`/`max_rpe`, `world` (Zwift rides in one world), `sort`, `desc`, `offset`, `limit` (≤ 200). Each ride says where its time zone came from (`time_zone_source`) and, for Zwift rides, its `zwift_world` |
+| `GET /api/zwift-worlds` | The Zwift worlds the `world` filter takes (`slug`, `name`) |
 | `GET /api/rides/{id}` | One ride (id or 4+ character prefix): summary, training figures, zones, power/HR curves, laps, location box, metadata |
 | `GET /api/rides/{id}/similar` | `kind=route` (default): rides covering ≥ 30 % of this ride's route, with `overlap` each way and `same_route`; `kind=effort`: the closest efforts with `similarity` (0–100). `limit` ≤ 50. `has_route` says whether the ride has positions |
 | `GET /api/rides/{id}/route-progress` | Every ride on the same route as this one (itself included), oldest first, as list entries; `has_route` says whether it has positions |
@@ -245,7 +247,20 @@ Dates and times are shown on the rider's clock. A ride's time zone comes from th
    existing rides" on the Bikes page brings it in line).
 4. Otherwise UTC, marked "UTC".
 
+The ride page (and `fitlib show`) says which of these a ride's time came from, with a link to
+Settings when it's the default or UTC; the library marks UTC dates.
+
 FTP, weight and default bikes apply by the ride's date on that clock.
+
+### Zwift worlds
+
+Zwift records positions on Earth: London, New York, Paris and the other city worlds sit on the
+real city, and the made-up ones on small Pacific islands (Watopia on Teanu, in the Solomon
+Islands). A Zwift ride's **world** is the one whose area holds its start point, from the
+world areas in [zwift-data](https://github.com/andipaetzold/zwift-data) (MIT). It shows on
+the ride page, in the library's Source column ("Zwift (Watopia)") and in `fitlib show`, and
+the library's **World** filter (`fitlib list --world`) finds a world's rides. Zwift's route
+names aren't shown: no public data has the routes' paths to match a ride to.
 
 Rides you haven't named are named after their source and local start time, so rides on the
 same day can be told apart: `Zwift 2026-11-15 07:23`, `Garmin indoor 2025-08-19 20:30`, or
@@ -462,7 +477,7 @@ date.
 - **Fixtures are current** (`tests/unit/test_fixtures_current.py`).
 - **Storage contracts** (`tests/unit/store/`): one suite runs against every catalog (SQLite, memory)
   and blob store (filesystem, memory): round trips, duplicate hashes, id prefixes, time
-  windows, every search filter, text search, sorting with missing values last, paging,
+  windows, every search filter (including where a ride starts), text search, sorting with missing values last, paging,
   replacing summaries, best efforts in a window (and each ride's heart rate squared, summed,
   for heart-rate TSS), athlete history, editing metadata (one ride,
   or several at once with nothing changed if one fails), bikes
@@ -496,6 +511,9 @@ date.
   from the best ride in the window; FTP changes applying without a recompute; a ride without
   power getting TSS from a set threshold heart rate or one estimated from age (a set one
   winning); power TSS kept for rides with power; impossible years of birth refused.
+- **Zwift worlds** (`tests/unit/metrics/test_zwift.py`): each world's centre and corners
+  found as that world, no two worlds overlapping, real rides and points just outside a world
+  in none, only Zwift rides with positions having a world, worlds by name.
 - **Routes and similar rides** (`tests/unit/metrics/test_route.py`,
   `tests/unit/analysis/test_similar.py`): geohash cells against published values,
   neighbours (including across the date line), the fixture loops' fingerprints (same loop
@@ -539,7 +557,9 @@ date.
   file's name (also inside a zip) and from the default for a renamed file.
 - **CLI** (`tests/unit/test_cli.py`, including `serve` in normal and e2e mode, and `similar`
   by route and effort, with nothing to match, and for rides needing a recompute, and `compare`
-side by side, with one ride or the same ride twice refused, and `timezone` shown, set,
+side by side, with one ride or the same ride twice refused, `show` naming the Zwift world
+and where the time came from (device, file name, UTC, the default), `list --world` (unknown
+worlds and other sources refused), and `timezone` shown, set,
 cleared and refused for an unknown zone or a zone with `--clear`, every `trends` view, a
 backwards range and an empty period, `progress` on the loop, alone and without GPS, `serve`
 with and without `--no-watch`, and `watch` add, scan, list and remove, refusals, files still
@@ -548,7 +568,8 @@ being written, and nothing watched),
   **display formatting** (both unit systems).
 - **API** (`tests/api/`): the fixture rides are imported once into a template library;
   read-only tests share it and tests that change anything get their own copy. Covered: every
-  list filter, sorting and paging, bad parameters; ride detail by id and prefix, ambiguous
+  list filter, sorting and paging, bad parameters; the world filter (unknown worlds and other
+  sources refused) and the worlds list; where each ride's time zone came from; ride detail by id and prefix, ambiguous
   prefixes, training figures with estimated and set FTP, zones and curves; streams (default
   columns, location only on request, thinning, unknown fields); metadata edits (partial,
   clearing, validation leaving the ride unchanged), and of several rides at once (repeats
@@ -576,7 +597,8 @@ being written, and nothing watched),
 - **Browser app unit tests** (`web/src/*.test.ts`): durations, distances, speeds, heights and
   weights in both unit systems, and weights typed in either; local versus UTC start times; the
   library's URL state (reading, writing, defaults, every filter, turning it into an API
-  query); tag parsing; which theme applies (remembered choice, else the system); picking
+  query, the World filter dropping another source and the other way round); where a ride's
+  time zone came from, in words; tag parsing; which theme applies (remembered choice, else the system); picking
   rides to compare or edit (up to 500, a whole page at once, stored selections read safely),
   what the bulk edit form sends, and the compare page's address;
   the stacked charts' spacing and their time (minutes, shown as a clock) and distance axes;
@@ -593,10 +615,12 @@ being written, and nothing watched),
     heart rate, opening the ride behind a best and back with choices kept; a preset from the
     header ending today, kept across a reload; a backwards range refused.
   - *Library*: search and an empty result; each filter and filters combined; sorting both ways;
-    paging, kept across a reload; the estimated-TSS mark.
+    paging, kept across a reload; the estimated-TSS mark; the World filter (Watopia finding
+    the Zwift ride, shown as "Zwift (Watopia)", London nothing, Garmin clearing the world).
   - *Ride detail*: summary, training with an estimated FTP, zones, best efforts, laps and
     charts; a ride without power; a start time without a real local time (UTC; Zwift's 1989 date ignored); switching units,
-    remembered across reloads and pages; an unknown ride.
+    remembered across reloads and pages; an unknown ride; where the start time came from (the
+    device, or the Zwift ride's file name), and the Zwift ride's world.
   - *Import*: a new ride imported and opened from the results; duplicates, a run, an
     overlapping recording and a broken file reported.
   - *Ride edits*: every detail edited, shown on the ride and found in the library by name,
@@ -616,8 +640,9 @@ being written, and nothing watched),
   - *Settings*: the theme button showing the system's mode until clicked, its hover hint,
     switching and staying switched across reloads and pages, header and Settings in sync;
     metric units switched in Settings only and applying everywhere.
-  - *Time zone*: choosing New York moves the ride without a time zone to the evening before;
-    clearing returns it to UTC; on a computer in Tokyo, one click picks Asia/Tokyo. The Zwift
+  - *Time zone*: the ride without a time zone said to be in UTC, marked UTC in the library;
+    choosing New York moves it to the evening before, said to be the default, with the link to
+    Settings; clearing returns it to UTC; on a computer in Tokyo, one click picks Asia/Tokyo. The Zwift
     ride is dated by its file name (in *Ride detail*).
   - *Watched folders*: a new temp folder watched through Settings; the extra ride dropped
     into it imported once it settles, listed with its link, announced on the page, opened from

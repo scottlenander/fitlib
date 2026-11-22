@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { LibraryPage } from '../../pageObjects/libraryPage'
 import { RidePage } from '../../pageObjects/ridePage'
 import { SettingsPage } from '../../pageObjects/settingsPage'
 import { RIDES } from '../../libs/constants'
@@ -8,12 +9,15 @@ import { TestData } from '../../libs/testData'
 // a Wahoo ride with no local time and an undated name, starting 02:00 UTC on 11 Aug 2025.
 // Both tests change the same setting, so they run one after the other.
 const RIDE = RIDES.NO_TIME_ZONE
+// Its name while no default time zone is set.
+const RIDE_UTC_NAME = 'Ride 2025-08-11 02:00 UTC'
 
 test.describe.configure({ mode: 'serial' })
 
 test('the default time zone dates rides that carry none', async ({ page, request }) => {
   const settings = new SettingsPage(page)
   const ride = new RidePage(page)
+  const library = new LibraryPage(page)
   const testData = new TestData(request)
   const rideId = await testData.rideId(RIDE.file)
 
@@ -25,6 +29,14 @@ test('the default time zone dates rides that carry none', async ({ page, request
     await ride.goto(rideId)
     await expect(ride.heading).toHaveText('Ride 2025-08-11 02:00 UTC')
     await expect(ride.subtitle).toContainText('Mon 11 Aug 2025, 02:00 UTC')
+    await expect(ride.timeZoneNote).toHaveText(
+      "Shown in UTC: the file doesn't say where it was ridden. Set a default time zone in Settings.",
+    )
+  })
+
+  await test.step('In the library, its date is marked as UTC', async () => {
+    await library.goto({ since: '2025-08-11', until: '2025-08-11' })
+    await expect(library.row(RIDE_UTC_NAME)).toContainText('2025-08-11 UTC')
   })
 
   await test.step('Choose New York as the default', async () => {
@@ -39,6 +51,14 @@ test('the default time zone dates rides that carry none', async ({ page, request
     await ride.goto(rideId)
     await expect(ride.heading).toHaveText('Ride 2025-08-10 22:00')
     await expect(ride.subtitle).toContainText('Sun 10 Aug 2025, 22:00 ·')
+    await expect(ride.timeZoneNote).toHaveText(
+      "Time zone: your default (America/New York), as the file doesn't say. Change it in Settings.",
+    )
+  })
+
+  await test.step('The note leads to Settings', async () => {
+    await ride.timeZoneNote.getByRole('link', { name: 'Settings' }).click()
+    await expect(settings.heading).toBeVisible()
   })
 
   await test.step('Clear the default, and the ride is back in UTC', async () => {

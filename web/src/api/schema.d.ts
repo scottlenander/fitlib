@@ -395,6 +395,7 @@ export interface paths {
      *         has_bike: Only rides with (or without) a bike.
      *         min_rpe: Lowest perceived effort.
      *         max_rpe: Highest perceived effort.
+     *         world: Only Zwift rides in this world (by short name).
      *         sort: What to sort by.
      *         desc: Largest or newest first.
      *         offset: Matching rides to skip.
@@ -402,6 +403,10 @@ export interface paths {
      *
      *     Returns:
      *         The page of rides, with the total that match.
+     *
+     *     Raises:
+     *         UnknownWorld: ``world`` isn't a Zwift world (a 422).
+     *         WorldNeedsZwift: ``world`` with a source other than Zwift (a 422).
      */
     get: operations['list_rides_api_rides_get']
     put?: never
@@ -974,6 +979,29 @@ export interface paths {
      *         Whether it runs in the background, or what the scan did.
      */
     post: operations['scan_folders_api_watch_scan_post']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/zwift-worlds': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * List Worlds
+     * @description List the Zwift worlds rides can be filtered on.
+     *
+     *     Returns:
+     *         Every world, in Zwift's order of release.
+     */
+    get: operations['list_worlds_api_zwift_worlds_get']
+    put?: never
+    post?: never
     delete?: never
     options?: never
     head?: never
@@ -1716,6 +1744,12 @@ export interface components {
       tags?: string[] | null
     }
     /**
+     * OffsetSource
+     * @description Where a ride's time zone (its offset from UTC) came from.
+     * @enum {string}
+     */
+    OffsetSource: 'device' | 'file_name' | 'default' | 'none'
+    /**
      * RideDetail
      * @description Everything about one ride, for its detail page.
      *
@@ -1834,6 +1868,7 @@ export interface components {
       tags: string[]
       /** Threshold Hr Estimated */
       threshold_hr_estimated: boolean
+      time_zone_source: components['schemas']['OffsetSource']
       training: components['schemas']['TrainingOut']
       /** Tss */
       tss: number | null
@@ -1842,6 +1877,8 @@ export interface components {
       utc_offset_s: number | null
       /** Vi */
       vi: number | null
+      /** Zwift World */
+      zwift_world: string | null
     }
     /**
      * RideItem
@@ -1853,7 +1890,12 @@ export interface components {
      *         name: The user's name for the ride, or one built from its source and date.
      *         start: Start time, UTC.
      *         local_start: Start time on the rider's clock, if the device recorded it.
+     *         time_zone_source: Where ``local_start``'s time zone came from: ``device`` (the
+     *             file's own local time), ``file_name`` (e.g. Zwift's), ``default`` (the library's
+     *             default time zone) or ``none`` (shown in UTC).
      *         source: Zwift, Garmin or other.
+     *         zwift_world: For Zwift rides, the world ridden in (e.g. "Watopia"), from where the
+     *             ride started; ``null`` if unknown or not Zwift.
      *         indoor: Whether the ride was indoors.
      *         device: The recording device, if known.
      *         moving_s: Moving time.
@@ -1915,9 +1957,12 @@ export interface components {
       tags: string[]
       /** Threshold Hr Estimated */
       threshold_hr_estimated: boolean
+      time_zone_source: components['schemas']['OffsetSource']
       /** Tss */
       tss: number | null
       tss_source: components['schemas']['TssSource'] | null
+      /** Zwift World */
+      zwift_world: string | null
     }
     /**
      * RidePage
@@ -2360,6 +2405,20 @@ export interface components {
        * Format: date-time
        */
       seen_at: string
+    }
+    /**
+     * WorldOut
+     * @description A Zwift world.
+     *
+     *     Attributes:
+     *         slug: Its short name, for the rides list's ``world`` filter.
+     *         name: Its name.
+     */
+    WorldOut: {
+      /** Name */
+      name: string
+      /** Slug */
+      slug: string
     }
     /**
      * ZoneTime
@@ -2833,6 +2892,8 @@ export interface operations {
         has_bike?: boolean | null
         min_rpe?: number | null
         max_rpe?: number | null
+        /** @description Zwift rides in this world, e.g. watopia. */
+        world?: string | null
         sort?: components['schemas']['SortKey']
         desc?: boolean
         offset?: number
@@ -3438,6 +3499,26 @@ export interface operations {
         }
         content: {
           'application/json': components['schemas']['ScanOut']
+        }
+      }
+    }
+  }
+  list_worlds_api_zwift_worlds_get: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['WorldOut'][]
         }
       }
     }

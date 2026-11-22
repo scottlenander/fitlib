@@ -15,7 +15,18 @@ from fitlib.analysis.training import Training
 from fitlib.metadata import MAX_BULK_RIDES
 from fitlib.metrics import zones
 from fitlib.metrics.load import TssSource
-from fitlib.models import Bike, BikeKind, BikeSlot, Curve, GeoSummary, Lap, Ride, Source
+from fitlib.metrics.zwift import zwift_world
+from fitlib.models import (
+    Bike,
+    BikeKind,
+    BikeSlot,
+    Curve,
+    GeoSummary,
+    Lap,
+    OffsetSource,
+    Ride,
+    Source,
+)
 
 
 class BikeRef(BaseModel):
@@ -39,7 +50,12 @@ class RideItem(BaseModel):
         name: The user's name for the ride, or one built from its source and date.
         start: Start time, UTC.
         local_start: Start time on the rider's clock, if the device recorded it.
+        time_zone_source: Where ``local_start``'s time zone came from: ``device`` (the
+            file's own local time), ``file_name`` (e.g. Zwift's), ``default`` (the library's
+            default time zone) or ``none`` (shown in UTC).
         source: Zwift, Garmin or other.
+        zwift_world: For Zwift rides, the world ridden in (e.g. "Watopia"), from where the
+            ride started; ``null`` if unknown or not Zwift.
         indoor: Whether the ride was indoors.
         device: The recording device, if known.
         moving_s: Moving time.
@@ -65,7 +81,9 @@ class RideItem(BaseModel):
     name: str
     start: datetime
     local_start: datetime | None
+    time_zone_source: OffsetSource
     source: Source
+    zwift_world: str | None
     indoor: bool
     device: str | None
     moving_s: int
@@ -438,7 +456,9 @@ def ride_item(ride: Ride, figures: Training, bikes: dict[str, Bike]) -> RideItem
         name=ride.display_name,
         start=s.start,
         local_start=_naive(s.local_start),
+        time_zone_source=s.utc_offset_source,
         source=s.source,
+        zwift_world=world.name if (world := zwift_world(s)) else None,
         indoor=s.indoor,
         device=s.device,
         moving_s=s.moving_s,

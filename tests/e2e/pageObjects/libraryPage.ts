@@ -21,6 +21,7 @@ export class LibraryPage {
   readonly bike: Locator
   readonly effortFrom: Locator
   readonly effortTo: Locator
+  readonly world: Locator
   readonly clearFilters: Locator
   // "Showing 1–8 of 8 rides" or "No rides found."
   readonly count: Locator
@@ -60,6 +61,7 @@ export class LibraryPage {
     this.bike = this.filters.getByLabel('Bike')
     this.effortFrom = this.filters.getByLabel('Effort from')
     this.effortTo = this.filters.getByLabel('Effort to')
+    this.world = this.filters.getByLabel('World')
     this.clearFilters = this.filters.getByRole('button', { name: 'Clear filters' })
     this.count = page.getByTestId('ride-count')
     this.table = page.getByRole('table', { name: 'Rides' })

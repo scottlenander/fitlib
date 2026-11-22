@@ -18,6 +18,7 @@ export type LibraryState = {
   bike: string // a bike id, or 'none' for rides without a bike
   minRpe: string
   maxRpe: string
+  world: string // a Zwift world's short name, e.g. 'watopia'
   sort: SortKey
   asc: boolean
   page: number // from 1
@@ -51,6 +52,7 @@ export function fromParams(params: URLSearchParams): LibraryState {
     bike: params.get('bike') ?? '',
     minRpe: rpe(params.get('rpe_min')),
     maxRpe: rpe(params.get('rpe_max')),
+    world: params.get('world') ?? '',
     sort: pick(params.get('sort'), SORTS, 'start'),
     asc: params.get('dir') === 'asc',
     page: positive(params.get('page'), 1),
@@ -75,6 +77,7 @@ export function toParams(state: LibraryState): URLSearchParams {
   set('bike', state.bike)
   set('rpe_min', state.minRpe)
   set('rpe_max', state.maxRpe)
+  set('world', state.world)
   set('sort', state.sort, 'start')
   set('dir', state.asc ? 'asc' : 'desc', 'desc')
   set('page', String(state.page), '1')
@@ -104,6 +107,7 @@ export function toQuery(state: LibraryState): RideQuery {
     has_bike: state.bike === 'none' ? false : undefined,
     min_rpe: state.minRpe ? Number(state.minRpe) : undefined,
     max_rpe: state.maxRpe ? Number(state.maxRpe) : undefined,
+    world: state.world || undefined,
     sort: state.sort,
     desc: !state.asc,
     offset: (state.page - 1) * state.limit,
@@ -124,7 +128,19 @@ export const NO_FILTERS = {
   bike: '',
   minRpe: '',
   maxRpe: '',
+  world: '',
 } as const satisfies Partial<LibraryState>
+
+// A Zwift world only goes with the Zwift source (or any): choosing a world drops another
+// source, and choosing another source drops the world.
+export function withWorld(state: LibraryState, world: string): Partial<LibraryState> {
+  const otherSource = state.source !== '' && state.source !== 'zwift'
+  return { world, ...(world && otherSource ? { source: '' } : {}) }
+}
+
+export function withSource(source: LibraryState['source']): Partial<LibraryState> {
+  return { source, ...(source !== '' && source !== 'zwift' ? { world: '' } : {}) }
+}
 
 export function hasFilters(state: LibraryState): boolean {
   return (Object.keys(NO_FILTERS) as (keyof typeof NO_FILTERS)[]).some((key) => state[key] !== '')

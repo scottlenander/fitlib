@@ -14,6 +14,9 @@ export class RidePage {
   readonly heading: Locator
   // "Tue 05 Aug 2025, 19:00 · Garmin · Garmin Edge 540 · Outdoor"
   readonly subtitle: Locator
+  // Under the subtitle: where the start time's time zone came from ("Local time from the
+  // device.", or the default or UTC, with a link to Settings).
+  readonly timeZoneNote: Locator
   readonly summary: Stats
   readonly training: Stats
   readonly details: Stats
@@ -53,6 +56,7 @@ export class RidePage {
     this.header = new Header(page)
     this.heading = page.getByRole('heading', { level: 1 })
     this.subtitle = page.getByTestId('ride-subtitle')
+    this.timeZoneNote = page.getByTestId('time-zone-note')
     this.summary = new Stats(page, 'summary-stats')
     this.training = new Stats(page, 'training-stats')
     this.details = new Stats(page, 'detail-stats')

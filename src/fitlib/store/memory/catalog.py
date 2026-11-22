@@ -81,6 +81,8 @@ def _matches(ride: Ride, bike_name: str | None, f: Filters) -> bool:
         f.min_duration_s is None or s.moving_s >= f.min_duration_s,
         f.max_duration_s is None or s.moving_s <= f.max_duration_s,
         f.has_power is None or s.has_power == f.has_power,
+        f.starts_in is None
+        or (s.geo is not None and f.starts_in.contains(s.geo.start_lat, s.geo.start_lon)),
     ]
     return all(checks)
 

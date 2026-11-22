@@ -72,6 +72,23 @@ test('each filter narrows the list to the matching rides', async ({ page }) => {
     await library.source.selectOption({ label: 'Garmin' })
     await expect(library.rideNames()).toHaveText([INTERVALS.name])
   })
+
+  await test.step('World: the Zwift ride is in Watopia', async () => {
+    await library.clearFilters.click()
+    await library.world.selectOption({ label: 'Watopia' })
+    await expect(library.rideNames()).toHaveText([ZWIFT.name])
+    await expect(library.row(ZWIFT.name)).toContainText('Zwift (Watopia)')
+    await library.world.selectOption({ label: 'London' })
+    await expect(library.count).toHaveText('No rides found.')
+  })
+
+  await test.step('Another source drops the world, which is for Zwift rides', async () => {
+    await library.source.selectOption({ label: 'Garmin' })
+    await expect(library.world, {
+      message: 'A Garmin ride is never in a Zwift world, so the world should be cleared',
+    }).toHaveValue('')
+    await expect(library.rideNames()).not.toHaveCount(0)
+  })
 })
 
 test('sorting by a column, then the other way', async ({ page }) => {

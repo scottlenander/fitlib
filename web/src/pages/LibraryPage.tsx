@@ -1,6 +1,14 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
-import { useBikes, useHealth, useRides, useTags, type RideItem, type SortKey } from '../api/client'
+import {
+  useBikes,
+  useHealth,
+  useRides,
+  useTags,
+  useZwiftWorlds,
+  type RideItem,
+  type SortKey,
+} from '../api/client'
 import { rideCount } from '../bulkEdit'
 import { BulkEdit } from '../components/BulkEdit'
 import { MAX_RIDES, MIN_RIDES, compareUrl } from '../compare'
@@ -16,6 +24,8 @@ import {
   hasFilters,
   toParams,
   toQuery,
+  withSource,
+  withWorld,
   type LibraryState,
 } from './libraryQuery'
 
@@ -301,6 +311,7 @@ const EFFORTS = Array.from({ length: 10 }, (_, i) => String(i + 1))
 function Filters({ state, onChange }: FiltersProps) {
   const tags = useTags()
   const bikes = useBikes()
+  const worlds = useZwiftWorlds()
   return (
     <fieldset className="filters">
       <legend>Filters</legend>
@@ -308,7 +319,7 @@ function Filters({ state, onChange }: FiltersProps) {
         Source
         <select
           value={state.source}
-          onChange={(e) => onChange({ source: e.target.value as LibraryState['source'] })}
+          onChange={(e) => onChange(withSource(e.target.value as LibraryState['source']))}
         >
           <option value="">Any</option>
           <option value="zwift">Zwift</option>
@@ -413,6 +424,17 @@ function Filters({ state, onChange }: FiltersProps) {
           ))}
         </select>
       </label>
+      <label>
+        World
+        <select value={state.world} onChange={(e) => onChange(withWorld(state, e.target.value))}>
+          <option value="">Any</option>
+          {worlds.data?.map((w) => (
+            <option key={w.slug} value={w.slug}>
+              {w.name}
+            </option>
+          ))}
+        </select>
+      </label>
       <button type="button" onClick={() => onChange(NO_FILTERS)}>
         Clear filters
       </button>
@@ -468,12 +490,21 @@ function RideRow({ ride, units, picked, onPick }: RowProps) {
           onChange={() => onPick({ id: ride.id, name: ride.name })}
         />
       </td>
-      <td>{f.date(ride.start, ride.local_start)}</td>
+      <td>
+        {f.date(ride.start, ride.local_start)}
+        {ride.time_zone_source === 'none' && (
+          <>
+            {' '}
+            <abbr title="No time zone known: the date is in UTC">UTC</abbr>
+          </>
+        )}
+      </td>
       <td>
         <Link to={`/rides/${ride.id}`}>{ride.name}</Link>
       </td>
       <td>
         {SOURCE_LABELS[ride.source] ?? ride.source}
+        {ride.zwift_world ? ` (${ride.zwift_world})` : ''}
         {ride.indoor && ride.source !== 'zwift' ? ' (indoor)' : ''}
       </td>
       <td className="num">{f.duration(ride.moving_s)}</td>

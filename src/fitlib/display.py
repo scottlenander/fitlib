@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from fitlib.models import RideSummary, Units
+from fitlib.models import OffsetSource, RideSummary, Units
 
 DASH = "–"
 METRES_PER_MILE = 1609.344
@@ -225,6 +225,31 @@ def start_time(summary: RideSummary) -> str:
     if local is not None:
         return f"{local:%a %d %b %Y, %H:%M}"
     return f"{summary.start:%a %d %b %Y, %H:%M} UTC"
+
+
+def time_zone_note(summary: RideSummary, default_zone: str | None) -> str:
+    """Say where a ride's local time came from.
+
+    Args:
+        summary: The ride's summary.
+        default_zone: The library's default time zone, if set.
+
+    Returns:
+        A sentence, e.g. "Local time from the file name."
+    """
+    match summary.utc_offset_source:
+        case OffsetSource.DEVICE:
+            return "Local time from the device."
+        case OffsetSource.FILE_NAME:
+            return "Local time from the file name."
+        case OffsetSource.DEFAULT:
+            zone = (default_zone or "unknown").replace("_", " ")
+            return f"Time zone: your default ({zone}), as the file doesn't say."
+        case _:
+            return (
+                "Shown in UTC: the file doesn't say where it was ridden. "
+                "Set a default time zone with `fitlib timezone`."
+            )
 
 
 def date(value: datetime) -> str:

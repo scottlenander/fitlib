@@ -23,6 +23,7 @@ from fitlib.api.routers import (
     settings,
     tags,
     trends,
+    worlds,
 )
 from fitlib.api.routers import watch as watch_routes
 from fitlib.api.static import default_static_dir, mount_app
@@ -95,6 +96,7 @@ def create_app(
     api.include_router(settings.router)
     api.include_router(trends.router)
     api.include_router(watch_routes.router)
+    api.include_router(worlds.router)
 
     @api.api_route(
         "/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"], include_in_schema=False

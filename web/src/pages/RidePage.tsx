@@ -1,6 +1,6 @@
 import { lazy, Suspense } from 'react'
 import { Link, useParams } from 'react-router'
-import { ApiError, useRide, type RideDetail } from '../api/client'
+import { ApiError, useRide, useSettings, type RideDetail } from '../api/client'
 import { RideDetails } from '../components/RideDetails'
 import { RouteProgress } from '../components/RouteProgress'
 import { ScrollBox } from '../components/ScrollBox'
@@ -8,6 +8,7 @@ import { SimilarRides } from '../components/SimilarRides'
 import { Stats, type Stat } from '../components/Stats'
 import { ZoneTable } from '../components/ZoneTable'
 import * as f from '../format'
+import { timeZoneNote } from '../timeZone'
 import { useUnits } from '../units'
 import { usePageTitle } from '../usePageTitle'
 
@@ -111,9 +112,11 @@ function Ride({ ride }: { ride: RideDetail }) {
       <header>
         <h1>{ride.name}</h1>
         <p className="subtitle" data-testid="ride-subtitle">
-          {f.startTime(ride.start, ride.local_start)} · {SOURCE_LABELS[ride.source]} ·{' '}
-          {ride.device ?? 'Unknown device'} · {where}
+          {f.startTime(ride.start, ride.local_start)} · {SOURCE_LABELS[ride.source]}
+          {ride.zwift_world ? ` · ${ride.zwift_world}` : ''} · {ride.device ?? 'Unknown device'} ·{' '}
+          {where}
         </p>
+        <TimeZoneNote ride={ride} />
       </header>
 
       <section aria-labelledby="summary-heading">
@@ -214,5 +217,23 @@ function Ride({ ride }: { ride: RideDetail }) {
       <SimilarRides ride={ride} />
       <RouteProgress ride={ride} />
     </article>
+  )
+}
+
+// Where the start time's time zone came from, with a way to Settings when it's the default
+// (or there's none).
+function TimeZoneNote({ ride }: { ride: RideDetail }) {
+  const settings = useSettings()
+  const note = timeZoneNote(ride.time_zone_source, settings.data?.timezone)
+  return (
+    <p className="hint" data-testid="time-zone-note">
+      {note.text}
+      {note.settings && (
+        <>
+          {' '}
+          {note.settings} <Link to="/settings">Settings</Link>.
+        </>
+      )}
+    </p>
   )
 }
