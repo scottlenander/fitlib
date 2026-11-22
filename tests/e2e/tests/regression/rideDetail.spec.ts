@@ -20,6 +20,7 @@ test('a ride with power shows its figures, zones, best efforts and laps', async 
     await expect(ride.subtitle).toHaveText(
       'Tue 05 Aug 2025, 19:00 · Garmin · Garmin Edge 540 · Outdoor',
     )
+    await expect(ride.timeZoneNote).toHaveText('Local time from the device.')
   })
 
   await test.step('Summary', async () => {
@@ -77,7 +78,7 @@ test('a ride without power leaves out power figures', async ({ page, request }) 
 
 // Zwift writes 1989-12-31 (the FIT epoch) as its local time, which must be ignored; it names
 // the file after the local start time instead (2025-08-02-08-29-42.fit, in CEST).
-test('a Zwift ride is dated by its file name', async ({ page, request }) => {
+test('a Zwift ride is dated by its file name, in its world', async ({ page, request }) => {
   const ride = new RidePage(page)
 
   await test.step('Open the Zwift ride', async () => {
@@ -85,7 +86,10 @@ test('a Zwift ride is dated by its file name', async ({ page, request }) => {
   })
 
   await test.step('The start is the local time from its file name (not 1989, not UTC)', async () => {
-    await expect(ride.subtitle).toHaveText('Sat 02 Aug 2025, 08:30 · Zwift · Zwift · Indoor')
+    await expect(ride.subtitle).toHaveText(
+      'Sat 02 Aug 2025, 08:30 · Zwift · Watopia · Zwift · Indoor',
+    )
+    await expect(ride.timeZoneNote).toHaveText('Local time from the file name.')
   })
 
   // Zwift writes the odometer on only a few records; distance is added up from speed.

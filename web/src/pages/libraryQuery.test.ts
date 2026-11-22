@@ -1,6 +1,14 @@
 // The library's URL state: reading it, writing it back and turning it into an API query.
 import { describe, expect, test } from 'vitest'
-import { DEFAULT_LIMIT, fromParams, hasFilters, toParams, toQuery } from './libraryQuery'
+import {
+  DEFAULT_LIMIT,
+  fromParams,
+  hasFilters,
+  toParams,
+  toQuery,
+  withSource,
+  withWorld,
+} from './libraryQuery'
 
 const parse = (search: string) => fromParams(new URLSearchParams(search))
 
@@ -28,7 +36,7 @@ describe('writing the URL', () => {
 
   test('a full state round-trips', () => {
     const search =
-      'q=x&source=garmin&where=outdoor&since=2025-08-01&until=2025-08-31&power=yes&min=30&tag=z2&bike=b1&rpe_min=3&rpe_max=7&sort=power&dir=asc&page=2&limit=10'
+      'q=x&source=garmin&where=outdoor&since=2025-08-01&until=2025-08-31&power=yes&min=30&tag=z2&bike=b1&rpe_min=3&rpe_max=7&world=watopia&sort=power&dir=asc&page=2&limit=10'
 
     expect(toParams(parse(search)).toString()).toBe(search)
   })
@@ -60,12 +68,17 @@ describe('the API query', () => {
     expect(toQuery(parse('bike=none'))).toMatchObject({ has_bike: false, bike_id: undefined })
   })
 
+  test('a Zwift world', () => {
+    expect(toQuery(parse('world=makuri-islands'))).toMatchObject({ world: 'makuri-islands' })
+    expect(toQuery(parse(''))).toMatchObject({ world: undefined })
+  })
+
   test('an effort outside 1-10 is ignored', () => {
     expect(parse('rpe_min=0&rpe_max=11')).toMatchObject({ minRpe: '', maxRpe: '' })
   })
 
   test('every filter counts as a filter', () => {
-    for (const search of ['tag=z2', 'bike=none', 'rpe_min=3', 'min=10']) {
+    for (const search of ['tag=z2', 'bike=none', 'rpe_min=3', 'min=10', 'world=watopia']) {
       expect(hasFilters(parse(search)), search).toBe(true)
     }
   })
@@ -76,5 +89,19 @@ describe('the API query', () => {
 
   test('sorting ascending turns off descending', () => {
     expect(toQuery(parse('sort=distance&dir=asc'))).toMatchObject({ sort: 'distance', desc: false })
+  })
+})
+
+describe('worlds and sources', () => {
+  test('choosing a world drops another source, but keeps Zwift', () => {
+    expect(withWorld(parse('source=garmin'), 'watopia')).toEqual({ world: 'watopia', source: '' })
+    expect(withWorld(parse('source=zwift'), 'watopia')).toEqual({ world: 'watopia' })
+    expect(withWorld(parse('source=garmin'), '')).toEqual({ world: '' })
+  })
+
+  test('choosing another source drops the world; Zwift or any keeps it', () => {
+    expect(withSource('garmin')).toEqual({ source: 'garmin', world: '' })
+    expect(withSource('zwift')).toEqual({ source: 'zwift' })
+    expect(withSource('')).toEqual({ source: '' })
   })
 })

@@ -27,6 +27,7 @@ export type MetaPatch = Schemas['MetaPatch']
 export type BulkMetaPatch = Schemas['BulkMetaPatch']
 export type BulkMetaResult = Schemas['BulkMetaResult']
 export type TagCount = Schemas['TagCount']
+export type ZwiftWorld = Schemas['WorldOut']
 export type SimilarRides = Schemas['SimilarRides']
 export type SimilarRide = Schemas['SimilarRide']
 export type Health = Schemas['Health']
@@ -191,6 +192,15 @@ function useInvalidate() {
   const client = useQueryClient()
   return (...keys: string[]) =>
     Promise.all(keys.map((key) => client.invalidateQueries({ queryKey: [key] })))
+}
+
+// The Zwift worlds the library can be filtered on.
+export function useZwiftWorlds() {
+  return useQuery({
+    queryKey: ['zwift-worlds'],
+    queryFn: () => request<ZwiftWorld[]>('/api/zwift-worlds'),
+    staleTime: Infinity,
+  })
 }
 
 export function useTags() {
