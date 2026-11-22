@@ -18,6 +18,7 @@ from fitlib.api import create_app
 from fitlib.config import Config
 from fitlib.importer import Importer
 from fitlib.store.factory import open_stores
+from tests.clients import LOCAL
 from tests.fixtures.generate import FIT_DIR
 
 
@@ -88,7 +89,7 @@ def client(config: Config) -> Generator[TestClient]:
     Yields:
         The client; closed after the test.
     """
-    with TestClient(create_app(config, workers=1)) as test_client:
+    with TestClient(create_app(config, workers=1), base_url=LOCAL) as test_client:
         yield test_client
 
 
@@ -103,7 +104,7 @@ def reader(template: Template) -> Generator[Api]:
         The client and the ride ids.
     """
     config = Config(library=template.library)
-    with TestClient(create_app(config, workers=1)) as test_client:
+    with TestClient(create_app(config, workers=1), base_url=LOCAL) as test_client:
         yield Api(test_client, config, template.ids)
 
 
@@ -121,5 +122,5 @@ def writer(template: Template, tmp_path: Path) -> Generator[Api]:
     library = tmp_path / "library"
     shutil.copytree(template.library, library)
     config = Config(library=library)
-    with TestClient(create_app(config, workers=1)) as test_client:
+    with TestClient(create_app(config, workers=1), base_url=LOCAL) as test_client:
         yield Api(test_client, config, template.ids)

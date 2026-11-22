@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 from fitlib.api import create_app
 from fitlib.config import Config
 from fitlib.models import Units
+from tests.clients import LOCAL
 from tests.fixtures.generate import FIT_DIR
 from tests.fixtures.specs import ride
 
@@ -200,7 +201,7 @@ def test_settings_report_the_configured_units(tmp_path: Path, units: Units):
     """
     config = Config(library=tmp_path / "library", units=units)
 
-    with TestClient(create_app(config, workers=1)) as client:
+    with TestClient(create_app(config, workers=1), base_url=LOCAL) as client:
         response = client.get("/api/settings")
 
     assert response.json() == {

@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 from fitlib.api import create_app
 from fitlib.api.static import PLACEHOLDER_DIR, default_static_dir
 from fitlib.config import Config
+from tests.clients import LOCAL
 
 
 @pytest.fixture
@@ -30,7 +31,7 @@ def built_app(tmp_path: Path, config: Config) -> Generator[TestClient]:
     (dist / "assets" / "main.js").write_text("console.log('app')")
     (dist / "favicon.svg").write_text("<svg/>")
     (tmp_path / "secret.txt").write_text("outside")
-    with TestClient(create_app(config, static_dir=dist, workers=1)) as test_client:
+    with TestClient(create_app(config, static_dir=dist, workers=1), base_url=LOCAL) as test_client:
         yield test_client
 
 
@@ -40,7 +41,9 @@ def test_placeholder_page_explains_how_to_build_the_app(config: Config):
     Given: the app serving the placeholder folder.
     Expect: an HTML page with the build command.
     """
-    with TestClient(create_app(config, static_dir=PLACEHOLDER_DIR, workers=1)) as client:
+    with TestClient(
+        create_app(config, static_dir=PLACEHOLDER_DIR, workers=1), base_url=LOCAL
+    ) as client:
         response = client.get("/")
 
     assert response.status_code == 200

@@ -13,6 +13,7 @@ import uvicorn
 
 from fitlib.api import create_app
 from fitlib.api.routers.e2e import UnsafeLibrary
+from fitlib.api.security import LOOPBACK_HOSTS
 from fitlib.cli.common import app, err, fail
 from fitlib.config import ConfigError, load_config
 
@@ -69,7 +70,12 @@ def serve(
             raise fail(f"{E2E_ENV}=1 needs {E2E_FIXTURES_ENV} set to the fixtures folder.")
         fixtures = Path(raw)
     try:
-        web = create_app(config, e2e_fixtures=fixtures, watch=watch)
+        web = create_app(
+            config,
+            e2e_fixtures=fixtures,
+            watch=watch,
+            allowed_hosts=None if host not in LOOPBACK else LOOPBACK_HOSTS,
+        )
     except UnsafeLibrary as exc:
         raise fail(str(exc)) from None
 
