@@ -107,6 +107,10 @@ class InvalidBlobKey(StoreError):
     """A blob key isn't a relative, lower-case, slash-separated path."""
 
 
+class BadSnapshot(StoreError):
+    """A catalog snapshot is damaged, or is from a newer fitlib."""
+
+
 class CatalogStore(Protocol):
     """One searchable entry per ride: summary, laps, location and the user's metadata."""
 

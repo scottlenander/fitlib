@@ -29,7 +29,17 @@ from fitlib.analysis.training import athlete_profile, training  # noqa: E402
 from fitlib.config import Config  # noqa: E402
 from fitlib.importer import Importer  # noqa: E402
 from fitlib.models import Filters, SortKey  # noqa: E402
-from fitlib.store.factory import open_stores  # noqa: E402
+from fitlib.store.factory import (  # noqa: E402
+    latest_schema_version,
+    library_blobs,
+    open_remote,
+    open_stores,
+    restore_catalog,
+    snapshot_catalog,
+)
+from fitlib.sync.crypto import Keys  # noqa: E402
+from fitlib.sync.engine import LocalLibrary, push, read_keyfile, restore, setup  # noqa: E402
+from fitlib.sync.keys import MemoryKeyStore  # noqa: E402
 from tests.fixtures.generate import build  # noqa: E402
 from tests.fixtures.specs import RIDES, Segment  # noqa: E402
 
@@ -127,6 +137,33 @@ def main() -> None:
             timed("trends: efficiency, all", lambda: trends.efficiency(c, first, last))
             timed("trends: power curve, all", lambda: trends.best_curve(c, "power", first, last))
             timed("trends: route progress (newest)", lambda: trends.route_progress(c, newest))
+
+            # Encrypted sync to a local folder (real Argon2id settings; a memory keychain).
+            sync_dir = root / "sync"
+            sync_dir.mkdir()
+            remote, keystore = open_remote(sync_dir), MemoryKeyStore()
+            passphrase = "perf passphrase 123"
+            timed("sync: setup (Argon2id)", lambda: setup(c, remote, keystore, passphrase))
+            local = LocalLibrary(
+                c, stores.blobs, partial(snapshot_catalog, stores), latest_schema_version()
+            )
+            keys = Keys.from_master(keystore.keys[next(iter(keystore.keys))])
+            first_push = timed("sync: first push, all", lambda: push(local, remote, keys))
+            print(f"  -> uploaded {first_push.uploaded_bytes / 1e6:.0f} MB")
+            timed("sync: push, nothing changed", lambda: push(local, remote, keys))
+            restored = Config(library=root / "restored")
+            timed(
+                "sync: restore, all",
+                lambda: restore(
+                    remote,
+                    read_keyfile(remote, passphrase),
+                    library_blobs(restored),
+                    partial(restore_catalog, restored),
+                    latest_schema_version(),
+                ),
+            )
+            sync_mb = sum(p.stat().st_size for p in sync_dir.rglob("*") if p.is_file()) / 1e6
+            print(f"  -> sync folder {sync_mb:.0f} MB")
         library_mb = sum(p.stat().st_size for p in library.rglob("*") if p.is_file()) / 1e6
         print(f"Library size: {library_mb:.0f} MB")
     finally:

@@ -9,6 +9,7 @@ from fitlib.cli import (  # noqa: F401 - registers commands
     bikes,
     rides,
     serve,
+    sync,
     timezone,
     trends,
     watch,

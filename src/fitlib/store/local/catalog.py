@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import os
 import sqlite3
+import struct
+import tempfile
 import threading
 import time
 from collections.abc import Generator, Iterable, Mapping
@@ -38,6 +41,7 @@ from fitlib.models import (
 from fitlib.store.interfaces import (
     MIN_ID_PREFIX,
     AmbiguousRideId,
+    BadSnapshot,
     BikeNotFound,
     DuplicateBike,
     DuplicateRide,
@@ -81,6 +85,60 @@ def _migrations() -> list[tuple[int, str]]:
         if entry.name.endswith(".sql"):
             found.append((int(entry.name.split("_", 1)[0]), entry.read_text()))
     return sorted(found)
+
+
+def latest_schema_version() -> int:
+    """The newest catalog schema this version of fitlib knows.
+
+    Returns:
+        The number of the last bundled migration.
+    """
+    return _migrations()[-1][0]
+
+
+# Tables that hold this computer's paths, left out of snapshots.
+LOCAL_TABLES = ("watch_files", "watch_folders")
+
+
+def restore_snapshot(path: Path, data: bytes) -> None:
+    """Write a catalog snapshot as a library's catalog file, checking it first.
+
+    The file appears only once it's complete and checked.
+
+    Args:
+        path: The catalog file to create. It must not exist yet.
+        data: A snapshot from ``SqliteCatalog.snapshot``.
+
+    Raises:
+        FileExistsError: ``path`` already exists.
+        BadSnapshot: The data isn't a sound SQLite database, or its schema is newer than
+            ``latest_schema_version()``.
+    """
+    if path.exists():
+        raise FileExistsError(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=".tmp-catalog-")
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(data)
+        db = sqlite3.connect(tmp)
+        try:
+            ok = db.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+            version = db.execute("PRAGMA user_version").fetchone()[0]
+        except sqlite3.DatabaseError:
+            ok, version = False, 0
+        finally:
+            db.close()
+        if not ok:
+            raise BadSnapshot("The catalog snapshot is damaged")
+        if version > latest_schema_version():
+            raise BadSnapshot(
+                f"The catalog is from a newer fitlib (schema {version}); update fitlib first"
+            )
+        os.replace(tmp, path)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)
+        raise
 
 
 def _ts(value: datetime) -> int:
@@ -1406,6 +1464,44 @@ class SqliteCatalog:
         """
         with self._lock:
             return self._db.execute("SELECT COUNT(*) FROM rides").fetchone()[0]
+
+    def snapshot(self, local_settings_prefix: str) -> bytes:
+        """Copy the whole catalog as one SQLite file, without this computer's own data.
+
+        Leaves out ``LOCAL_TABLES`` (watched folders and files) and settings whose names start
+        with ``local_settings_prefix``. Safe while others write: SQLite's backup copies one
+        consistent state.
+
+        Args:
+            local_settings_prefix: Settings with names starting with this are left out.
+
+        Returns:
+            The database file's bytes, not in WAL mode.
+        """
+        with tempfile.TemporaryDirectory(prefix="fitlib-snapshot-") as folder:
+            path = Path(folder) / "catalog.sqlite3"
+            copy = sqlite3.connect(path, autocommit=True)
+            try:
+                with self._lock:
+                    self._db.backup(copy)
+                copy.execute("PRAGMA journal_mode = DELETE")
+                for table in LOCAL_TABLES:
+                    copy.execute(f"DELETE FROM {table}")
+                copy.execute(
+                    "DELETE FROM settings WHERE substr(key, 1, ?) = ?",
+                    (len(local_settings_prefix), local_settings_prefix),
+                )
+                copy.execute("VACUUM")
+            finally:
+                copy.close()
+            data = bytearray(path.read_bytes())
+        # The header's file change counter (offset 24) and its copy (92) carry over from the
+        # library and move with every write, even to settings left out. Pinning both to 1
+        # (still a valid header) makes an unchanged catalog give the same bytes, so a push
+        # can skip it.
+        struct.pack_into(">I", data, 24, 1)
+        struct.pack_into(">I", data, 92, 1)
+        return bytes(data)
 
     def close(self) -> None:
         """Release the catalog's resources."""
