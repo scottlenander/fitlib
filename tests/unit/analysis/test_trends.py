@@ -228,13 +228,15 @@ def test_fitness_fatigue_and_form_by_hand(catalog: MemoryCatalog):
 def test_fitness_does_not_depend_on_the_range(catalog: MemoryCatalog):
     """Values on a day are the same whatever range is asked for; they start at the first ride.
 
-    Given: hours at FTP on 2, 5 and 9 Aug, and a ride without power on 12 Aug.
-    Expect: 10 to 14 Aug alone matches the same days of 1 to 31 Aug; the ride without power
+    Given: hours at FTP on 2, 5 and 9 Aug, and a ride with neither power nor heart rate on
+    12 Aug.
+    Expect: 10 to 14 Aug alone matches the same days of 1 to 31 Aug; the ride without TSS
     is counted; fitness on 14 Aug isn't zero.
     """
     for day in (2, 5, 9):
         add(catalog, utc(day), **hour_at_ftp())
-    add(catalog, utc(12), has_power=False, np=None, kj=None, power_curve=())
+    add(catalog, utc(12), has_power=False, np=None, kj=None, power_curve=(), has_hr=False,
+        avg_hr=None, hr_histogram=(), hr_curve=())  # fmt: skip
 
     month = trends.fitness(catalog, AUG_1, AUG_31)
     part = trends.fitness(catalog, date(2025, 8, 10), date(2025, 8, 14))

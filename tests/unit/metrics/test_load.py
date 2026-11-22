@@ -170,3 +170,36 @@ def test_ride_tss_prefers_power(np, ftp, hr_squared_s, threshold, expected):
         None if expected[0] is None else pytest.approx(expected[0]),
         expected[1],
     )
+
+
+def test_hr_per_watt_over_the_window():
+    """Heart rate per watt adds up the rides in the 90 days up to the day, once there are 3.
+
+    Given: rides on 1 May (old), 1, 2 and 3 Aug: hours at NP 200 W and 150 bpm, except 2 Aug
+    at 250 W and 150 bpm.
+    Expect: on 3 Aug, sqrt(3 x 150² / (2 x 200² + 250²)); on 2 Aug (two rides in the window,
+    1 May is outside), none.
+    """
+
+    def ride(day: date, np: float):
+        return load.calibration_ride(day, 3600, np, 150 * 150 * 3600)
+
+    rides = [ride(date(2025, 5, 1), 200), ride(date(2025, 8, 1), 200),
+             ride(date(2025, 8, 2), 250), ride(date(2025, 8, 3), 200)]  # fmt: skip
+
+    expected = (3 * 150**2 / (2 * 200**2 + 250**2)) ** 0.5
+    assert load.hr_per_watt(rides, date(2025, 8, 3)) == pytest.approx(expected)
+    assert load.hr_per_watt(rides, date(2025, 8, 2)) is None
+
+
+@pytest.mark.parametrize(
+    ("moving_s", "np", "hr"), [(1199, 200.0, 1e8), (3600, None, 1e8), (3600, 200.0, None)],
+    ids=["short", "no-power", "no-heart-rate"],
+)  # fmt: skip
+def test_only_rides_with_power_heart_rate_and_20_minutes_calibrate(moving_s, np, hr):
+    """Short rides, and rides without power or heart rate, don't count.
+
+    Given: 19:59 of riding; no power; no heart rate.
+    Expect: no calibration ride.
+    """
+    assert load.calibration_ride(date(2025, 8, 1), moving_s, np, hr) is None

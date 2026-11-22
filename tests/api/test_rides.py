@@ -135,13 +135,16 @@ def test_list_items_carry_estimated_tss(reader: Api):
     """Without an FTP set, rides with power get TSS from an estimated FTP.
 
     Given: the fixture library, which has no athlete history.
-    Expect: every ride with power has a TSS marked estimated; the two without power have none.
+    Expect: every ride with power has a TSS marked estimated; the heart-rate-only ride a TSS
+    from heart rate, its threshold worked out from the rides with power; the ride with
+    neither power nor heart rate none.
     """
     response = reader.client.get("/api/rides")
 
     items = {item["id"]: item for item in response.json()["items"]}
-    without_power = [items.pop(reader.ids[name]) for name in (HR_ONLY, NO_TIME_ZONE)]
-    assert [i["tss"] for i in without_power] == [None, None]
+    hr_only, neither = (items.pop(reader.ids[name]) for name in (HR_ONLY, NO_TIME_ZONE))
+    assert (hr_only["tss_source"], hr_only["threshold_hr_estimated"]) == ("hr", True)
+    assert neither["tss"] is None, "no power and no heart rate: no TSS"
     assert all(i["tss"] is not None and i["ftp_estimated"] for i in items.values()), (
         "every ride with power should have an estimated TSS"
     )
@@ -193,12 +196,14 @@ def test_detail_without_power_has_no_power_figures(reader: Api):
     """A ride with heart rate only has no power-based figures.
 
     Given: the HR-only ride.
-    Expect: no TSS, no power zones and an empty power curve; a heart-rate curve.
+    Expect: no IF, no power zones and an empty power curve; a heart-rate curve; its TSS from
+    heart rate.
     """
     response = reader.client.get(f"/api/rides/{reader.ids[HR_ONLY]}")
 
     ride = response.json()
-    assert ride["training"]["tss"] is None
+    assert ride["training"]["intensity_factor"] is None
+    assert ride["training"]["tss_source"] == "hr"
     assert ride["power_zones"] is None
     assert ride["power_curve"] == []
     assert ride["hr_curve"], "the HR curve should be there"

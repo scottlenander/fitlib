@@ -12,7 +12,12 @@ import typer
 from rich.table import Table
 
 from fitlib import display
-from fitlib.analysis.training import BadBirthYear, athlete_profile, set_birth_year
+from fitlib.analysis.training import (
+    BadBirthYear,
+    athlete_profile,
+    set_birth_year,
+    threshold_today,
+)
 from fitlib.cli.common import UnitsOption, athlete_app, fail, library, out
 from fitlib.metrics import load
 from fitlib.models import (
@@ -84,6 +89,7 @@ def athlete_show(ctx: typer.Context, units: UnitsOption = None) -> None:
     """
     with library(ctx) as lib:
         profile = athlete_profile(lib.stores.catalog)
+        threshold, source = threshold_today(lib.stores.catalog, profile)
         chosen = lib.units(units)
     history = profile.history
     today = date.today()
@@ -91,7 +97,7 @@ def athlete_show(ctx: typer.Context, units: UnitsOption = None) -> None:
     if profile.birth_year is not None:
         out.print(
             f"Born {profile.birth_year}: threshold heart rate estimated at "
-            f"{display.bpm(estimate)} when none is set."
+            f"{display.bpm(estimate)} when none is set and your rides don't give one."
         )
     if not history:
         out.print("No athlete history yet. Add some with `fitlib athlete set`.")
@@ -107,12 +113,10 @@ def athlete_show(ctx: typer.Context, units: UnitsOption = None) -> None:
         )
     out.print(table)
     now = load.values_on(history, today)
-    threshold = display.bpm(now.threshold_hr if now.threshold_hr is not None else estimate)
-    if now.threshold_hr is None and estimate is not None:
-        threshold += " (estimated from age)"
     out.print(
         f"\nToday: FTP {display.watts(now.ftp)}, weight {display.weight(now.weight_kg, chosen)}, "
-        f"max HR {display.bpm(now.max_hr)}, threshold HR {threshold}."
+        f"max HR {display.bpm(now.max_hr)}, threshold HR "
+        f"{display.bpm(threshold)}{display.threshold_source(source)}."
     )
 
 

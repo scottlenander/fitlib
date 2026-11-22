@@ -25,6 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fitlib.analysis import trends  # noqa: E402
 from fitlib.analysis.similar import similar_efforts, similar_routes  # noqa: E402
+from fitlib.analysis.training import athlete_profile, training  # noqa: E402
 from fitlib.config import Config  # noqa: E402
 from fitlib.importer import Importer  # noqa: E402
 from fitlib.models import Filters, SortKey  # noqa: E402
@@ -93,6 +94,13 @@ def main() -> None:
                 "list by power, page 10", lambda: c.search(sort=SortKey.POWER, offset=180, limit=20)
             )
             timed("text search 'zwift'", lambda: c.search(Filters(text="zwift"), limit=20))
+
+            def page_with_training():
+                page = c.search(limit=50)
+                athlete = athlete_profile(c)
+                return [training(c, ride, athlete) for ride in page.items]
+
+            timed("library page of 50 with training figures", page_with_training)
             timed(
                 "one year, outdoor, > 1 h",
                 lambda: c.search(

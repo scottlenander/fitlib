@@ -11,11 +11,11 @@ import {
 } from '../api/client'
 import { rideCount } from '../bulkEdit'
 import { BulkEdit } from '../components/BulkEdit'
+import { TssNotes, TssValue } from '../components/Tss'
 import { MAX_RIDES, MIN_RIDES, compareUrl } from '../compare'
 import * as f from '../format'
 import { useUnits } from '../units'
 import { MAX_SELECTED, usePicked, type Picked } from '../selection'
-import { tssMarks, tssNotes } from '../tss'
 import { usePageTitle } from '../usePageTitle'
 import {
   NO_FILTERS,
@@ -77,7 +77,6 @@ export function LibraryPage() {
 
   const page = rides.data
   const pages = page ? Math.max(1, Math.ceil(page.total / page.limit)) : 1
-  const notes = tssNotes(page?.items ?? [])
 
   return (
     <>
@@ -171,11 +170,7 @@ export function LibraryPage() {
               </table>
             </div>
           )}
-          {notes.map((note) => (
-            <p key={note} className="footnote">
-              {note}
-            </p>
-          ))}
+          <TssNotes rides={page.items} />
           {page.total > 0 && (
             <nav aria-label="Pages" className="pager">
               <button
@@ -477,7 +472,6 @@ type RowProps = {
 }
 
 function RideRow({ ride, units, picked, onPick }: RowProps) {
-  const marks = tssMarks(ride)
   const checked = picked.some((p) => p.id === ride.id)
   return (
     <tr data-testid="ride-row">
@@ -513,24 +507,7 @@ function RideRow({ ride, units, picked, onPick }: RowProps) {
       <td className="num">{f.watts(ride.avg_power)}</td>
       <td className="num">{f.watts(ride.np)}</td>
       <td className="num">
-        {f.tss(ride.tss)}
-        {marks.fromHeartRate && (
-          <>
-            {' '}
-            <abbr title="TSS from heart rate (no power)">HR</abbr>
-          </>
-        )}
-        {marks.estimated && (
-          <abbr
-            title={
-              marks.fromHeartRate
-                ? 'Threshold heart rate estimated from age'
-                : 'TSS from an estimated FTP'
-            }
-          >
-            *
-          </abbr>
-        )}
+        <TssValue ride={ride} />
       </td>
       <td className="num">{f.bpm(ride.avg_hr)}</td>
       <td>{ride.bike?.name ?? f.DASH}</td>

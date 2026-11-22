@@ -356,7 +356,8 @@ def ride_loads(
         estimated = False
         if ftp is None and row.np is not None:
             ftp, estimated = estimate, estimate is not None
-        threshold_hr, _ = threshold_hr_on(athlete, row.local_date)
+        day_ftp = ftp if ftp is not None else estimate
+        threshold_hr, _ = threshold_hr_on(athlete, row.local_date, day_ftp)
         tss, source = load.ride_tss(row.moving_s, row.np, ftp, row.hr_squared_s, threshold_hr)
         loads.append(RideLoad(row, ftp, estimated, tss, source))
     return loads

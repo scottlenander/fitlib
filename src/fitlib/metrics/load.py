@@ -8,9 +8,11 @@ effect everywhere at once.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+import math
+from bisect import bisect_left, bisect_right
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from enum import StrEnum
 
 from fitlib.models import AthleteEntry, Histogram
@@ -23,6 +25,11 @@ EFTP_LOOKBACK_DAYS = 42
 TANAKA_INTERCEPT = 208.0
 TANAKA_SLOPE = 0.7
 THRESHOLD_SHARE_OF_MAX = 0.9
+# Threshold heart rate from your own rides: heart rate per watt over rides with power and
+# heart rate of at least this long, in this many days up to the day, once there are enough.
+CALIBRATION_DAYS = 90
+CALIBRATION_MIN_RIDES = 3
+CALIBRATION_MIN_S = 20 * 60
 
 
 class TssSource(StrEnum):
@@ -30,6 +37,77 @@ class TssSource(StrEnum):
 
     POWER = "power"
     HEART_RATE = "hr"
+
+
+class ThresholdSource(StrEnum):
+    """Where a threshold heart rate came from."""
+
+    # Set in the athlete history.
+    SET = "set"
+    # From your rides with power and heart rate, and the FTP on the day.
+    RIDES = "rides"
+    # Estimated from your age.
+    AGE = "age"
+
+
+@dataclass(frozen=True)
+class CalibrationRide:
+    """What one ride with power and heart rate adds to the heart rate per watt.
+
+    Attributes:
+        day: The ride's local date.
+        power_term: Riding seconds times NP squared (W² · s).
+        hr_term: Riding seconds times heart rate squared, summed (bpm² · s).
+    """
+
+    day: date
+    power_term: float
+    hr_term: float
+
+
+def calibration_ride(
+    day: date, moving_s: int, np: float | None, hr_squared_s: float | None
+) -> CalibrationRide | None:
+    """A ride's part in the heart rate per watt, if it can have one.
+
+    Args:
+        day: Its local date.
+        moving_s: Its riding time.
+        np: Its Normalized Power, if it has power.
+        hr_squared_s: Its riding seconds times heart rate squared, if it has heart rate.
+
+    Returns:
+        Its terms, or ``None`` without power or heart rate, or when shorter than
+        ``CALIBRATION_MIN_S``.
+    """
+    if not np or not hr_squared_s or moving_s < CALIBRATION_MIN_S:
+        return None
+    return CalibrationRide(day, moving_s * np * np, hr_squared_s)
+
+
+def hr_per_watt(rides: Sequence[CalibrationRide], day: date) -> float | None:
+    """Heart rate per watt of NP over recent rides, as TSS sees them.
+
+    With it, ``FTP x hr_per_watt`` is the threshold heart rate at which a ride's heart-rate
+    TSS adds up to its power TSS: power TSS is ``Σ s x NP² / FTP²`` and heart-rate TSS
+    ``Σ s x HR² / threshold²`` (both / 36), so over these rides
+    ``threshold = FTP x sqrt(Σ s·HR² / Σ s·NP²)``. It doesn't depend on FTP itself.
+
+    Args:
+        rides: Rides with power and heart rate, oldest first by day.
+        day: The day it's for.
+
+    Returns:
+        ``sqrt(Σ hr_term / Σ power_term)`` over the rides in the ``CALIBRATION_DAYS`` days up
+        to ``day`` (included), or ``None`` with fewer than ``CALIBRATION_MIN_RIDES``.
+    """
+    days = [r.day for r in rides]
+    lo = bisect_left(days, day - timedelta(days=CALIBRATION_DAYS - 1))
+    hi = bisect_right(days, day)
+    window = rides[lo:hi]
+    if len(window) < CALIBRATION_MIN_RIDES:
+        return None
+    return math.sqrt(sum(r.hr_term for r in window) / sum(r.power_term for r in window))
 
 
 @dataclass(frozen=True)

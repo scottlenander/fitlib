@@ -118,7 +118,7 @@ def tss_text(figures: Training) -> str:
         figures: The ride's training figures.
 
     Returns:
-        E.g. "112*" (estimated FTP), "48 HR", "52 HR*" (threshold estimated from age).
+        E.g. "112*" (estimated FTP), "48 HR", "52 HR*" (threshold from your rides or age).
     """
     if figures.tss is None:
         return display.tss(None)
@@ -139,7 +139,7 @@ def print_tss_notes(figures: Iterable[Training]) -> None:
         out.print("* TSS from an estimated FTP (no FTP set for that date).")
     if by_hr:
         estimated = (
-            " (* threshold estimated from age)"
+            " (* threshold heart rate not set: from your rides or your age)"
             if any(f.threshold_hr_estimated for f in by_hr)
             else ""
         )
@@ -165,7 +165,7 @@ def print_training(ride: Ride, figures: Training) -> None:
     table.add_row("Intensity Factor", display.ratio(figures.intensity_factor))
     table.add_row("TSS", display.tss(figures.tss))
     if figures.tss_source is TssSource.HEART_RATE:
-        source = " (estimated from age)" if figures.threshold_hr_estimated else ""
+        source = display.threshold_source(figures.threshold_hr_source)
         table.add_row("", f"from heart rate: threshold {display.bpm(figures.threshold_hr)}{source}")
     table.add_row("Variability Index", display.ratio(r.vi))
     table.add_row("Work", display.kilojoules(r.kj))
@@ -186,7 +186,7 @@ def print_hr_training(figures: Training) -> None:
     Args:
         figures: Its training figures (with a heart-rate TSS).
     """
-    source = " (estimated from age)" if figures.threshold_hr_estimated else ""
+    source = display.threshold_source(figures.threshold_hr_source)
     table = Table(show_header=False, box=None)
     table.add_row("TSS", display.tss(figures.tss))
     table.add_row("Threshold heart rate", f"{display.bpm(figures.threshold_hr)}{source}")

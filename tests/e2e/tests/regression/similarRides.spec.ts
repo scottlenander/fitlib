@@ -101,6 +101,14 @@ test('progress on a route lists its rides oldest first, by speed', async ({ page
     await expect(progress.rows.last()).toContainText(EXPORT_B.name)
   })
 
+  // The heart-rate-only ride's threshold comes from the rides with power before it.
+  await test.step('The ride without power has its TSS from heart rate, explained', async () => {
+    await expect(progress.row(HR_ONLY.name)).toContainText(/\d+ HR\*/)
+    await expect(
+      progress.root.getByText('HR: TSS from heart rate, as the ride has no power.'),
+    ).toBeVisible()
+  })
+
   await test.step('Show power instead', async () => {
     await progress.metric.selectOption({ label: 'Avg power' })
     await expect(progress.chart).toHaveAttribute(

@@ -3,6 +3,7 @@ import { Link } from 'react-router'
 import { useSimilar, type RideDetail, type SimilarRide } from '../api/client'
 import { MAX_RIDES, compareUrl } from '../compare'
 import * as f from '../format'
+import { TssNotes, TssValue } from './Tss'
 import { useUnits } from '../units'
 
 const RECOMPUTE_HINT = 'Run fitlib recompute to find rides on its route.'
@@ -200,7 +201,9 @@ function EffortMatches({ ride }: { ride: RideDetail }) {
                 </td>
                 <td className="num">{f.duration(item.ride.moving_s)}</td>
                 <td className="num">{f.watts(item.ride.np ?? item.ride.avg_power)}</td>
-                <td className="num">{f.tss(item.ride.tss)}</td>
+                <td className="num">
+                  <TssValue ride={item.ride} />
+                </td>
                 <td>
                   <CompareLink rideId={ride.id} other={item.ride} />
                 </td>
@@ -209,6 +212,7 @@ function EffortMatches({ ride }: { ride: RideDetail }) {
           </tbody>
         </table>
       </div>
+      <TssNotes rides={similar.data.items.map((item) => item.ride)} />
       <p className="hint">
         Similarity: 100 is an identical effort, by length, intensity, steadiness and the shape of
         the {ride.has_power ? 'power' : 'heart-rate'} curve.

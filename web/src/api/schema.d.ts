@@ -1021,8 +1021,11 @@ export interface components {
      *         today: FTP, weight, max and threshold heart rate in effect today, each from the
      *             latest entry that sets it.
      *         birth_year: The rider's year of birth, if given.
-     *         estimated_threshold_hr: Today's threshold heart rate estimated from age, used when
-     *             none is set; ``null`` without a year of birth.
+     *         estimated_threshold_hr: Today's threshold heart rate estimated from age; ``null``
+     *             without a year of birth.
+     *         threshold_hr_today: The threshold heart rate a ride today would use: set, from your
+     *             rides, or from your age.
+     *         threshold_hr_source_today: Where ``threshold_hr_today`` comes from.
      */
     Athlete: {
       /** Birth Year */
@@ -1031,6 +1034,9 @@ export interface components {
       estimated_threshold_hr: number | null
       /** History */
       history: components['schemas']['AthleteEntryOut'][]
+      threshold_hr_source_today: components['schemas']['ThresholdSource'] | null
+      /** Threshold Hr Today */
+      threshold_hr_today: number | null
       today: components['schemas']['AthleteValuesIn']
     }
     /**
@@ -1909,8 +1915,8 @@ export interface components {
      *             threshold heart rate.
      *         tss_source: ``"power"`` or ``"hr"`` (heart rate), or ``null`` without a TSS.
      *         ftp_estimated: Whether the TSS uses an estimated FTP.
-     *         threshold_hr_estimated: Whether a heart-rate TSS uses a threshold heart rate
-     *             estimated from age.
+     *         threshold_hr_estimated: Whether a heart-rate TSS uses a threshold heart rate worked
+     *             out (from your rides or your age) rather than set.
      *         rpe: Perceived effort, 1-10, if set.
      *         bike: The ride's bike, if any.
      *         tags: The ride's tags.
@@ -2162,6 +2168,12 @@ export interface components {
       rides: number
     }
     /**
+     * ThresholdSource
+     * @description Where a threshold heart rate came from.
+     * @enum {string}
+     */
+    ThresholdSource: 'set' | 'rides' | 'age'
+    /**
      * TimeZoneChange
      * @description What changing the default time zone did.
      *
@@ -2201,7 +2213,9 @@ export interface components {
      *         weight_kg: Body weight on the day, if set.
      *         max_hr: Max heart rate on the day, if set.
      *         threshold_hr: Threshold heart rate on the day, set or estimated from age.
-     *         threshold_hr_estimated: Whether ``threshold_hr`` is estimated from age.
+     *         threshold_hr_estimated: Whether ``threshold_hr`` is worked out rather than set.
+     *         threshold_hr_source: ``"set"``, ``"rides"`` (your rides with power and heart rate,
+     *             and the day's FTP) or ``"age"``; ``null`` without a threshold.
      *         intensity_factor: NP / FTP.
      *         tss: Training Stress Score.
      *         tss_source: ``"power"`` or ``"hr"`` (heart rate, for rides without power TSS).
@@ -2223,6 +2237,7 @@ export interface components {
       threshold_hr: number | null
       /** Threshold Hr Estimated */
       threshold_hr_estimated: boolean
+      threshold_hr_source: components['schemas']['ThresholdSource'] | null
       /** Tss */
       tss: number | null
       tss_source: components['schemas']['TssSource'] | null

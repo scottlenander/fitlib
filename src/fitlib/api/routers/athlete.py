@@ -11,7 +11,7 @@ from datetime import date
 
 from fastapi import APIRouter, HTTPException, Response
 
-from fitlib.analysis.training import athlete_profile, set_birth_year
+from fitlib.analysis.training import athlete_profile, set_birth_year, threshold_today
 from fitlib.api.deps import StoresDep
 from fitlib.api.schemas import Athlete, AthleteEntryOut, AthleteValuesIn, BirthYearIn
 from fitlib.metrics.load import estimated_threshold_hr, values_on
@@ -53,6 +53,7 @@ def _athlete(catalog: CatalogStore) -> Athlete:
     history = sorted(profile.history, key=lambda e: e.effective_from)
     today = date.today()
     now = values_on(history, today)
+    threshold, source = threshold_today(catalog, profile, today)
     return Athlete(
         history=[_entry_out(e) for e in history],
         today=AthleteValuesIn(
@@ -60,6 +61,8 @@ def _athlete(catalog: CatalogStore) -> Athlete:
         ),
         birth_year=profile.birth_year,
         estimated_threshold_hr=estimated_threshold_hr(profile.birth_year, today),
+        threshold_hr_today=threshold,
+        threshold_hr_source_today=source,
     )
 
 

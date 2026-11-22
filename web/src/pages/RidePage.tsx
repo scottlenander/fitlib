@@ -9,6 +9,7 @@ import { Stats, type Stat } from '../components/Stats'
 import { ZoneTable } from '../components/ZoneTable'
 import * as f from '../format'
 import { timeZoneNote } from '../timeZone'
+import { THRESHOLD_NOTES } from '../tss'
 import { useUnits } from '../units'
 import { usePageTitle } from '../usePageTitle'
 
@@ -97,7 +98,7 @@ function Ride({ ride }: { ride: RideDetail }) {
           {
             label: 'Threshold HR',
             value: f.bpm(t.threshold_hr),
-            note: t.threshold_hr_estimated ? '(estimated from age)' : undefined,
+            note: THRESHOLD_NOTES[t.threshold_hr_source ?? 'set'],
           },
         ]
       : []),

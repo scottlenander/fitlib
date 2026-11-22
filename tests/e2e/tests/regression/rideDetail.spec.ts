@@ -54,6 +54,9 @@ test('a ride with power shows its figures, zones, best efforts and laps', async 
   })
 })
 
+// Its TSS comes from heart rate, with a threshold worked out from the rides with power and
+// heart rate before it. Its exact value moves while the import spec re-imports the 9 Aug ride
+// (one of those), so only where it came from is checked.
 test('a ride without power leaves out power figures', async ({ page, request }) => {
   const ride = new RidePage(page)
 
@@ -65,14 +68,19 @@ test('a ride without power leaves out power figures', async ({ page, request }) 
   await test.step('Heart rate is shown, power is not', async () => {
     await expect(ride.summary.value('Avg heart rate')).toHaveText('132 bpm')
     await expect(ride.summary.labels).not.toContainText(['NP'])
-    await expect(ride.training.root, {
-      message: 'Training figures need power, so the section should be hidden',
-    }).toBeHidden()
+    await expect(ride.training.labels, {
+      message: 'Without power, training should only have TSS and the threshold heart rate',
+    }).toHaveText(['TSS', 'Threshold HR'])
     await expect(ride.powerZones, { message: 'No power, so no power zones' }).toBeHidden()
     await expect(ride.effort('20 min')).toContainText('132 bpm')
     await expect(ride.efforts.getByRole('columnheader', { name: 'Power' }), {
       message: 'The best-efforts table should have no power column',
     }).toBeHidden()
+  })
+
+  await test.step('Its TSS is from heart rate, the threshold from the other rides', async () => {
+    await expect(ride.training.value('TSS')).toContainText('(from heart rate)')
+    await expect(ride.training.value('Threshold HR')).toContainText('(from your rides)')
   })
 })
 

@@ -14,6 +14,7 @@ import { DisplaySwitches } from '../components/DisplaySwitches'
 import { Stats } from '../components/Stats'
 import { WatchedFolders } from '../components/WatchedFolders'
 import * as f from '../format'
+import { THRESHOLD_NOTES } from '../tss'
 import { useUnits } from '../units'
 import { usePageTitle } from '../usePageTitle'
 
@@ -153,11 +154,8 @@ function AthleteSection() {
               { label: 'Max heart rate', value: f.bpm(today.max_hr) },
               {
                 label: 'Threshold heart rate',
-                value: f.bpm(today.threshold_hr ?? athlete.data?.estimated_threshold_hr ?? null),
-                note:
-                  today.threshold_hr === null && athlete.data?.estimated_threshold_hr != null
-                    ? '(estimated from age)'
-                    : undefined,
+                value: f.bpm(athlete.data?.threshold_hr_today ?? null),
+                note: THRESHOLD_NOTES[athlete.data?.threshold_hr_source_today ?? 'set'],
               },
             ]}
           />
@@ -322,8 +320,8 @@ function BirthYearForm({ saved }: { saved: number | null }) {
     <form onSubmit={submit} className="inline-form" data-testid="birth-year-form" noValidate>
       <h3>Year of birth</h3>
       <p className="hint">
-        Without a threshold heart rate, it is estimated from your age: 90% of 208 − 0.7 × age. Leave
-        it empty to give rides without power no TSS until you set one.
+        Without a threshold heart rate set, it is worked out from your recent rides with power and
+        heart rate, or else estimated from your age: 90% of 208 − 0.7 × age.
       </p>
       <label>
         Year of birth
