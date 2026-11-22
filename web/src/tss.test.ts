@@ -45,7 +45,7 @@ describe('TSS notes', () => {
       ]),
     ).toEqual([
       '* TSS from an estimated FTP (no FTP set for that date).',
-      'HR: TSS from heart rate, as the ride has no power. * on those: threshold heart rate estimated from age.',
+      'HR: TSS from heart rate, as the ride has no power. * on those: threshold heart rate not set, so worked out from your rides or your age.',
     ])
   })
 

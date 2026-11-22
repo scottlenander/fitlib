@@ -279,11 +279,20 @@ the six weeks up to the ride, and marked as estimated.
 Rides **without power** get a TSS from heart rate: each riding second adds
 (heart rate ÷ threshold heart rate)², and an hour at threshold scores 100, as an hour at FTP
 does. It's worked out from the seconds stored at each bpm, so it needs no recompute. The
-threshold heart rate is the one set in the athlete history on the ride's date or, without
-one, **estimated from your age** that year: 90 % of 208 − 0.7 × age (Tanaka's age-predicted
-maximum), marked as estimated. With neither a threshold nor a year of birth, the ride has no
-TSS. Rides with power always use power TSS (heart rate is used only when there's no FTP to
-compare with).
+threshold heart rate is the first of:
+
+1. The one **set** in the athlete history on the ride's date.
+2. **From your rides**: the FTP on that day (set or estimated) times your heart rate per
+   watt, √(Σ seconds × HR² ÷ Σ seconds × NP²), over your rides with power and heart rate of
+   20 minutes or more in the 90 days up to it (at least 3 of them). This is the threshold at
+   which those rides' heart-rate TSS adds up to their power TSS, so rides with and without
+   power count on the same scale.
+3. **Estimated from your age** that year: 90 % of 208 − 0.7 × age (Tanaka's age-predicted
+   maximum).
+
+The ride page says which ("from your rides", "estimated from age"), and a TSS from a threshold
+that wasn't set is starred. With none of them, the ride has no TSS. Rides with power always use
+power TSS (heart rate is used only when there's no FTP to compare with).
 
 ### Trends
 
@@ -501,7 +510,8 @@ date.
   heart rate, cadence, location box and laps; NP (against a step-by-step reference), kJ, VI,
   best efforts (incl. never across a pause), decoupling, histograms, zone boundaries, IF/TSS,
   TSS from heart rate (an hour at threshold scoring 100, mixed rides summing their parts,
-  power preferred), threshold heart rate estimated from age, estimated FTP and athlete
+  power preferred), heart rate per watt over 90 days once there are 3 rides (short, old and
+  power-less rides left out), threshold heart rate estimated from age, estimated FTP and athlete
   values carrying forward. Expected values are worked out from the
   specs (e.g. 200 W for an hour at FTP 250 → IF 0.80, TSS 64).
 - **Default time zone** (`tests/unit/analysis/test_timezone.py`): only rides without their own
@@ -510,7 +520,9 @@ date.
 - **Training** (`tests/unit/analysis/`): FTP, weight and max HR from the history; estimated FTP
   from the best ride in the window; FTP changes applying without a recompute; a ride without
   power getting TSS from a set threshold heart rate or one estimated from age (a set one
-  winning); power TSS kept for rides with power; impossible years of birth refused.
+  winning); power TSS kept for rides with power; impossible years of birth refused; the
+  threshold from your rides (making heart-rate TSS equal power TSS on them, using the set or
+  estimated FTP, needing 3 recent rides, a set threshold winning) and today's threshold.
 - **Zwift worlds** (`tests/unit/metrics/test_zwift.py`): each world's centre and corners
   found as that world, no two worlds overlapping, real rides and points just outside a world
   in none, only Zwift rides with positions having a world, worlds by name.
@@ -575,8 +587,9 @@ being written, and nothing watched),
   clearing, validation leaving the ride unchanged), and of several rides at once (repeats
   counted once, the name left alone, bad values or an unknown ride changing nothing); tags, bikes, default-bike timeline and
   backfill keeping hand-set bikes; athlete history (with threshold heart rate), the year of
-  birth and its estimate, impossible years refused, and heart-rate TSS on rides and the
-  library list; uploads (`.fit`, `.zip`, duplicates, bad
+  birth and its estimate, impossible years refused, heart-rate TSS on rides and the
+  library list, and the threshold from your rides ahead of the age (on a ride, and today's
+  from age with no recent rides); uploads (`.fit`, `.zip`, duplicates, bad
   and non-FIT files, unsafe file names, default bikes, no coordinates in logs); settings; the
   placeholder page, app-route fallback and 404s for unknown API paths and missing assets;
   `/e2e` shortcuts (including deleting a ride so it can be imported again) only in e2e mode
@@ -618,7 +631,7 @@ being written, and nothing watched),
     paging, kept across a reload; the estimated-TSS mark; the World filter (Watopia finding
     the Zwift ride, shown as "Zwift (Watopia)", London nothing, Garmin clearing the world).
   - *Ride detail*: summary, training with an estimated FTP, zones, best efforts, laps and
-    charts; a ride without power; a start time without a real local time (UTC; Zwift's 1989 date ignored); switching units,
+    charts; a ride without power (only TSS from heart rate and the threshold from your rides); a start time without a real local time (UTC; Zwift's 1989 date ignored); switching units,
     remembered across reloads and pages; an unknown ride; where the start time came from (the
     device, or the Zwift ride's file name), and the Zwift ride's world.
   - *Import*: a new ride imported and opened from the results; duplicates, a run, an
@@ -654,7 +667,8 @@ being written, and nothing watched),
     opened; the effort tab reached with the arrow keys, closest first, no HR-only rides; the
     indoor ride (no GPS) and the Zwift ride (alone in Watopia) saying why there's nothing;
     progress on the loop, oldest first with this ride marked, by speed then power, opening
-    the oldest ride, and no progress section for a ride alone on its route.
+    the oldest ride, the ride without power's TSS marked "HR*" and explained, and no progress
+    section for a ride alone on its route.
   - *Ride stats*: switching the charts between time and distance; the zoom bar's label, and
     Show whole ride enabled once zoomed in and resetting it.
   - *Phone width*: the library, ride, compare and trends pages (and Settings, in *Watched

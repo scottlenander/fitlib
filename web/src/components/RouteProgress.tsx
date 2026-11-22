@@ -2,6 +2,7 @@ import { lazy, Suspense, useState } from 'react'
 import { Link } from 'react-router'
 import { useRouteProgress, type RideDetail, type RideItem } from '../api/client'
 import * as f from '../format'
+import { TssNotes, TssValue } from './Tss'
 import { useUnits } from '../units'
 import { PROGRESS_METRICS, type ProgressMetric } from './progressMetrics'
 import { ShowTable } from './ShowTable'
@@ -44,48 +45,54 @@ export function RouteProgress({ ride }: { ride: RideDetail }) {
 function ProgressTable({ rides, rideId }: { rides: RideItem[]; rideId: string }) {
   const { units } = useUnits()
   return (
-    <div className="table-scroll">
-      <table className="wide" data-testid="progress-table">
-        <caption>Rides on this route, oldest first</caption>
-        <thead>
-          <tr>
-            <th scope="col">Date</th>
-            <th scope="col">Name</th>
-            {['Time', 'Distance', 'Avg speed', 'Avg power', 'NP', 'Avg HR', 'TSS'].map((c) => (
-              <th key={c} scope="col" className="num">
-                {c}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rides.map((r) => {
-            const speed = r.distance_m !== null && r.moving_s > 0 ? r.distance_m / r.moving_s : null
-            const mine = r.id === rideId
-            return (
-              <tr key={r.id} data-testid="progress-row">
-                <td>{f.date(r.start, r.local_start)}</td>
-                <td>
-                  {mine ? (
-                    <>
-                      {r.name} <span className="muted">(this ride)</span>
-                    </>
-                  ) : (
-                    <Link to={`/rides/${r.id}`}>{r.name}</Link>
-                  )}
-                </td>
-                <td className="num">{f.duration(r.moving_s)}</td>
-                <td className="num">{f.distance(r.distance_m, units)}</td>
-                <td className="num">{f.speed(speed, units)}</td>
-                <td className="num">{f.watts(r.avg_power)}</td>
-                <td className="num">{f.watts(r.np)}</td>
-                <td className="num">{f.bpm(r.avg_hr)}</td>
-                <td className="num">{f.tss(r.tss)}</td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
-    </div>
+    <>
+      <div className="table-scroll">
+        <table className="wide" data-testid="progress-table">
+          <caption>Rides on this route, oldest first</caption>
+          <thead>
+            <tr>
+              <th scope="col">Date</th>
+              <th scope="col">Name</th>
+              {['Time', 'Distance', 'Avg speed', 'Avg power', 'NP', 'Avg HR', 'TSS'].map((c) => (
+                <th key={c} scope="col" className="num">
+                  {c}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rides.map((r) => {
+              const speed =
+                r.distance_m !== null && r.moving_s > 0 ? r.distance_m / r.moving_s : null
+              const mine = r.id === rideId
+              return (
+                <tr key={r.id} data-testid="progress-row">
+                  <td>{f.date(r.start, r.local_start)}</td>
+                  <td>
+                    {mine ? (
+                      <>
+                        {r.name} <span className="muted">(this ride)</span>
+                      </>
+                    ) : (
+                      <Link to={`/rides/${r.id}`}>{r.name}</Link>
+                    )}
+                  </td>
+                  <td className="num">{f.duration(r.moving_s)}</td>
+                  <td className="num">{f.distance(r.distance_m, units)}</td>
+                  <td className="num">{f.speed(speed, units)}</td>
+                  <td className="num">{f.watts(r.avg_power)}</td>
+                  <td className="num">{f.watts(r.np)}</td>
+                  <td className="num">{f.bpm(r.avg_hr)}</td>
+                  <td className="num">
+                    <TssValue ride={r} />
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+      <TssNotes rides={rides} />
+    </>
   )
 }

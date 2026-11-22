@@ -33,9 +33,16 @@ export function tssNotes(rides: TssFigures[]): string[] {
     notes.push('* TSS from an estimated FTP (no FTP set for that date).')
   if (marks.some((m) => m.fromHeartRate)) {
     const estimated = marks.some((m) => m.fromHeartRate && m.estimated)
-      ? ' * on those: threshold heart rate estimated from age.'
+      ? ' * on those: threshold heart rate not set, so worked out from your rides or your age.'
       : ''
     notes.push(`HR: TSS from heart rate, as the ride has no power.${estimated}`)
   }
   return notes
+}
+
+// Where a threshold heart rate came from, said after its value; nothing for one that was set.
+export const THRESHOLD_NOTES: Record<'set' | 'rides' | 'age', string | undefined> = {
+  set: undefined,
+  rides: '(from your rides)',
+  age: '(estimated from age)',
 }
