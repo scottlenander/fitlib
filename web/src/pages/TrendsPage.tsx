@@ -343,8 +343,8 @@ function WithoutTss({ count }: { count: number }) {
   if (!count) return null
   return (
     <p className="footnote" data-testid="without-tss">
-      {count === 1 ? '1 ride has' : `${count} rides have`} no TSS (no power, or no FTP) and count as
-      0.
+      {count === 1 ? '1 ride has' : `${count} rides have`} no TSS (no power or FTP, and no heart
+      rate or threshold heart rate) and count as 0.
     </p>
   )
 }

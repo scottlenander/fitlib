@@ -4,6 +4,7 @@ import { useCompare, type Align, type ComparedRide, type Comparison } from '../a
 import { ScrollBox } from '../components/ScrollBox'
 import { Swatch } from '../components/Swatch'
 import { DEFAULT_SMOOTH, MAX_RIDES, MIN_RIDES, SMOOTHING, parseIds } from '../compare'
+import { tssNotes, tssText } from '../tss'
 import * as f from '../format'
 import { useUnits } from '../units'
 import { usePageTitle } from '../usePageTitle'
@@ -175,7 +176,7 @@ function CompareTable({ rides }: { rides: ComparedRide[] }) {
   const list = rides.map((r) => r.ride)
   const best = (seconds: number) =>
     list.map((r) => f.watts(r.power_curve.find((p) => p.duration_s === seconds)?.value))
-  const anyEstimated = list.some((r) => r.training.ftp_estimated && r.training.tss !== null)
+  const notes = tssNotes(list.map((r) => r.training))
   const rows: [string, string[]][] = [
     ['Date', list.map((r) => f.date(r.start, r.local_start))],
     ['Moving time', list.map((r) => f.duration(r.moving_s))],
@@ -185,13 +186,7 @@ function CompareTable({ rides }: { rides: ComparedRide[] }) {
     ['Avg power', list.map((r) => f.watts(r.avg_power))],
     ['NP', list.map((r) => f.watts(r.np))],
     ['IF', list.map((r) => f.ratio(r.training.intensity_factor))],
-    [
-      'TSS',
-      list.map(
-        (r) =>
-          f.tss(r.training.tss) + (r.training.ftp_estimated && r.training.tss !== null ? '*' : ''),
-      ),
-    ],
+    ['TSS', list.map((r) => tssText(r.training, f.tss))],
     ['Avg HR', list.map((r) => f.bpm(r.avg_hr))],
     ['Decoupling', list.map((r) => f.signedPercent(r.decoupling_pct))],
     ['Best 1 min', best(60)],
@@ -227,9 +222,11 @@ function CompareTable({ rides }: { rides: ComparedRide[] }) {
           </tbody>
         </table>
       </ScrollBox>
-      {anyEstimated && (
-        <p className="footnote">* TSS from an estimated FTP (no FTP set for that date).</p>
-      )}
+      {notes.map((note) => (
+        <p key={note} className="footnote">
+          {note}
+        </p>
+      ))}
     </>
   )
 }

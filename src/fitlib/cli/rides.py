@@ -14,7 +14,7 @@ from rich.table import Table
 from fitlib import display
 from fitlib.analysis.compare import MAX_RIDES, MIN_RIDES
 from fitlib.analysis.similar import similar_efforts, similar_routes
-from fitlib.analysis.training import training
+from fitlib.analysis.training import athlete_profile, training
 from fitlib.cli.common import (
     EXIT_IMPORT_FAILURES,
     UnitsOption,
@@ -28,7 +28,7 @@ from fitlib.cli.common import (
     outdated_hint,
     tags_from,
 )
-from fitlib.cli.output import print_report, print_ride, section
+from fitlib.cli.output import print_report, print_ride, print_tss_notes, section, tss_text
 from fitlib.importer import Importer
 from fitlib.ingest.scanner import scan
 from fitlib.ingest.summarize import METRICS_VERSION
@@ -172,8 +172,8 @@ def list_(
         if bike is not None:
             filters = replace(filters, bike_id=find_bike(catalog, bike).id)
         page = catalog.search(filters, sort=sort, descending=not asc, offset=offset, limit=limit)
-        history = catalog.athlete_history()
-        loads = {ride.id: training(catalog, ride, history) for ride in page.items}
+        athlete = athlete_profile(catalog)
+        loads = {ride.id: training(catalog, ride, athlete) for ride in page.items}
         chosen = lib.units(units)
 
     if not page.items:
@@ -184,13 +184,9 @@ def list_(
     for column in ("ID", "Date", "Time", "Distance", "Power", "HR", "TSS"):
         table.add_column(column, no_wrap=True)
     table.add_column("Name")
-    estimated = False
     for ride in page.items:
         r = ride.summary
         t = loads[ride.id]
-        marker = ""
-        if t.ftp_estimated and t.tss is not None:
-            marker, estimated = "*", True
         table.add_row(
             ride.short_id,
             display.date(r.local_start or r.start),
@@ -198,14 +194,13 @@ def list_(
             display.distance(r.distance_m, chosen),
             display.watts(r.avg_power),
             display.bpm(r.avg_hr),
-            display.tss(t.tss) + marker,
+            tss_text(t),
             ride.display_name,
         )
     out.print(table)
     shown_to = page.offset + len(page.items)
     out.print(f"Showing {page.offset + 1}–{shown_to} of {page.total}.")
-    if estimated:
-        out.print("* TSS from an estimated FTP (no FTP set for that date).")
+    print_tss_notes(loads.values())
 
 
 @app.command(help="Show one ride's summary.")
@@ -259,10 +254,10 @@ def similar(
         catalog = lib.stores.catalog
         found = find_ride(catalog, ride)
         chosen = lib.units(units)
-        history = catalog.athlete_history()
+        athlete = athlete_profile(catalog)
         if effort:
             efforts = similar_efforts(catalog, found, limit)
-            figures = {m.ride.id: training(catalog, m.ride, history) for m in efforts}
+            figures = {m.ride.id: training(catalog, m.ride, athlete) for m in efforts}
         else:
             routes = similar_routes(catalog, found, limit)
             has_route = bool(catalog.route_cells(found.id))
@@ -287,11 +282,12 @@ def similar(
                 display.duration(r.moving_s),
                 display.distance(r.distance_m, chosen),
                 display.watts(r.np),
-                display.tss(figures[match.ride.id].tss),
+                tss_text(figures[match.ride.id]),
                 f"{match.similarity}",
                 match.ride.display_name,
             )
         out.print(table)
+        print_tss_notes(figures.values())
         return
 
     if not has_route:
@@ -351,23 +347,8 @@ def compare(
         if len({r.id for r in found}) < len(found):
             raise fail("The same ride is given more than once.")
         chosen = lib.units(units)
-        history = catalog.athlete_history()
-        figures = [training(catalog, r, history) for r in found]
-
-    estimated = any(f.ftp_estimated and f.tss is not None for f in figures)
-
-    def tss(index: int) -> str:
-        """Show a ride's TSS, starred when its FTP is estimated.
-
-        Args:
-            index: The ride's position.
-
-        Returns:
-            The TSS.
-        """
-        f = figures[index]
-        star = "*" if f.ftp_estimated and f.tss is not None else ""
-        return f"{display.tss(f.tss)}{star}"
+        athlete = athlete_profile(catalog)
+        figures = [training(catalog, r, athlete) for r in found]
 
     rows = {
         "Name": [r.display_name for r in found],
@@ -379,7 +360,7 @@ def compare(
         "Avg power": [display.watts(r.summary.avg_power) for r in found],
         "NP": [display.watts(r.summary.np) for r in found],
         "IF": [display.ratio(f.intensity_factor) for f in figures],
-        "TSS": [tss(i) for i in range(len(found))],
+        "TSS": [tss_text(f) for f in figures],
         "Avg HR": [display.bpm(r.summary.avg_hr) for r in found],
         "Decoupling": [display.signed_percent(r.summary.decoupling_pct) for r in found],
         **{
@@ -397,8 +378,7 @@ def compare(
         table.add_row(label, *values)
     section("Compared rides")
     out.print(table)
-    if estimated:
-        out.print("* TSS from an estimated FTP (no FTP set for that date).")
+    print_tss_notes(figures)
 
 
 @app.command(

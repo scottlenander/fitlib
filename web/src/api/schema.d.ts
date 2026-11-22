@@ -13,16 +13,46 @@ export interface paths {
     }
     /**
      * Get Athlete
-     * @description Show the athlete history and today's values.
+     * @description Show the athlete history, today's values and the year of birth.
      *
      *     Args:
      *         stores: The library's stores.
      *
      *     Returns:
-     *         Every entry, oldest first, and the values in effect today (local date).
+     *         The athlete.
      */
     get: operations['get_athlete_api_athlete_get']
     put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/athlete/birth-year': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    /**
+     * Put Birth Year
+     * @description Set or clear the rider's year of birth, for estimating threshold heart rate.
+     *
+     *     Args:
+     *         stores: The library's stores.
+     *         body: The year, or ``null``.
+     *
+     *     Returns:
+     *         The athlete, with the new estimate.
+     *
+     *     Raises:
+     *         BadBirthYear: Before 1900 or in the future (a 422; nothing changes).
+     */
+    put: operations['put_birth_year_api_athlete_birth_year_put']
     post?: never
     delete?: never
     options?: never
@@ -45,7 +75,7 @@ export interface paths {
      *     Args:
      *         stores: The library's stores.
      *         effective_from: The first day the values apply.
-     *         values: FTP, weight and/or max heart rate; at least one.
+     *         values: FTP, weight, max and/or threshold heart rate; at least one.
      *
      *     Returns:
      *         The saved entry.
@@ -960,10 +990,17 @@ export interface components {
      *
      *     Attributes:
      *         history: Every entry, oldest first.
-     *         today: FTP, weight and max heart rate in effect today, each from the latest entry
-     *             that sets it.
+     *         today: FTP, weight, max and threshold heart rate in effect today, each from the
+     *             latest entry that sets it.
+     *         birth_year: The rider's year of birth, if given.
+     *         estimated_threshold_hr: Today's threshold heart rate estimated from age, used when
+     *             none is set; ``null`` without a year of birth.
      */
     Athlete: {
+      /** Birth Year */
+      birth_year: number | null
+      /** Estimated Threshold Hr */
+      estimated_threshold_hr: number | null
       /** History */
       history: components['schemas']['AthleteEntryOut'][]
       today: components['schemas']['AthleteValuesIn']
@@ -985,6 +1022,8 @@ export interface components {
       ftp?: number | null
       /** Max Hr */
       max_hr?: number | null
+      /** Threshold Hr */
+      threshold_hr?: number | null
       /** Weight Kg */
       weight_kg?: number | null
     }
@@ -996,12 +1035,15 @@ export interface components {
      *         ftp: FTP in watts.
      *         weight_kg: Body weight in kilograms.
      *         max_hr: Max heart rate in bpm.
+     *         threshold_hr: Threshold heart rate in bpm, for TSS on rides without power.
      */
     AthleteValuesIn: {
       /** Ftp */
       ftp?: number | null
       /** Max Hr */
       max_hr?: number | null
+      /** Threshold Hr */
+      threshold_hr?: number | null
       /** Weight Kg */
       weight_kg?: number | null
     }
@@ -1129,6 +1171,17 @@ export interface components {
       retired: boolean
       /** Rides */
       rides: number
+    }
+    /**
+     * BirthYearIn
+     * @description The rider's year of birth.
+     *
+     *     Attributes:
+     *         birth_year: The year, or ``null`` to clear it.
+     */
+    BirthYearIn: {
+      /** Birth Year */
+      birth_year: number | null
     }
     /** Body_import_files_api_imports_post */
     Body_import_files_api_imports_post: {
@@ -1424,7 +1477,8 @@ export interface components {
      *     Attributes:
      *         since: First day.
      *         until: Last day.
-     *         rides_without_tss: Rides in the range that add no TSS (no power, or no FTP).
+     *         rides_without_tss: Rides in the range that add no TSS (neither from power nor heart
+     *             rate).
      *         days: One per day, oldest first.
      */
     FitnessOut: {
@@ -1778,9 +1832,12 @@ export interface components {
       sub_sport: string | null
       /** Tags */
       tags: string[]
+      /** Threshold Hr Estimated */
+      threshold_hr_estimated: boolean
       training: components['schemas']['TrainingOut']
       /** Tss */
       tss: number | null
+      tss_source: components['schemas']['TssSource'] | null
       /** Utc Offset S */
       utc_offset_s: number | null
       /** Vi */
@@ -1806,8 +1863,12 @@ export interface components {
      *         avg_power: Average power, if recorded.
      *         np: Normalized Power, if there was power.
      *         avg_hr: Average heart rate, if recorded.
-     *         tss: Training Stress Score, if there was power and an FTP.
+     *         tss: Training Stress Score: from power and an FTP, else from heart rate and a
+     *             threshold heart rate.
+     *         tss_source: ``"power"`` or ``"hr"`` (heart rate), or ``null`` without a TSS.
      *         ftp_estimated: Whether the TSS uses an estimated FTP.
+     *         threshold_hr_estimated: Whether a heart-rate TSS uses a threshold heart rate
+     *             estimated from age.
      *         rpe: Perceived effort, 1-10, if set.
      *         bike: The ride's bike, if any.
      *         tags: The ride's tags.
@@ -1852,8 +1913,11 @@ export interface components {
       start: string
       /** Tags */
       tags: string[]
+      /** Threshold Hr Estimated */
+      threshold_hr_estimated: boolean
       /** Tss */
       tss: number | null
+      tss_source: components['schemas']['TssSource'] | null
     }
     /**
      * RidePage
@@ -2084,15 +2148,18 @@ export interface components {
     }
     /**
      * TrainingOut
-     * @description FTP-based figures, using the athlete values in effect on the ride's date.
+     * @description Training figures, using the athlete values in effect on the ride's date.
      *
      *     Attributes:
      *         ftp: The FTP used, if set or estimable.
      *         ftp_estimated: Whether ``ftp`` is estimated from recent rides.
      *         weight_kg: Body weight on the day, if set.
      *         max_hr: Max heart rate on the day, if set.
+     *         threshold_hr: Threshold heart rate on the day, set or estimated from age.
+     *         threshold_hr_estimated: Whether ``threshold_hr`` is estimated from age.
      *         intensity_factor: NP / FTP.
      *         tss: Training Stress Score.
+     *         tss_source: ``"power"`` or ``"hr"`` (heart rate, for rides without power TSS).
      *         watts_per_kg: Average power per kilogram.
      *         np_per_kg: Normalized Power per kilogram.
      */
@@ -2107,13 +2174,24 @@ export interface components {
       max_hr: number | null
       /** Np Per Kg */
       np_per_kg: number | null
+      /** Threshold Hr */
+      threshold_hr: number | null
+      /** Threshold Hr Estimated */
+      threshold_hr_estimated: boolean
       /** Tss */
       tss: number | null
+      tss_source: components['schemas']['TssSource'] | null
       /** Watts Per Kg */
       watts_per_kg: number | null
       /** Weight Kg */
       weight_kg: number | null
     }
+    /**
+     * TssSource
+     * @description What a ride's TSS was worked out from.
+     * @enum {string}
+     */
+    TssSource: 'power' | 'hr'
     /**
      * Units
      * @description Which units figures are shown in. Stored data is always SI.
@@ -2174,7 +2252,7 @@ export interface components {
      *         ascent_m: Climbing.
      *         kj: Work in kilojoules.
      *         tss: Total Training Stress Score.
-     *         rides_without_tss: Rides adding no TSS (no power, or no FTP).
+     *         rides_without_tss: Rides adding no TSS (neither from power nor heart rate).
      */
     VolumeBucketOut: {
       /** Ascent M */
@@ -2325,6 +2403,39 @@ export interface operations {
         }
         content: {
           'application/json': components['schemas']['Athlete']
+        }
+      }
+    }
+  }
+  put_birth_year_api_athlete_birth_year_put: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['BirthYearIn']
+      }
+    }
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Athlete']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
         }
       }
     }

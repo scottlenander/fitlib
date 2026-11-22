@@ -7,7 +7,7 @@ from datetime import UTC, date, datetime
 import pytest
 
 from fitlib.analysis import trends
-from fitlib.analysis.training import training
+from fitlib.analysis.training import set_birth_year, training
 from fitlib.analysis.trends import Period
 from fitlib.models import AthleteEntry, Ride
 from fitlib.store.memory import MemoryCatalog
@@ -78,15 +78,22 @@ def catalog() -> MemoryCatalog:
 # -- TSS --------------------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("ftp_set", [False, True], ids=["estimated-ftp", "set-ftp"])
-def test_tss_matches_the_ride_page(imported: ImportedLibrary, ftp_set: bool):
+@pytest.mark.parametrize(
+    "athlete", ["nothing", "ftp", "heart-rate"], ids=["estimated-ftp", "set-ftp", "heart-rate"]
+)
+def test_tss_matches_the_ride_page(imported: ImportedLibrary, athlete: str):
     """Trend TSS is the same as the ride page's, for every fixture ride.
 
-    Given: the fixture library, with no athlete history or with FTP 250 W from 10 Aug.
-    Expect: each ride's FTP, estimate flag and TSS equal ``training()``'s.
+    Given: the fixture library, with no athlete history; with FTP 250 W from 10 Aug; or born
+    1980 with threshold HR 150 from 14 Aug (rides without power before it use the age
+    estimate).
+    Expect: each ride's FTP, estimate flag, TSS and where it came from equal ``training()``'s.
     """
-    if ftp_set:
+    if athlete == "ftp":
         imported.catalog.set_athlete_entry(AthleteEntry(date(2025, 8, 10), ftp=FTP))
+    if athlete == "heart-rate":
+        set_birth_year(imported.catalog, 1980)
+        imported.catalog.set_athlete_entry(AthleteEntry(date(2025, 8, 14), threshold_hr=150))
 
     loads = trends.ride_loads(imported.catalog, None, None)
 
@@ -94,7 +101,10 @@ def test_tss_matches_the_ride_page(imported: ImportedLibrary, ftp_set: bool):
     for ride_load in loads:
         page = training(imported.catalog, imported.catalog.get_ride(ride_load.row.id))
         assert (ride_load.ftp, ride_load.ftp_estimated) == (page.ftp, page.ftp_estimated)
-        assert ride_load.tss == page.tss, f"TSS of {ride_load.row.id} should match"
+        assert ride_load.tss == pytest.approx(page.tss), f"TSS of {ride_load.row.id} should match"
+        assert ride_load.tss_source == page.tss_source
+    if athlete == "heart-rate":
+        assert any(r.tss_source == "hr" for r in loads), "some rides should use heart rate"
 
 
 def test_estimate_uses_rides_before_the_range():
@@ -147,6 +157,28 @@ def test_weekly_volume_by_local_date(catalog: MemoryCatalog):
     )
     assert (first.tss, first.rides_without_tss) == (pytest.approx(200), 1)
     assert weeks[2] == trends.VolumeBucket(date(2025, 8, 18))
+
+
+def test_rides_without_power_add_heart_rate_tss(catalog: MemoryCatalog):
+    """With a threshold heart rate, a ride without power adds TSS to volume and fitness.
+
+    Given: threshold HR 160 from 2 Jan; an hour at FTP on Mon 4 Aug and a ride without power
+    on Tue 5 Aug (the factory's heart rates: 600 s at 120, 1800 at 140, 1100 at 160, 1 at
+    171 bpm).
+    Expect: the week's TSS is 100 + 72,109,241 / 160² / 3600 x 100 (78.2), with no ride
+    left without TSS; fitness on 5 Aug counts the day's 78.2.
+    """
+    catalog.set_athlete_entry(AthleteEntry(date(2025, 1, 2), threshold_hr=160))
+    add(catalog, utc(4), **hour_at_ftp())
+    add(catalog, utc(5), has_power=False, np=None, kj=None, power_curve=())
+    hr_tss = 72_109_241 / 160**2 / 3600 * 100
+
+    week = trends.volume(catalog, Period.WEEK, date(2025, 8, 4), date(2025, 8, 10))[0]
+    fitness = trends.fitness(catalog, date(2025, 8, 5), date(2025, 8, 5))
+
+    assert (week.tss, week.rides_without_tss) == (pytest.approx(100 + hr_tss), 0)
+    assert fitness.days[0].tss == pytest.approx(hr_tss)
+    assert fitness.rides_without_tss == 0
 
 
 def test_monthly_volume(catalog: MemoryCatalog):

@@ -10,36 +10,43 @@ from fastapi.testclient import TestClient
 from tests.api.conftest import Api
 
 INTERVALS = "garmin_nord_intervals_5x4.fit"  # 5 Aug 2025
+HR_ONLY = "garmin_nord_hr_no_power.fit"  # 16 Aug 2025, 45 min at 132 bpm, no power
 
 
 def test_empty_history(client: TestClient):
     """A new library has no athlete values.
 
     Given: an empty library.
-    Expect: no entries, and nothing in effect today.
+    Expect: no entries, nothing in effect today, no year of birth and so no estimate.
     """
     response = client.get("/api/athlete")
 
     assert response.json() == {
         "history": [],
-        "today": {"ftp": None, "weight_kg": None, "max_hr": None},
+        "today": {"ftp": None, "weight_kg": None, "max_hr": None, "threshold_hr": None},
+        "birth_year": None,
+        "estimated_threshold_hr": None,
     }
 
 
 def test_entries_carry_values_forward(client: TestClient):
     """Each value comes from the latest entry that sets it.
 
-    Given: FTP, weight and max HR from 2025-01-01, then only a new FTP from 2025-06-01.
-    Expect: both entries oldest first; today's FTP from June, weight and max HR from January.
+    Given: FTP, weight, max and threshold HR from 2025-01-01, then only a new FTP from
+    2025-06-01.
+    Expect: both entries oldest first; today's FTP from June, the rest from January.
     """
     client.put("/api/athlete/2025-06-01", json={"ftp": 260})
-    client.put("/api/athlete/2025-01-01", json={"ftp": 250, "weight_kg": 72.5, "max_hr": 185})
+    client.put(
+        "/api/athlete/2025-01-01",
+        json={"ftp": 250, "weight_kg": 72.5, "max_hr": 185, "threshold_hr": 165},
+    )
 
     response = client.get("/api/athlete")
 
     body = response.json()
     assert [e["effective_from"] for e in body["history"]] == ["2025-01-01", "2025-06-01"]
-    assert body["today"] == {"ftp": 260, "weight_kg": 72.5, "max_hr": 185}
+    assert body["today"] == {"ftp": 260, "weight_kg": 72.5, "max_hr": 185, "threshold_hr": 165}
 
 
 def test_put_replaces_the_entry_on_that_date(client: TestClient):
@@ -53,15 +60,23 @@ def test_put_replaces_the_entry_on_that_date(client: TestClient):
     saved = client.put("/api/athlete/2025-01-01", json={"ftp": 255}).json()
 
     history = client.get("/api/athlete").json()["history"]
-    assert saved == {"effective_from": "2025-01-01", "ftp": 255, "weight_kg": None, "max_hr": None}
+    assert saved == {
+        "effective_from": "2025-01-01",
+        "ftp": 255,
+        "weight_kg": None,
+        "max_hr": None,
+        "threshold_hr": None,
+    }
     assert history == [saved]
 
 
 @pytest.mark.parametrize(
     "body",
-    [{}, {"ftp": 0}, {"ftp": -5}, {"weight_kg": 0}, {"max_hr": 300}, {"vo2max": 60}],
-    ids=["nothing", "zero-ftp", "negative-ftp", "zero-weight", "max-hr-high", "unknown-field"],
-)
+    [{}, {"ftp": 0}, {"ftp": -5}, {"weight_kg": 0}, {"max_hr": 300}, {"threshold_hr": 0},
+     {"vo2max": 60}],
+    ids=["nothing", "zero-ftp", "negative-ftp", "zero-weight", "max-hr-high", "zero-threshold",
+         "unknown-field"],
+)  # fmt: skip
 def test_put_rejects_missing_or_impossible_values(client: TestClient, body: dict):
     """An entry needs at least one plausible value.
 
@@ -106,3 +121,71 @@ def test_ride_figures_use_the_ftp_in_effect_on_the_ride_date(writer: Api):
     assert training["intensity_factor"] == pytest.approx(ride["np"] / 250)
     assert len(ride["hr_zones"]) == 5, "max HR is set, so HR zones should be there"
     assert date.fromisoformat(ride["start"][:10]) < date(2025, 8, 6)
+
+
+def test_year_of_birth_gives_an_estimated_threshold(client: TestClient):
+    """A year of birth gives today's estimated threshold heart rate; it can be cleared.
+
+    Given: born 1980, then cleared.
+    Expect: the year and round(0.9 x (208 - 0.7 x age)) today; then neither.
+    """
+    age = date.today().year - 1980
+
+    saved = client.put("/api/athlete/birth-year", json={"birth_year": 1980}).json()
+    cleared = client.put("/api/athlete/birth-year", json={"birth_year": None}).json()
+
+    assert saved["birth_year"] == 1980
+    assert saved["estimated_threshold_hr"] == round(0.9 * (208 - 0.7 * age))
+    assert (cleared["birth_year"], cleared["estimated_threshold_hr"]) == (None, None)
+
+
+@pytest.mark.parametrize(
+    "year", [1899, date.today().year + 1, "x"], ids=["early", "future", "text"]
+)
+def test_impossible_years_of_birth_are_refused(client: TestClient, year):
+    """Years before 1900, in the future or not numbers are refused.
+
+    Given: 1899, next year, and "x".
+    Expect: 422, and still no year of birth.
+    """
+    response = client.put("/api/athlete/birth-year", json={"birth_year": year})
+
+    assert response.status_code == 422
+    assert client.get("/api/athlete").json()["birth_year"] is None
+
+
+def test_a_ride_without_power_gets_tss_from_heart_rate(writer: Api):
+    """Rides without power get a heart-rate TSS, marked as such, in detail and in the list.
+
+    Given: threshold HR 165 from 2025-08-01; the 16 Aug ride with heart rate only.
+    Expect: TSS 48 from heart rate, threshold 165 not estimated; the library row the same.
+    """
+    writer.client.put("/api/athlete/2025-08-01", json={"threshold_hr": 165})
+
+    ride = writer.client.get(f"/api/rides/{writer.ids[HR_ONLY]}").json()
+    items = writer.client.get("/api/rides", params={"limit": 200}).json()["items"]
+
+    training = ride["training"]
+    assert training["tss"] == pytest.approx(48)
+    assert training["tss_source"] == "hr"
+    assert (training["threshold_hr"], training["threshold_hr_estimated"]) == (165, False)
+    row = next(r for r in items if r["id"] == writer.ids[HR_ONLY])
+    assert (row["tss"], row["tss_source"], row["threshold_hr_estimated"]) == (
+        pytest.approx(48),
+        "hr",
+        False,
+    )
+
+
+def test_a_ride_without_power_uses_the_age_estimate(writer: Api):
+    """With only a year of birth, the threshold is estimated from age on the ride's date.
+
+    Given: born 1980 (45 in 2025); the 16 Aug 2025 ride.
+    Expect: threshold 159, estimated; TSS 0.75 x (132 / 159)² x 100.
+    """
+    writer.client.put("/api/athlete/birth-year", json={"birth_year": 1980})
+
+    training = writer.client.get(f"/api/rides/{writer.ids[HR_ONLY]}").json()["training"]
+
+    assert (training["threshold_hr"], training["threshold_hr_estimated"]) == (159, True)
+    assert training["tss"] == pytest.approx(75 * (132 / 159) ** 2)

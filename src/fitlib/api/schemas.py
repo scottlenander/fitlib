@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from fitlib.analysis.training import Training
 from fitlib.metadata import MAX_BULK_RIDES
 from fitlib.metrics import zones
+from fitlib.metrics.load import TssSource
 from fitlib.models import Bike, BikeKind, BikeSlot, Curve, GeoSummary, Lap, Ride, Source
 
 
@@ -48,8 +49,12 @@ class RideItem(BaseModel):
         avg_power: Average power, if recorded.
         np: Normalized Power, if there was power.
         avg_hr: Average heart rate, if recorded.
-        tss: Training Stress Score, if there was power and an FTP.
+        tss: Training Stress Score: from power and an FTP, else from heart rate and a
+            threshold heart rate.
+        tss_source: ``"power"`` or ``"hr"`` (heart rate), or ``null`` without a TSS.
         ftp_estimated: Whether the TSS uses an estimated FTP.
+        threshold_hr_estimated: Whether a heart-rate TSS uses a threshold heart rate
+            estimated from age.
         rpe: Perceived effort, 1-10, if set.
         bike: The ride's bike, if any.
         tags: The ride's tags.
@@ -71,7 +76,9 @@ class RideItem(BaseModel):
     np: float | None
     avg_hr: float | None
     tss: float | None
+    tss_source: TssSource | None
     ftp_estimated: bool
+    threshold_hr_estimated: bool
     rpe: int | None
     bike: BikeRef | None
     tags: list[str]
@@ -172,15 +179,18 @@ class GeoOut(BaseModel):
 
 
 class TrainingOut(BaseModel):
-    """FTP-based figures, using the athlete values in effect on the ride's date.
+    """Training figures, using the athlete values in effect on the ride's date.
 
     Attributes:
         ftp: The FTP used, if set or estimable.
         ftp_estimated: Whether ``ftp`` is estimated from recent rides.
         weight_kg: Body weight on the day, if set.
         max_hr: Max heart rate on the day, if set.
+        threshold_hr: Threshold heart rate on the day, set or estimated from age.
+        threshold_hr_estimated: Whether ``threshold_hr`` is estimated from age.
         intensity_factor: NP / FTP.
         tss: Training Stress Score.
+        tss_source: ``"power"`` or ``"hr"`` (heart rate, for rides without power TSS).
         watts_per_kg: Average power per kilogram.
         np_per_kg: Normalized Power per kilogram.
     """
@@ -189,8 +199,11 @@ class TrainingOut(BaseModel):
     ftp_estimated: bool
     weight_kg: float | None
     max_hr: int | None
+    threshold_hr: int | None
+    threshold_hr_estimated: bool
     intensity_factor: float | None
     tss: float | None
+    tss_source: TssSource | None
     watts_per_kg: float | None
     np_per_kg: float | None
 
@@ -436,7 +449,9 @@ def ride_item(ride: Ride, figures: Training, bikes: dict[str, Bike]) -> RideItem
         np=s.np,
         avg_hr=s.avg_hr,
         tss=figures.tss,
+        tss_source=figures.tss_source,
         ftp_estimated=figures.ftp_estimated,
+        threshold_hr_estimated=figures.threshold_hr_estimated,
         rpe=m.rpe,
         bike=bike_ref(m.bike_id, bikes),
         tags=list(m.tags),
@@ -553,8 +568,11 @@ def ride_detail(ride: Ride, figures: Training, bikes: dict[str, Bike]) -> RideDe
             ftp_estimated=figures.ftp_estimated,
             weight_kg=figures.weight_kg,
             max_hr=figures.max_hr,
+            threshold_hr=figures.threshold_hr,
+            threshold_hr_estimated=figures.threshold_hr_estimated,
             intensity_factor=figures.intensity_factor,
             tss=figures.tss,
+            tss_source=figures.tss_source,
             watts_per_kg=figures.watts_per_kg,
             np_per_kg=figures.np_per_kg,
         ),
@@ -812,6 +830,7 @@ class AthleteValuesIn(BaseModel):
         ftp: FTP in watts.
         weight_kg: Body weight in kilograms.
         max_hr: Max heart rate in bpm.
+        threshold_hr: Threshold heart rate in bpm, for TSS on rides without power.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -819,6 +838,7 @@ class AthleteValuesIn(BaseModel):
     ftp: Annotated[int | None, Field(gt=0, le=2000)] = None
     weight_kg: Annotated[float | None, Field(gt=0, le=300)] = None
     max_hr: Annotated[int | None, Field(gt=0, le=250)] = None
+    threshold_hr: Annotated[int | None, Field(gt=0, le=250)] = None
 
 
 class AthleteEntryOut(AthleteValuesIn):
@@ -836,12 +856,29 @@ class Athlete(BaseModel):
 
     Attributes:
         history: Every entry, oldest first.
-        today: FTP, weight and max heart rate in effect today, each from the latest entry
-            that sets it.
+        today: FTP, weight, max and threshold heart rate in effect today, each from the
+            latest entry that sets it.
+        birth_year: The rider's year of birth, if given.
+        estimated_threshold_hr: Today's threshold heart rate estimated from age, used when
+            none is set; ``null`` without a year of birth.
     """
 
     history: list[AthleteEntryOut]
     today: AthleteValuesIn
+    birth_year: int | None
+    estimated_threshold_hr: int | None
+
+
+class BirthYearIn(BaseModel):
+    """The rider's year of birth.
+
+    Attributes:
+        birth_year: The year, or ``null`` to clear it.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    birth_year: int | None
 
 
 class RouteProgress(BaseModel):
@@ -867,7 +904,7 @@ class VolumeBucketOut(BaseModel):
         ascent_m: Climbing.
         kj: Work in kilojoules.
         tss: Total Training Stress Score.
-        rides_without_tss: Rides adding no TSS (no power, or no FTP).
+        rides_without_tss: Rides adding no TSS (neither from power nor heart rate).
     """
 
     start: date
@@ -920,7 +957,8 @@ class FitnessOut(BaseModel):
     Attributes:
         since: First day.
         until: Last day.
-        rides_without_tss: Rides in the range that add no TSS (no power, or no FTP).
+        rides_without_tss: Rides in the range that add no TSS (neither from power nor heart
+            rate).
         days: One per day, oldest first.
     """
 

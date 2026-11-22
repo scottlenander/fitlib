@@ -3,7 +3,13 @@ import { Header, THEME_NAME } from './components/header'
 import { NewRidesNotice } from './components/newRidesNotice'
 import { Stats } from './components/stats'
 
-export type AthleteValues = { from: string; ftp?: string; weight?: string; maxHr?: string }
+export type AthleteValues = {
+  from: string
+  ftp?: string
+  weight?: string
+  maxHr?: string
+  thresholdHr?: string
+}
 
 // Settings (/settings): the light/dark toggle (also in the header), the units switch (only
 // here), the default time zone, the watched folders and the athlete history.
@@ -48,9 +54,18 @@ export class SettingsPage {
   // "Weight (lb)" or "Weight (kg)", in the display units.
   readonly weight: Locator
   readonly maxHr: Locator
+  readonly thresholdHr: Locator
   readonly saveButton: Locator
   readonly notice: Locator
   readonly error: Locator
+  // The year of birth form, under today's values.
+  readonly birthYearForm: Locator
+  readonly birthYear: Locator
+  readonly saveBirthYear: Locator
+  // "Saved: born 2026. Estimated threshold heart rate today: 187 bpm." or "Year of birth
+  // cleared."
+  readonly birthYearNotice: Locator
+  readonly birthYearError: Locator
 
   constructor(page: Page) {
     this.page = page
@@ -86,9 +101,15 @@ export class SettingsPage {
     this.ftp = this.form.getByLabel('FTP (W)')
     this.weight = this.form.getByLabel(/^Weight/)
     this.maxHr = this.form.getByLabel('Max heart rate (bpm)')
+    this.thresholdHr = this.form.getByLabel('Threshold heart rate (bpm)')
     this.saveButton = this.form.getByRole('button', { name: 'Save values' })
     this.notice = this.form.getByTestId('form-notice')
     this.error = this.form.getByTestId('form-error')
+    this.birthYearForm = page.getByTestId('birth-year-form')
+    this.birthYear = this.birthYearForm.getByLabel('Year of birth')
+    this.saveBirthYear = this.birthYearForm.getByRole('button', { name: 'Save year of birth' })
+    this.birthYearNotice = this.birthYearForm.getByTestId('form-notice')
+    this.birthYearError = this.birthYearForm.getByTestId('form-error')
   }
 
   async goto() {
@@ -134,7 +155,14 @@ export class SettingsPage {
     await this.ftp.fill(values.ftp ?? '')
     await this.weight.fill(values.weight ?? '')
     await this.maxHr.fill(values.maxHr ?? '')
+    await this.thresholdHr.fill(values.thresholdHr ?? '')
     await this.saveButton.click()
+  }
+
+  // Sets the year of birth; an empty string clears it.
+  async setBirthYear(year: string) {
+    await this.birthYear.fill(year)
+    await this.saveBirthYear.click()
   }
 
   // Removes an entry, accepting the confirmation, and waits for its row to go.

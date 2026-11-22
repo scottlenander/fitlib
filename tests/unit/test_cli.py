@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import re
 import shutil
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -343,6 +344,69 @@ def test_list_shows_tss_and_marks_estimates(imported: Path):
     assert re.search(r"2025-08-12 .* 26 ", result.output), "set FTP: plain TSS"
     assert re.search(r"2025-08-02 .* 111\* ", result.output), "estimated FTP: starred TSS"
     assert "* TSS from an estimated FTP" in result.output
+
+
+def test_athlete_threshold_hr_and_year_of_birth(config: Path):
+    """``athlete set --lthr`` records a threshold heart rate; ``athlete born`` a year of birth.
+
+    Given: ``set --from 2025-08-10 --lthr 165``; ``born 1980``; ``show``; then ``born
+    --clear``.
+    Expect: the entry with threshold 165 bpm; the year saved with today's estimate; ``show``
+    lists both, today's threshold as the set 165; the year cleared.
+    """
+    age = date.today().year - 1980
+    estimate = round(0.9 * (208 - 0.7 * age))
+
+    run(config, "athlete", "set", "--from", "2025-08-10", "--lthr", "165")
+    born = run(config, "athlete", "born", "1980")
+    shown = run(config, "athlete", "show")
+    cleared = run(config, "athlete", "born", "--clear")
+
+    assert f"Saved: born 1980. Estimated threshold heart rate today: {estimate} bpm." in born.output
+    assert re.search(r"2025-08-10\s+.*165 bpm", shown.output)
+    assert f"Born 1980: threshold heart rate estimated at {estimate} bpm" in shown.output
+    assert "threshold HR 165 bpm." in shown.output, "a set threshold wins over the estimate"
+    assert "Cleared the year of birth" in cleared.output
+
+
+@pytest.mark.parametrize(
+    ("args", "message"),
+    [(["1899"], "from 1900 to"), ([], "Give a year of birth, or --clear."),
+     (["1980", "--clear"], "Give a year of birth, or --clear.")],
+    ids=["too-early", "nothing", "both"],
+)  # fmt: skip
+def test_athlete_born_refuses_bad_input(config: Path, args: list[str], message: str):
+    """An impossible year, or neither or both of a year and ``--clear``, is an error.
+
+    Given: 1899; nothing; a year and ``--clear``.
+    Expect: the reason, and exit code 2.
+    """
+    result = run(config, "athlete", "born", *args)
+
+    assert message in result.output
+    assert result.exit_code == EXIT_ERROR
+
+
+def test_rides_without_power_show_tss_from_heart_rate(imported: Path):
+    """``list`` and ``show`` mark TSS from heart rate, and starred when estimated from age.
+
+    Given: born 1980, no threshold set; the 16 Aug ride (no power, 45 min at 132 bpm).
+    Expect: ``list`` shows "52 HR*" (0.75 x (132 / 159)² x 100 = 51.7) with the note;
+    ``show`` gives the threshold 159 bpm, estimated from age.
+    """
+    run(imported, "athlete", "born", "1980")
+
+    listed = run(imported, "list")
+    shown = run(imported, "show", ride_prefix(imported, "2025-08-16", "2025-08-17"))
+
+    assert re.search(r"2025-08-16 .* 52 HR\* ", listed.output)
+    assert (
+        "HR: TSS from heart rate, as the ride has no power (* threshold estimated from age)."
+        in (listed.output)
+    )
+    assert re.search(r"TSS\s+52\b", shown.output)
+    assert "Training (from heart rate, no power)" in shown.output
+    assert re.search(r"Threshold heart rate\s+159 bpm \(estimated from age\)", shown.output)
 
 
 def test_recompute_when_up_to_date_and_for_one_ride(imported: Path):

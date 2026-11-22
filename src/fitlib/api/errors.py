@@ -9,6 +9,7 @@ from __future__ import annotations
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
+from fitlib.analysis.training import BadBirthYear
 from fitlib.analysis.trends import BadRange
 from fitlib.ingest.localtime import UnknownTimeZone
 from fitlib.metadata import InvalidTag
@@ -32,6 +33,7 @@ STATUS: dict[type[Exception], int] = {
     InvalidTag: 422,
     UnknownTimeZone: 422,
     BadRange: 422,
+    BadBirthYear: 422,
     BadWatchFolder: 422,
     AlreadyWatched: 409,
     NotWatched: 404,

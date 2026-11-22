@@ -4,6 +4,7 @@ import {
   useAthlete,
   useDeleteAthlete,
   useSetAthlete,
+  useSetBirthYear,
   useSettings,
   useSetTimeZone,
   useTimeZones,
@@ -119,8 +120,9 @@ function TimeZoneForm({ current, zones }: { current: string | null; zones: strin
   )
 }
 
-// FTP, weight and max heart rate over time. Each value carries forward from its date until
-// a later entry changes it, so rides use what was in effect on their day.
+// FTP, weight, max and threshold heart rate over time. Each value carries forward from its
+// date until a later entry changes it, so rides use what was in effect on their day. The year
+// of birth estimates threshold heart rate where none is set.
 function AthleteSection() {
   const athlete = useAthlete()
   const remove = useDeleteAthlete()
@@ -135,8 +137,9 @@ function AthleteSection() {
     <section aria-labelledby="athlete-heading">
       <h2 id="athlete-heading">Athlete</h2>
       <p className="hint">
-        FTP, weight and max heart rate from a date on. A value carries forward until a later entry
-        changes it; rides before your first FTP use an estimate.
+        FTP, weight, max and threshold heart rate from a date on. A value carries forward until a
+        later entry changes it; rides before your first FTP use an estimate. Threshold heart rate
+        gives rides without power a TSS from heart rate.
       </p>
       {athlete.isError && <p role="alert">Couldn't load the athlete history.</p>}
       {today && (
@@ -148,10 +151,19 @@ function AthleteSection() {
               { label: 'FTP', value: f.watts(today.ftp) },
               { label: 'Weight', value: f.weight(today.weight_kg, units) },
               { label: 'Max heart rate', value: f.bpm(today.max_hr) },
+              {
+                label: 'Threshold heart rate',
+                value: f.bpm(today.threshold_hr ?? athlete.data?.estimated_threshold_hr ?? null),
+                note:
+                  today.threshold_hr === null && athlete.data?.estimated_threshold_hr != null
+                    ? '(estimated from age)'
+                    : undefined,
+              },
             ]}
           />
         </>
       )}
+      {athlete.data && <BirthYearForm saved={athlete.data.birth_year} />}
       {athlete.data && athlete.data.history.length > 0 && (
         // Scrolls sideways on a phone; its Remove buttons can be reached with Tab.
         <div className="table-scroll">
@@ -169,6 +181,9 @@ function AthleteSection() {
                 <th scope="col" className="num">
                   Max HR
                 </th>
+                <th scope="col" className="num">
+                  Threshold HR
+                </th>
                 <th scope="col">
                   <span className="visually-hidden">Actions</span>
                 </th>
@@ -181,6 +196,7 @@ function AthleteSection() {
                   <td className="num">{f.watts(entry.ftp)}</td>
                   <td className="num">{f.weight(entry.weight_kg, units)}</td>
                   <td className="num">{f.bpm(entry.max_hr)}</td>
+                  <td className="num">{f.bpm(entry.threshold_hr ?? null)}</td>
                   <td>
                     <button
                       type="button"
@@ -209,6 +225,7 @@ function AthleteForm() {
   const [ftp, setFtp] = useState('')
   const [weight, setWeight] = useState('')
   const [maxHr, setMaxHr] = useState('')
+  const [thresholdHr, setThresholdHr] = useState('')
   const [error, setError] = useState('')
 
   const number = (text: string) => (text.trim() === '' ? null : Number(text))
@@ -220,10 +237,11 @@ function AthleteForm() {
       ftp: number(ftp),
       weight_kg: kg === null ? null : Math.round(f.kgFrom(kg, units) * 100) / 100,
       max_hr: number(maxHr),
+      threshold_hr: number(thresholdHr),
     }
     if (!from) return setError('Choose the date the values apply from.')
-    if (values.ftp === null && values.weight_kg === null && values.max_hr === null)
-      return setError('Give at least one of FTP, weight or max heart rate.')
+    if (Object.values(values).every((v) => v === null))
+      return setError('Give at least one of FTP, weight, max or threshold heart rate.')
     setError('')
     save.mutate(
       { from, values },
@@ -232,6 +250,7 @@ function AthleteForm() {
           setFtp('')
           setWeight('')
           setMaxHr('')
+          setThresholdHr('')
         },
       },
     )
@@ -262,6 +281,15 @@ function AthleteForm() {
         Max heart rate (bpm)
         <input type="number" min={1} value={maxHr} onChange={(e) => setMaxHr(e.target.value)} />
       </label>
+      <label>
+        Threshold heart rate (bpm)
+        <input
+          type="number"
+          min={1}
+          value={thresholdHr}
+          onChange={(e) => setThresholdHr(e.target.value)}
+        />
+      </label>
       <button type="submit" disabled={save.isPending}>
         Save values
       </button>
@@ -273,6 +301,55 @@ function AthleteForm() {
         )}
         {save.isSuccess && !error && (
           <p data-testid="form-notice">Saved values from {save.data.effective_from}.</p>
+        )}
+      </div>
+    </form>
+  )
+}
+
+// The year of birth: threshold heart rate is estimated from age on days with none set.
+function BirthYearForm({ saved }: { saved: number | null }) {
+  const save = useSetBirthYear()
+  const [year, setYear] = useState(saved === null ? '' : String(saved))
+
+  function submit(event: FormEvent) {
+    event.preventDefault()
+    save.mutate(year.trim() === '' ? null : Number(year))
+  }
+
+  const result = save.data
+  return (
+    <form onSubmit={submit} className="inline-form" data-testid="birth-year-form" noValidate>
+      <h3>Year of birth</h3>
+      <p className="hint">
+        Without a threshold heart rate, it is estimated from your age: 90% of 208 − 0.7 × age. Leave
+        it empty to give rides without power no TSS until you set one.
+      </p>
+      <label>
+        Year of birth
+        <input
+          type="number"
+          min={1900}
+          inputMode="numeric"
+          value={year}
+          onChange={(e) => setYear(e.target.value)}
+        />
+      </label>
+      <button type="submit" disabled={save.isPending}>
+        Save year of birth
+      </button>
+      <div aria-live="polite" className="form-status">
+        {save.isError && (
+          <p role="alert" data-testid="form-error">
+            {save.error.message}
+          </p>
+        )}
+        {result && (
+          <p data-testid="form-notice">
+            {result.birth_year === null
+              ? 'Year of birth cleared.'
+              : `Saved: born ${result.birth_year}. Estimated threshold heart rate today: ${f.bpm(result.estimated_threshold_hr)}.`}
+          </p>
         )}
       </div>
     </form>
