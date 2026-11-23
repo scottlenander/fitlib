@@ -6,6 +6,7 @@ the command line.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from datetime import UTC, datetime
 from typing import Annotated, Literal
 
@@ -40,6 +41,7 @@ from fitlib.metrics.track import ride_track
 from fitlib.metrics.zwift import in_world, zwift_world
 from fitlib.models import Filters, Ride, SortKey, Source
 from fitlib.store.factory import Stores
+from fitlib.store.interfaces import MissingRides, RideNotFound
 
 router = APIRouter(prefix="/rides", tags=["rides"])
 
@@ -78,6 +80,32 @@ def find_ride(stores: Stores, ref: str) -> Ride:
         AmbiguousRideId: The prefix matches several rides (a 409 listing them).
     """
     return stores.catalog.get_ride(stores.catalog.resolve_id(ref))
+
+
+def find_rides(stores: Stores, refs: Iterable[str]) -> list[Ride]:
+    """Load several rides from ids or prefixes, reporting every one that's missing at once.
+
+    Args:
+        stores: The library's stores.
+        refs: Full ids or unique prefixes.
+
+    Returns:
+        The rides, in order.
+
+    Raises:
+        MissingRides: Some match no ride (a 404 listing them).
+        AmbiguousRideId: A prefix matches several rides (a 409).
+    """
+    found: list[Ride] = []
+    missing: list[str] = []
+    for ref in refs:
+        try:
+            found.append(find_ride(stores, ref))
+        except RideNotFound:
+            missing.append(ref)
+    if missing:
+        raise MissingRides(missing)
+    return found
 
 
 @router.get("")
@@ -372,7 +400,7 @@ def update_many(stores: StoresDep, patch: BulkMetaPatch) -> BulkMetaResult:
 
     Raises:
         HTTPException: The patch changes nothing (a 422).
-        RideNotFound: A ride isn't in the library (a 404).
+        MissingRides: Rides aren't in the library (a 404 listing them).
         BikeNotFound: ``bike_id`` isn't a bike (a 404).
         InvalidTag: A tag is empty, too long or has a comma (a 422).
     """
@@ -385,7 +413,7 @@ def update_many(stores: StoresDep, patch: BulkMetaPatch) -> BulkMetaResult:
     )
     if change.is_empty:
         raise HTTPException(422, "Choose an effort, a bike or tags to change.")
-    rides = {ride.id: ride for ride in (find_ride(stores, ref) for ref in patch.ids)}
+    rides = {ride.id: ride for ride in find_rides(stores, patch.ids)}
     stores.catalog.update_metas({i: apply_edit(r.meta, change) for i, r in rides.items()})
     return BulkMetaResult(updated=len(rides))
 
@@ -421,8 +449,8 @@ def delete_many(stores: StoresDep, body: BulkDelete) -> DeleteResult:
         How many rides were deleted (each ride once, however often it was named).
 
     Raises:
-        RideNotFound: A ride isn't in the library (a 404); nothing is deleted.
+        MissingRides: Rides aren't in the library (a 404 listing them); nothing is deleted.
     """
-    ids = list(dict.fromkeys(find_ride(stores, ref).id for ref in body.ids))
+    ids = list(dict.fromkeys(ride.id for ride in find_rides(stores, body.ids)))
     delete_rides(stores.catalog, stores.blobs, stores.streams, ids)
     return DeleteResult(deleted=len(ids))

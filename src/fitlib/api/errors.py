@@ -20,12 +20,14 @@ from fitlib.store.interfaces import (
     BikeNotFound,
     BlobNotFound,
     DuplicateBike,
+    MissingRides,
     RideNotFound,
 )
 from fitlib.watcher import AlreadyWatched, BadWatchFolder, NotWatched
 
 STATUS: dict[type[Exception], int] = {
     RideNotFound: 404,
+    MissingRides: 404,
     BikeNotFound: 404,
     BlobNotFound: 404,
     AmbiguousRideId: 409,
@@ -51,12 +53,14 @@ def _respond(request: Request, exc: Exception) -> JSONResponse:
         exc: The error.
 
     Returns:
-        The error's status code, with ``detail`` and, for ambiguous references,
-        ``candidates``.
+        The error's status code, with ``detail``; for ambiguous references, ``candidates``;
+        for several rides asked for at once, ``missing`` (those not in the library).
     """
     body: dict[str, object] = {"detail": str(exc)}
     if isinstance(exc, AmbiguousRideId | AmbiguousBike):
         body["candidates"] = exc.candidates
+    if isinstance(exc, MissingRides):
+        body["missing"] = exc.refs
     return JSONResponse(body, status_code=STATUS[type(exc)])
 
 
