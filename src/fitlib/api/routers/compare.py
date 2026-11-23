@@ -17,7 +17,7 @@ from fitlib.analysis.compare import (
 )
 from fitlib.analysis.training import athlete_profile, training
 from fitlib.api.deps import StoresDep
-from fitlib.api.routers.rides import find_ride
+from fitlib.api.routers.rides import find_rides
 from fitlib.api.schemas import ComparedRide, Comparison, ride_detail
 
 router = APIRouter(prefix="/compare", tags=["compare"])
@@ -63,7 +63,7 @@ def compare(
     Raises:
         HTTPException: 422 for too few or too many rides, the same ride twice, a smoothing
             window not in ``SMOOTHING_S``, or lining up by distance when a ride has none.
-            Unknown rides are a 404.
+            Unknown rides are a 404 listing them all (``missing``).
     """
     if not MIN_RIDES <= len(ids) <= MAX_RIDES:
         raise HTTPException(
@@ -75,7 +75,7 @@ def compare(
             status_code=422,
             detail=f"Smoothing must be one of {list(SMOOTHING_S)} seconds; got {smooth}",
         )
-    rides = [find_ride(stores, ref) for ref in ids]
+    rides = find_rides(stores, ids)
     if len({r.id for r in rides}) < len(rides):
         raise HTTPException(status_code=422, detail="The same ride is asked for more than once")
     frames = [stores.streams.get(r.id, r.summary.start) for r in rides]

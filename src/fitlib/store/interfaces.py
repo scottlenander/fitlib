@@ -57,6 +57,31 @@ class RideNotFound(StoreError):
         return f"No ride matches {ref!r} (it may have been deleted)"
 
 
+class MissingRides(RideNotFound):
+    """Some of several rides asked for at once aren't in the library.
+
+    Args:
+        refs: The ids or prefixes that match no ride.
+
+    Attributes:
+        refs: The ids or prefixes that match no ride, in the order asked.
+    """
+
+    def __init__(self, refs: list[str]):
+        super().__init__(*refs)
+        self.refs = refs
+
+    def __str__(self) -> str:
+        """Say how many rides weren't found, readably.
+
+        Returns:
+            E.g. "2 rides are no longer in the library (they may have been deleted)".
+        """
+        if len(self.refs) == 1:
+            return "1 ride is no longer in the library (it may have been deleted)"
+        return f"{len(self.refs)} rides are no longer in the library (they may have been deleted)"
+
+
 class AmbiguousRideId(StoreError):
     """An id prefix matches more than one ride.
 

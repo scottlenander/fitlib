@@ -32,3 +32,11 @@ export function bulkChange(form: BulkForm): BulkChange | null {
 export function rideCount(count: number): string {
   return count === 1 ? '1 ride' : `${count} rides`
 }
+
+// Said when selected rides turned out to be gone (deleted in another tab or from the command
+// line): they're unselected and nothing was changed.
+export function missingText(count: number): string {
+  return count === 1
+    ? '1 selected ride is no longer in the library and was unselected. Nothing was changed: try again.'
+    : `${count} selected rides are no longer in the library and were unselected. Nothing was changed: try again.`
+}

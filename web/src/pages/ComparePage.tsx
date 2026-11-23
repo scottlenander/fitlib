@@ -1,6 +1,12 @@
-import { lazy, Suspense, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
-import { useCompare, type Align, type ComparedRide, type Comparison } from '../api/client'
+import {
+  missingRides,
+  useCompare,
+  type Align,
+  type ComparedRide,
+  type Comparison,
+} from '../api/client'
 import { CompareMap } from '../components/CompareMap'
 import { ScrollBox } from '../components/ScrollBox'
 import { Swatch } from '../components/Swatch'
@@ -33,6 +39,29 @@ export function ComparePage() {
   const pending = clicked?.from === alignParam ? clicked.by : undefined
   const enough = ids.length >= MIN_RIDES && ids.length <= MAX_RIDES
   const comparison = useCompare(ids, align, smooth, enough)
+  // Rides in the link that are no longer in the library (deleted since) are left out of it,
+  // replacing the link so Back doesn't return to it, and the page says how many.
+  const [leftOut, setLeftOut] = useState(0)
+  const missing = missingRides(comparison.error)
+  const missingKey = missing.join(',')
+  useEffect(() => {
+    if (!missingKey) return
+    const gone = new Set(missingKey.split(','))
+    const current = new URLSearchParams(window.location.search)
+    const before = parseIds(current.get('ids'))
+    const kept = before.filter((id) => !gone.has(id))
+    // Counts what the server just said is gone, as the link is rewritten: an outside event.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setLeftOut((n) => n + before.length - kept.length)
+    current.set('ids', kept.join(','))
+    setParams(current, { replace: true })
+  }, [missingKey, setParams])
+  const leftOutNotice = leftOut > 0 && (
+    <p className="notice" data-testid="left-out-notice">
+      Left out {leftOut === 1 ? '1 ride that is' : `${leftOut} rides that are`} no longer in the
+      library.
+    </p>
+  )
 
   function change(changes: Record<string, string>) {
     const next = new URLSearchParams(params)
@@ -51,6 +80,7 @@ export function ComparePage() {
     return (
       <>
         <h1>Compare rides</h1>
+        {leftOutNotice}
         <p data-testid="compare-empty">
           {ids.length > MAX_RIDES
             ? `You can compare up to ${MAX_RIDES} rides at once. `
@@ -63,7 +93,8 @@ export function ComparePage() {
   return (
     <>
       <h1>Compare rides</h1>
-      {comparison.isError && (
+      {leftOutNotice}
+      {comparison.isError && missing.length === 0 && (
         <p role="alert" data-testid="form-error">
           Couldn't compare these rides: {comparison.error.message}
         </p>

@@ -1,14 +1,15 @@
 import { useState, type FormEvent } from 'react'
-import { useBikes, useBulkEdit, useTags } from '../api/client'
+import { missingRides, useBikes, useBulkEdit, useTags } from '../api/client'
 import { KEEP_ALL, bulkChange, rideCount, type BulkForm } from '../bulkEdit'
 
 const EFFORTS = Array.from({ length: 10 }, (_, i) => String(i + 1))
 
-type Props = { ids: string[]; onClose: () => void }
+// onMissing: some of the rides are gone (the library unselects them and says so).
+type Props = { ids: string[]; onClose: () => void; onMissing: (ids: string[]) => void }
 
 // The library's form for changing the effort, bike and tags of the selected rides at once.
 // Name and notes are edited one ride at a time, on the ride's page.
-export function BulkEdit({ ids, onClose }: Props) {
+export function BulkEdit({ ids, onClose, onMissing }: Props) {
   const bikes = useBikes()
   const tags = useTags()
   const edit = useBulkEdit()
@@ -18,7 +19,17 @@ export function BulkEdit({ ids, onClose }: Props) {
 
   function submit(event: FormEvent) {
     event.preventDefault()
-    if (change) edit.mutate({ ids, ...change }, { onSuccess: () => setForm(KEEP_ALL) })
+    if (!change) return
+    edit.mutate(
+      { ids, ...change },
+      {
+        onSuccess: () => setForm(KEEP_ALL),
+        onError: (error) => {
+          const missing = missingRides(error)
+          if (missing.length) onMissing(missing)
+        },
+      },
+    )
   }
 
   return (
@@ -96,7 +107,7 @@ export function BulkEdit({ ids, onClose }: Props) {
         </button>
       </div>
       <div aria-live="polite" className="form-status">
-        {edit.isError && (
+        {edit.isError && missingRides(edit.error).length === 0 && (
           <p role="alert" data-testid="form-error">
             {edit.error.message}
           </p>

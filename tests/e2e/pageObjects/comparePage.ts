@@ -26,6 +26,8 @@ export class ComparePage {
   // "Pick at least 2 rides to compare: …" when fewer than 2 rides are in the URL.
   readonly empty: Locator
   readonly error: Locator
+  // "Left out 1 ride that is no longer in the library."
+  readonly leftOut: Locator
 
   constructor(page: Page) {
     this.page = page
@@ -44,6 +46,7 @@ export class ComparePage {
     this.map = new RouteMap(page, 'compare-map', 'compare-map-note')
     this.empty = page.getByTestId('compare-empty')
     this.error = page.getByTestId('form-error')
+    this.leftOut = page.getByTestId('left-out-notice')
   }
 
   // Opens a comparison of rides by id, the first being the one gaps are measured against.

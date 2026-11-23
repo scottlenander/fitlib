@@ -55,22 +55,41 @@ export type WatchedFile = Schemas['WatchedFileOut']
 export type ScanResult = Schemas['ScanOut']
 export type RideQuery = NonNullable<operations['list_rides_api_rides_get']['parameters']['query']>
 
-// An error from the API, with its status and message.
+// An error from the API, with its status and message, and for several rides asked for at
+// once, the ones no longer in the library.
 export class ApiError extends Error {
   readonly status: number
+  readonly missing: string[]
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, missing: string[] = []) {
     super(message)
     this.status = status
+    this.missing = missing
   }
+}
+
+// The rides an error says are no longer in the library (none for other errors).
+export function missingRides(error: unknown): string[] {
+  return error instanceof ApiError ? error.missing : []
+}
+
+// Whether a failed query is worth trying again: not when the server answered that the
+// request itself was wrong (a 4xx, such as a ride that's gone), only for network or server
+// trouble.
+export function shouldRetry(failures: number, error: unknown): boolean {
+  if (error instanceof ApiError && error.status < 500) return false
+  return failures < 3
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, init)
   if (!response.ok) {
     let message = response.statusText
+    let missing: string[] = []
     try {
-      const body = (await response.json()) as { detail?: unknown }
+      const body = (await response.json()) as { detail?: unknown; missing?: unknown }
+      if (Array.isArray(body.missing))
+        missing = body.missing.filter((m): m is string => typeof m === 'string')
       if (typeof body.detail === 'string') message = body.detail
       // Validation errors: a list of problems, each with a message.
       else if (Array.isArray(body.detail))
@@ -80,7 +99,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     } catch {
       // Not JSON: keep the status text.
     }
-    throw new ApiError(response.status, message)
+    throw new ApiError(response.status, message, missing)
   }
   if (response.status === 204) return undefined as T
   return (await response.json()) as T
@@ -243,12 +262,9 @@ export function useDeleteRides() {
   const client = useQueryClient()
   const invalidate = useInvalidate()
   return useMutation({
-    mutationFn: (ids: string[]) => {
-      const [only] = ids
-      return ids.length === 1 && only !== undefined
-        ? request<DeleteResult>(`/api/rides/${encodeURIComponent(only)}`, { method: 'DELETE' })
-        : request<DeleteResult>('/api/rides/bulk-delete', json('POST', { ids }))
-    },
+    // Always the bulk endpoint, even for one ride: it lists rides already gone.
+    mutationFn: (ids: string[]) =>
+      request<DeleteResult>('/api/rides/bulk-delete', json('POST', { ids })),
     onSuccess: (_, ids) => {
       // Anything about a deleted ride (its page, similar rides, route progress, streams)
       // would only 404 and retry.

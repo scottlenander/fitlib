@@ -304,7 +304,7 @@ export interface paths {
      *     Raises:
      *         HTTPException: 422 for too few or too many rides, the same ride twice, a smoothing
      *             window not in ``SMOOTHING_S``, or lining up by distance when a ride has none.
-     *             Unknown rides are a 404.
+     *             Unknown rides are a 404 listing them all (``missing``).
      */
     get: operations['compare_api_compare_get']
     put?: never
@@ -439,7 +439,7 @@ export interface paths {
      *         How many rides were deleted (each ride once, however often it was named).
      *
      *     Raises:
-     *         RideNotFound: A ride isn't in the library (a 404); nothing is deleted.
+     *         MissingRides: Rides aren't in the library (a 404 listing them); nothing is deleted.
      */
     post: operations['delete_many_api_rides_bulk_delete_post']
     delete?: never
@@ -472,7 +472,7 @@ export interface paths {
      *
      *     Raises:
      *         HTTPException: The patch changes nothing (a 422).
-     *         RideNotFound: A ride isn't in the library (a 404).
+     *         MissingRides: Rides aren't in the library (a 404 listing them).
      *         BikeNotFound: ``bike_id`` isn't a bike (a 404).
      *         InvalidTag: A tag is empty, too long or has a comma (a 422).
      */

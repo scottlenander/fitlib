@@ -9,7 +9,7 @@ import {
   type RideItem,
   type SortKey,
 } from '../api/client'
-import { rideCount } from '../bulkEdit'
+import { missingText, rideCount } from '../bulkEdit'
 import { BulkEdit } from '../components/BulkEdit'
 import { ConfirmDelete } from '../components/ConfirmDelete'
 import type { DeletedState } from '../components/RideDetails'
@@ -55,10 +55,24 @@ export function LibraryPage() {
   const [editing, setEditing] = useState(false)
   const [deleting, setDeleting] = useState(false)
   // "Deleted …": from a ride's page (navigation state) or from the selection bar.
+  // Read once, then cleared from the history entry, so a reload or Back doesn't say it again.
   const location = useLocation()
-  const fromRide = (location.state as DeletedState | null)?.deleted
+  const navigate = useNavigate()
+  const [fromRide] = useState(() => (location.state as DeletedState | null)?.deleted)
+  useEffect(() => {
+    if ((location.state as DeletedState | null)?.deleted)
+      void navigate(`${location.pathname}${location.search}`, { replace: true, state: null })
+  }, [location, navigate])
   const [deletedHere, setDeletedHere] = useState<string | null>(null)
+  const [missingNotice, setMissingNotice] = useState<string | null>(null)
   const deletedNotice = deletedHere ?? (fromRide ? `Deleted ${fromRide}.` : null)
+
+  // Selected rides that turned out to be gone (deleted in another tab or the command line).
+  function dropMissing(ids: string[]) {
+    const gone = new Set(ids)
+    selection.unselectAll(selection.picked.filter((p) => gone.has(p.id)))
+    setMissingNotice(missingText(ids.length))
+  }
 
   // The URL state as last set, which may be ahead of this render: two quick changes (such
   // as "Clear filters" then a new filter) must build on each other, not on the same render.
@@ -101,6 +115,11 @@ export function LibraryPage() {
             {deletedNotice}
           </p>
         )}
+        {missingNotice && (
+          <p className="notice" data-testid="missing-notice">
+            {missingNotice}
+          </p>
+        )}
       </div>
       <SearchBox key={state.q} initial={state.q} onSearch={(q) => update({ q })} />
       <Filters state={state} onChange={update} />
@@ -135,6 +154,7 @@ export function LibraryPage() {
             <ConfirmDelete
               rides={selection.picked}
               onCancel={() => setDeleting(false)}
+              onMissing={dropMissing}
               onDeleted={(count) => {
                 selection.unselectAll(selection.picked)
                 setDeleting(false)
@@ -144,7 +164,11 @@ export function LibraryPage() {
             />
           )}
           {editing && selection.picked.length > 0 && (
-            <BulkEdit ids={selection.picked.map((p) => p.id)} onClose={() => setEditing(false)} />
+            <BulkEdit
+              ids={selection.picked.map((p) => p.id)}
+              onClose={() => setEditing(false)}
+              onMissing={dropMissing}
+            />
           )}
           {page.items.length > 0 && (
             <div className="table-scroll">

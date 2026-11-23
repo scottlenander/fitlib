@@ -1,6 +1,6 @@
 // What the library's "Edit rides" form sends.
-import { describe, expect, test } from 'vitest'
-import { KEEP_ALL, bulkChange, rideCount } from './bulkEdit'
+import { describe, expect, it, test } from 'vitest'
+import { KEEP_ALL, bulkChange, missingText, rideCount } from './bulkEdit'
 
 describe('bulk change', () => {
   test('a form left as it is changes nothing', () => {
@@ -37,4 +37,15 @@ describe('bulk change', () => {
 test('ride counts', () => {
   expect(rideCount(1)).toBe('1 ride')
   expect(rideCount(12)).toBe('12 rides')
+})
+
+describe('missingText', () => {
+  it('says how many selected rides were gone and unselected', () => {
+    expect(missingText(1)).toBe(
+      '1 selected ride is no longer in the library and was unselected. Nothing was changed: try again.',
+    )
+    expect(missingText(3)).toMatch(
+      /^3 selected rides are no longer in the library and were unselected\./,
+    )
+  })
 })

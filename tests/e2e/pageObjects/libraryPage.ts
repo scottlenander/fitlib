@@ -45,6 +45,8 @@ export class LibraryPage {
   readonly confirmDelete: ConfirmDelete
   // "Deleted Garmin 2025-08-08 18:00." (from its page) or "Deleted 2 rides."
   readonly deletedNotice: Locator
+  // Selected rides that turned out to be gone: "1 selected ride is no longer …"
+  readonly missingNotice: Locator
   readonly clearSelection: Locator
   // The header checkbox that selects every ride on the page.
   readonly selectPage: Locator
@@ -83,6 +85,7 @@ export class LibraryPage {
     this.deleteButton = page.getByRole('button', { name: /^Delete \d+ rides?$/ })
     this.confirmDelete = new ConfirmDelete(page)
     this.deletedNotice = page.getByTestId('deleted-notice')
+    this.missingNotice = page.getByTestId('missing-notice')
     this.clearSelection = page.getByRole('button', { name: 'Clear selection' })
     this.selectPage = this.table.getByRole('checkbox', { name: 'Select all rides on this page' })
     this.bulkEdit = new BulkEdit(page)
