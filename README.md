@@ -61,6 +61,7 @@ uv run fitlib watch scan                    # import what's new in them now
 uv run fitlib recompute                     # only needed after fitlib's calculations change
 uv run fitlib edit 3f2a9c --name "Arenberg" --note "Windy" --rpe 7 --tag z2 --tag cobbles
 uv run fitlib edit 3f2a9c 77b0e1 --bike "Giant Contend 1"    # several rides at once
+uv run fitlib delete 3f2a9c 77b0e1          # asks first; --yes doesn't
 uv run fitlib bikes add "Giant Contend 1" --kind road --default-for outdoor --from 2020-01-01
 uv run fitlib bikes default "Tarmac SL7" --for outdoor --from 2023-04-15
 uv run fitlib bikes backfill --dry-run      # then without --dry-run
@@ -73,7 +74,13 @@ uv run fitlib --help                        # every command and option
   re-running an import, or resuming an interrupted one, is safe. Runs and other non-cycling
   activities are skipped. If a file records the same ride as one already in the library (start
   within 2 minutes, over 80% of the time shared), the ride already there is kept and the file is
-  skipped; its original is still archived. Exit code 1 means some files couldn't be read.
+  skipped; its original is still archived. Rides you deleted are skipped too (listed as
+  "deleted before"); `--include-deleted` brings them back. Exit code 1 means some files
+  couldn't be read.
+- **delete** removes rides with their 1-second data and their original files in the library
+  (your own copies, in Zwift's or Garmin's folders, are kept). It lists the rides and asks
+  first. Their files are remembered, so importing a folder or a Garmin export again doesn't
+  bring them back unless asked. Fitness, trends and estimated FTP follow at once.
 - **list** filters by text (name, notes, tags, source, device), dates (UTC), source,
   indoor/outdoor and riding time, and sorts by start, duration, distance or power. It shows
   each ride's TSS; `HR` marks TSS from heart rate (rides without power), and a `*` TSS from
@@ -136,14 +143,16 @@ uv run fitlib serve --open     # http://localhost:8000/ ; --port, --host, --no-w
   URL, so reloads, the back button and links keep the view. TSS from heart rate (rides
   without power) is marked `HR`, and TSS from an estimated FTP or threshold heart rate `*`. Tick rides (from any page or filter, or every ride on a page with the
   header box; the selection lasts for the browser tab, up to 500 rides), then press
-  **Compare** (2 to 4 rides) or **Edit** to set the effort, bike or tags of them all at
-  once: fields left on Keep stay as each ride has them, and tags are added or taken off
-  without touching a ride's other tags. Name and notes are edited on the ride's page.
+  **Compare** (2 to 4 rides), **Edit** to set the effort, bike or tags of them all at
+  once (fields left on Keep stay as each ride has them, and tags are added or taken off
+  without touching a ride's other tags), or **Delete**, after a confirmation. Name and notes
+  are edited on the ride's page.
 - **Ride** (`/rides/<id>`): summary and training figures; **Ride Stats**: power, heart rate,
   cadence, speed and altitude stacked on one axis, shown over **time** or **distance**, zoomed
   by dragging the bar's ends or scrolling, and **Show whole ride** to zoom back out; time in
   power and heart-rate zones; best
-  efforts; laps. **Edit details** sets the name, notes, effort, bike and tags. **Similar
+  efforts; laps. **Edit details** sets the name, notes, effort, bike and tags; **Delete ride**
+  asks, then deletes it and returns to the library. **Similar
   rides** lists rides on the same route (newest first, to see progress) and with a similar
   effort, each with a **Compare** link, plus a link comparing the ride with its 3 closest.
   **Progress on this route** charts every ride on the route by date (average speed by
@@ -163,7 +172,8 @@ uv run fitlib serve --open     # http://localhost:8000/ ; --port, --host, --no-w
   the first ride each was, stops included), or by **time**. Power and heart rate are smoothed
   over 10 s by default (off or 30 s to choose).
 - **Import** (`/import`): choose or drop `.fit` and `.zip` files; the results list what was
-  imported (with links), already in the library, skipped and failed.
+  imported (with links), already in the library, skipped and failed, and rides you deleted,
+  with **Import them anyway** to bring those back.
 - **Bikes** (`/bikes`): bikes with their rides, distance and time; add, rename, change kind,
   retire and bring back. The dated default-bike timeline, and applying the defaults to
   existing rides (Preview, then Apply; bikes chosen by hand are never changed).
@@ -422,7 +432,7 @@ fitlib has no login: it's meant for the account that runs it.
 library/
   catalog.sqlite3                     per ride: summary, laps, best efforts, watt/bpm histograms,
                                       route fingerprint, your notes/tags (searchable); athlete
-                                      history
+                                      history; hashes of deleted rides' files
   blobs/raw/<sha[:2]>/<sha>.fit       every original file, unchanged
   blobs/streams/<year>/<id>.parquet   each ride's 1-second samples (zstd Parquet)
 ```
@@ -451,6 +461,7 @@ search find rides by their new names (with the start time).
 | `fitlib/metadata.py` | Tag rules, ride kinds for default bikes, and which dated default applies |
 | `fitlib/store/` | `CatalogStore` / `BlobStore` interfaces; `local/` (SQLite + files) and `memory/` backends; `factory.py` picks one |
 | `fitlib/importer.py` | Hash, dedupe, analyse in worker processes, store |
+| `fitlib/delete.py` | Deleting rides with their streams and original files |
 | `fitlib/recompute.py` | Rebuild rides from their raw files when calculations change |
 | `fitlib/watcher.py` | Watched folders: which files, settling, scans, and the background watcher the server runs |
 | `fitlib/sync/` | Optional encrypted backup: `crypto.py` (sealed objects, object names, the passphrase keyfile), `keys.py` (Keychain), `engine.py` (setup, push, status, restore) |
@@ -461,7 +472,7 @@ search find rides by their new names (with the start time).
 
 Only `store/factory.py` chooses a backend; everything else depends on the interfaces. The API
 opens the stores per request. `import-linter` enforces this and the layering
-(`models ← metrics ← ingest ← importer | recompute | analysis | sync ← api ← cli`; sync gets
+(`models ← metrics ← ingest ← importer | recompute | analysis | sync | delete ← api ← cli`; sync gets
 the catalog snapshot through the factory, never SQLite itself).
 
 **E2E mode** (for the browser tests): with `FITLIB_E2E=1` and `FITLIB_E2E_FIXTURES` pointing
@@ -472,7 +483,7 @@ the system temp folder, so they can't touch real rides:
 |---|---|---|
 | `GET /e2e/rides` | `rideIds`, `rideId`, `findRideId` | (read-only) |
 | `POST /e2e/rides/{id}/reset-meta` | `resetMeta` | Editing rides (`rideEdits.spec.ts`) |
-| `POST /e2e/rides/{id}/delete` | `deleteRide` | Nothing yet: the app can't delete rides |
+| `POST /e2e/rides/{id}/delete` | `deleteRide` (doesn't remember the file as deleted) | Deleting rides (`rideDelete.spec.ts`) |
 | `POST /e2e/reset`, `POST /e2e/import/{file}` | (not used yet) | Importing (`import.spec.ts`) |
 | `POST /api/imports` | `importFile` (extra rides kept out of the library at start-up) | Importing (`import.spec.ts`) |
 | `GET /api/watch`, `DELETE /api/watch/folders` | `stopWatchingLeftovers` (folders a failed run left) | Watched folders (`watchedFolders.spec.ts`) |
@@ -525,9 +536,9 @@ time, a 1989 local time inside, the odometer on the first record only), Garmin i
 pause, smart recording (irregular samples), no power meter, an indoor ride without HR or GPS,
 a second recording of the Zwift ride, a ride from another maker (Wahoo) with no time zone and
 no power or heart rate, a run, two rides inside a `.zip`, an exact duplicate and a truncated
-file. One more ride, outdoor near Arras with heart rate only, is kept in `tests/fixtures/extra/`
-rather than the fixture folder, so it's never in the library at the start: the browser tests
-drop it into a watched folder.
+file. Four more rides, outdoor near Arras with heart rate only (3, 4, 7 and 8 Aug), are kept
+in `tests/fixtures/extra/` rather than the fixture folder, so they're never in the library at
+the start: the browser tests drop one into a watched folder, edit two together and delete one.
 
 The files in `tests/fixtures/fit/` are generated from the specs and committed. After changing
 the specs or the generator, rebuild them:
@@ -608,6 +619,14 @@ date.
   ending early) and by distance (to the shortest ride); the time gap, between whole seconds
   and with a 60 s step at a stop; no distance refused; smoothing that flattens spikes but
   never fills a pause; only recorded channels returned.
+- **Deleting rides** (`tests/unit/test_delete.py`, `tests/api/test_delete.py`, catalog
+  contract and CLI tests): the ride, its stream and original file gone, others untouched;
+  several at once all or none (an unknown id deletes nothing); deleted files remembered and
+  skipped on re-import (alone or inside a zip), `include_deleted` / `--include-deleted`
+  bringing them back for good, test set-up deletes not remembered; the API's single and bulk
+  delete (1 to 500 rides, repeats counted once, 404 for unknown rides with a readable
+  message); recent watched-folder files marked when their ride is deleted; `fitlib delete`
+  asking, `--yes`, unknown rides; the watcher reporting deleted files as skipped.
 - **Metadata** (`tests/unit/test_metadata.py`, `tests/unit/analysis/test_bikes.py`): tag
   normalization; edits (kept, set and cleared fields, tags added and removed, a bike chosen
   by hand); ride kinds; dated default bikes by local date; backfill never overwriting a
@@ -722,6 +741,12 @@ being written, and nothing watched),
     overlapping recording and a broken file reported.
   - *Ride edits*: every detail edited, shown on the ride and found in the library by name,
     tag, bike and effort; clearing details; a too-long tag refused with nothing saved; Cancel.
+  - *Deleting rides* (an extra ride on 8 Aug, imported by the spec): asking from its page,
+    Cancel focused, cancelling with the button and with Escape, an accessibility scan of the
+    dialog; deleting, back in the library with "Deleted …", the ride gone and its page not
+    found; importing its file again leaving it out as deleted before, and **Import them
+    anyway** bringing it back. Deleting it from the library's selection: "Delete 1 ride",
+    gone, unselected and "Deleted 1 ride.".
   - *Bulk edits* (two extra rides on 3 and 4 Aug, imported by the spec): both selected with
     the page checkbox and given an effort, a new bike and two tags; one unselected (the page
     box part-ticked), the other's effort cleared and a tag taken off; the library's filters
