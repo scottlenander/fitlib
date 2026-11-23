@@ -187,6 +187,9 @@ def test_security_headers_on_every_response(client: TestClient, path: str):
     assert "script-src 'self'" in csp
     assert "frame-ancestors 'none'" in csp
     assert "unsafe-eval" not in csp
+    assert "img-src 'self' data: blob: https://tile.openstreetmap.org" in csp, (
+        "should allow only OpenStreetMap's images from elsewhere, for the optional street map"
+    )
 
 
 def test_refusals_carry_the_security_headers(client: TestClient):
