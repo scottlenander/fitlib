@@ -56,6 +56,11 @@ test('delete a ride from its page, then import it again on purpose', async ({ pa
     await dialog.confirm.click()
     await expect(library.heading).toBeVisible()
     await expect(library.deletedNotice).toHaveText(`Deleted ${RIDE.name}.`)
+    await page.reload()
+    await expect(library.heading).toBeVisible()
+    await expect(library.deletedNotice, {
+      message: 'The notice should not come back on a reload',
+    }).toBeHidden()
     await library.goto(DAY)
     await expect(library.count).toHaveText('No rides found.')
   })

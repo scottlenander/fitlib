@@ -1,12 +1,14 @@
 import { useEffect, useRef } from 'react'
-import { useDeleteRides } from '../api/client'
-import { rideCount } from '../bulkEdit'
+import { missingRides, useDeleteRides } from '../api/client'
+import { missingText, rideCount } from '../bulkEdit'
 
 type Props = {
   // The rides to delete, with names to list (all of them up to a few, then a count).
   rides: { id: string; name: string }[]
   onDeleted: (count: number) => void
   onCancel: () => void
+  // Some of the rides are gone already: the caller drops them (the dialog stays for the rest).
+  onMissing?: (ids: string[]) => void
 }
 
 // How many ride names the dialog lists before summing up the rest.
@@ -14,7 +16,7 @@ const LISTED = 5
 
 // Asks before deleting rides, in a modal dialog. Cancel has the focus, so pressing Enter
 // straight away never deletes; Escape cancels too.
-export function ConfirmDelete({ rides, onDeleted, onCancel }: Props) {
+export function ConfirmDelete({ rides, onDeleted, onCancel, onMissing }: Props) {
   const ref = useRef<HTMLDialogElement>(null)
   const remove = useDeleteRides()
   const count = rides.length
@@ -54,7 +56,9 @@ export function ConfirmDelete({ rides, onDeleted, onCancel }: Props) {
       </p>
       {remove.isError && (
         <p role="alert" data-testid="form-error">
-          Nothing was deleted: {remove.error.message}
+          {onMissing && missingRides(remove.error).length
+            ? missingText(missingRides(remove.error).length)
+            : `Nothing was deleted: ${remove.error.message}`}
         </p>
       )}
       <div className="button-row">
@@ -68,7 +72,13 @@ export function ConfirmDelete({ rides, onDeleted, onCancel }: Props) {
           onClick={() =>
             remove.mutate(
               rides.map((r) => r.id),
-              { onSuccess: (result) => onDeleted(result.deleted) },
+              {
+                onSuccess: (result) => onDeleted(result.deleted),
+                onError: (error) => {
+                  const missing = missingRides(error)
+                  if (missing.length) onMissing?.(missing)
+                },
+              },
             )
           }
         >

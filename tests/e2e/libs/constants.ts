@@ -33,6 +33,7 @@ export const RIDES = {
     date: '2025-08-02',
     changes: false,
     usedBy: [
+      'regression/maps.spec.ts',
       'regression/compare.spec.ts',
       'smoke/libraryToRide.spec.ts',
       'regression/library.spec.ts',
@@ -47,6 +48,8 @@ export const RIDES = {
     date: '2025-08-05',
     changes: false,
     usedBy: [
+      'regression/maps.spec.ts',
+      'regression/missingRides.spec.ts',
       'regression/security.spec.ts',
       'regression/phoneWidth.spec.ts',
       'regression/rideStats.spec.ts',
@@ -81,6 +84,8 @@ export const RIDES = {
     date: '2025-08-16',
     changes: false,
     usedBy: [
+      'regression/maps.spec.ts',
+      'regression/missingRides.spec.ts',
       'regression/compare.spec.ts',
       'regression/similarRides.spec.ts',
       'regression/library.spec.ts',
@@ -96,6 +101,7 @@ export const RIDES = {
     // The other specs only read figures the bike doesn't change.
     changes: true,
     usedBy: [
+      'regression/maps.spec.ts',
       'regression/similarRides.spec.ts',
       'regression/bikes.spec.ts',
       'regression/library.spec.ts',
