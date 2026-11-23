@@ -532,6 +532,21 @@ class Page[T]:
     limit: int
 
 
+@dataclass(frozen=True)
+class DeletedFile:
+    """The original file of a ride the user deleted, so importing it again can skip it.
+
+    Attributes:
+        sha256: The file's hash.
+        name: The ride's file name, for display.
+        deleted_at: When the ride was deleted (UTC).
+    """
+
+    sha256: str
+    name: str
+    deleted_at: datetime
+
+
 class WatchOutcome(StrEnum):
     """What happened to a file found in a watched folder."""
 

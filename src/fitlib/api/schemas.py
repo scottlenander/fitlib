@@ -699,6 +699,28 @@ class BulkMetaPatch(BaseModel):
     remove_tags: list[str] = []
 
 
+class BulkDelete(BaseModel):
+    """Rides to delete together.
+
+    Attributes:
+        ids: The rides, by id or unique prefix.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    ids: Annotated[list[str], Field(min_length=1, max_length=MAX_BULK_RIDES)]
+
+
+class DeleteResult(BaseModel):
+    """What a delete did.
+
+    Attributes:
+        deleted: How many rides were deleted (each once, however often it was named).
+    """
+
+    deleted: int
+
+
 class BulkMetaResult(BaseModel):
     """What a change to several rides did.
 

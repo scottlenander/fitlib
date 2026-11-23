@@ -20,11 +20,11 @@ from fitlib.api.deps import ConfigDep, StoresDep
 from fitlib.api.routers.imports import ImportResult, import_result
 from fitlib.api.routers.rides import find_ride
 from fitlib.config import Config
+from fitlib.delete import delete_rides
 from fitlib.importer import Importer
 from fitlib.metadata import default_bike
 from fitlib.models import RideMeta
 from fitlib.store.factory import open_stores
-from fitlib.store.streams import raw_key
 
 
 class UnsafeLibrary(Exception):
@@ -125,8 +125,8 @@ def make_router(fixtures: Path) -> APIRouter:
     def delete_ride(stores: StoresDep, ref: str) -> Response:
         """Delete a ride with its stream and original file, so it can be imported again.
 
-        The app has no way to delete rides yet, so this shortcut is the one exception to
-        "every shortcut is also tested through the UI".
+        Unlike deleting in the app, the file isn't remembered as deleted: set-up wants the
+        ride importable again as if it were new.
 
         Args:
             stores: The library's stores.
@@ -135,9 +135,8 @@ def make_router(fixtures: Path) -> APIRouter:
         Returns:
             An empty response.
         """
-        ride = stores.catalog.delete_ride(find_ride(stores, ref).id)
-        stores.streams.delete(ride.id, ride.summary.start)
-        stores.blobs.delete(raw_key(ride.sha256))
+        ride_id = find_ride(stores, ref).id
+        delete_rides(stores.catalog, stores.blobs, stores.streams, [ride_id], remember=False)
         return Response(status_code=204)
 
     @router.post("/import/{name}")

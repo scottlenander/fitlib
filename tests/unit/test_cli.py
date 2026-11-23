@@ -1259,3 +1259,76 @@ def test_watch_without_folders(config: Path):
         result = run(config, "watch", command)
 
         assert "Add one with `fitlib watch add FOLDER`." in result.output
+
+
+# -- delete -----------------------------------------------------------------------------------
+
+INTERVALS = FIT_DIR / "garmin_nord_intervals_5x4.fit"
+
+
+def test_delete_asks_then_deletes(imported: Path):
+    """``fitlib delete`` lists the rides and asks; yes deletes, no keeps them.
+
+    Given: The interval ride (5 Aug), answered "n" and then "y".
+    Expect: Both list the ride and ask; "n" exits 1 with nothing deleted; "y" deletes it,
+        and it's gone from the list.
+    """
+    ride = ride_id_on(imported, "2025-08-05")
+
+    kept = runner.invoke(app, ["--config", str(imported), "delete", ride], input="n\n")
+    deleted = runner.invoke(app, ["--config", str(imported), "delete", ride], input="y\n")
+
+    assert kept.exit_code == 1
+    assert "Nothing deleted." in kept.output
+    assert "Delete 1 ride?" in kept.output
+    assert deleted.exit_code == 0, deleted.output
+    assert "Deleted 1 ride." in deleted.output
+    assert ride not in ride_ids(run(imported, "list", "--limit", "50").output)
+
+
+def test_delete_several_without_asking(imported: Path):
+    """``--yes`` deletes several rides without asking; a ride named twice counts once.
+
+    Given: Two rides by prefix, one named twice, with ``--yes``.
+    Expect: "Deleted 2 rides." and no question.
+    """
+    first, second = ride_id_on(imported, "2025-08-05"), ride_id_on(imported, "2025-08-09")
+
+    result = run(imported, "delete", first, second, first, "--yes")
+
+    assert result.exit_code == 0, result.output
+    assert "Deleted 2 rides." in result.output
+    assert "Delete 2 rides?" not in result.output
+
+
+def test_delete_unknown_ride(imported: Path):
+    """An unknown ride is an error and nothing is deleted.
+
+    Given: A real ride and an unknown prefix.
+    Expect: Exit code 2 naming the unknown one; the real ride still listed.
+    """
+    ride = ride_id_on(imported, "2025-08-05")
+
+    result = run(imported, "delete", ride, "ffffffff", "--yes")
+
+    assert result.exit_code == 2
+    assert "ffffffff" in result.output
+    assert ride in ride_ids(run(imported, "list", "--limit", "50").output)
+
+
+def test_import_skips_deleted_rides_unless_asked(imported: Path):
+    """Re-importing a deleted ride lists it as deleted before; --include-deleted imports it.
+
+    Given: A ride deleted, its file imported, then imported with ``--include-deleted``.
+    Expect: The first import counts it as deleted before and shows how to bring it back;
+        the second imports it.
+    """
+    run(imported, "delete", ride_id_on(imported, "2025-08-05"), "--yes")
+
+    skipped = run(imported, "import", str(INTERVALS), "--workers", "1")
+    back = run(imported, "import", str(INTERVALS), "--workers", "1", "--include-deleted")
+
+    assert "Imported 0" in skipped.output
+    assert "deleted before 1" in skipped.output
+    assert "--include-deleted brings them back" in skipped.output
+    assert "Imported 1," in back.output

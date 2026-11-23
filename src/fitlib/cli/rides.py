@@ -1,4 +1,4 @@
-"""Commands for rides: import, list, show, similar, compare, edit, tags and recompute."""
+"""Commands for rides: import, list, show, similar, compare, edit, delete, tags, recompute."""
 
 from __future__ import annotations
 
@@ -30,6 +30,7 @@ from fitlib.cli.common import (
     tags_from,
 )
 from fitlib.cli.output import print_report, print_ride, print_tss_notes, section, tss_text
+from fitlib.delete import delete_rides
 from fitlib.importer import Importer
 from fitlib.ingest.scanner import scan
 from fitlib.ingest.summarize import METRICS_VERSION
@@ -60,6 +61,12 @@ def import_(
     workers: Annotated[
         int | None, typer.Option(min=1, help="Processes for decoding. Default: up to 4.")
     ] = None,
+    include_deleted: Annotated[
+        bool,
+        typer.Option(
+            "--include-deleted", help="Also import rides you deleted (they're skipped otherwise)."
+        ),
+    ] = False,
 ) -> None:
     """Import every .fit file under ``paths`` and print a report.
 
@@ -67,6 +74,7 @@ def import_(
         ctx: Typer context holding the config path.
         paths: Folders (searched recursively), .fit files and .zip archives.
         workers: Number of decoding processes; up to 4 by default.
+        include_deleted: Import files of deleted rides too.
 
     Raises:
         typer.Exit: A path doesn't exist (code 2), or some files couldn't be read (code 1).
@@ -84,7 +92,11 @@ def import_(
             transient=True,
         ) as progress:  # fmt: skip
             task = progress.add_task("import", total=total)
-            report = importer.run(paths, on_progress=lambda _: progress.advance(task))
+            report = importer.run(
+                paths,
+                on_progress=lambda _: progress.advance(task),
+                include_deleted=include_deleted,
+            )
         print_report(report)
         outdated_hint(s.catalog)
 
@@ -477,6 +489,40 @@ def edit(
         )
     out.print(f"Updated {len(updated)} ride(s).")
     out.print(table)
+
+
+@app.command(
+    help="Delete rides, with their streams and original files in the library. Your own copies "
+    "of the files are kept; importing them again skips them unless --include-deleted."
+)
+def delete(
+    ctx: typer.Context,
+    rides: Annotated[list[str], typer.Argument(help="Ride ids or prefixes.", show_default=False)],
+    yes: Annotated[bool, typer.Option("--yes", "-y", help="Don't ask first.")] = False,
+) -> None:
+    """List the rides, ask, and delete them.
+
+    Args:
+        ctx: Typer context holding the config path.
+        rides: Ride ids or prefixes.
+        yes: Skip the question.
+
+    Raises:
+        typer.Exit: A ride isn't found (code 2), or the user said no (code 1).
+    """
+    with library(ctx) as lib:
+        s = lib.stores
+        found = {r.id: r for r in (find_ride(s.catalog, ref) for ref in rides)}
+        for ride in found.values():
+            out.print(f"{ride.short_id}  {ride.display_name}")
+        count = f"{len(found)} ride{'s' if len(found) != 1 else ''}"
+        if not yes and not typer.confirm(
+            f"Delete {count}? This can't be undone (your own copies of the files are kept).",
+        ):
+            out.print("Nothing deleted.")
+            raise typer.Exit(1)
+        delete_rides(s.catalog, s.blobs, s.streams, list(found))
+    out.print(f"Deleted {count}.")
 
 
 @app.command(help="List tags and how many rides have each.")

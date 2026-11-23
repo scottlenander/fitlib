@@ -192,8 +192,28 @@ def test_wanted_files(folder: Path, name: str, expected: bool):
             ),
         ),
         (ImportReport(), (WatchOutcome.SKIPPED, "No .fit files inside", None)),
+        (
+            ImportReport(deleted=[("a.fit", "You deleted this ride on 2026-11-23")]),
+            (WatchOutcome.SKIPPED, "You deleted this ride on 2026-11-23", None),
+        ),
+        (
+            ImportReport(
+                imported=[("z:a.fit", RIDE_ID)],
+                deleted=[("z:b.fit", "You deleted this ride on 2026-11-23")],
+            ),
+            (WatchOutcome.IMPORTED, "1 file imported, 1 file you deleted", RIDE_ID),
+        ),
     ],
-    ids=["imported", "duplicate", "skipped", "failed", "zip", "empty-zip"],
+    ids=[
+        "imported",
+        "duplicate",
+        "skipped",
+        "failed",
+        "zip",
+        "empty-zip",
+        "deleted",
+        "zip-deleted",
+    ],
 )
 def test_summarize(report: ImportReport, expected: tuple):
     """One file's outcome is its own; a zip's is the best of its files, with counts.
