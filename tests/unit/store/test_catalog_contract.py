@@ -408,7 +408,7 @@ def test_delete_ride_removes_it_everywhere(catalog: CatalogStore):
     catalog.add_ride(gone)
     catalog.add_ride(kept)
 
-    removed = catalog.delete_ride(gone.id)
+    (removed,) = catalog.delete_rides([gone.id])
 
     assert removed.id == gone.id and removed.meta.notes == "windy"
     with pytest.raises(RideNotFound):
@@ -427,7 +427,52 @@ def test_delete_unknown_ride(catalog: CatalogStore):
     Expect: ``RideNotFound``.
     """
     with pytest.raises(RideNotFound):
-        catalog.delete_ride("00000000-0000-0000-0000-000000000000")
+        catalog.delete_rides(["00000000-0000-0000-0000-000000000000"])
+
+
+def test_delete_rides_is_all_or_nothing(catalog: CatalogStore):
+    """Deleting several rides removes all of them, or none if one is unknown.
+
+    Given: three rides; then two of them plus an unknown id; then the two (one named twice).
+    Expect: the unknown id raises ``RideNotFound`` with all three still there; the second
+        call removes exactly the two and returns them once each.
+    """
+    rides = [make_ride(start=at(i)) for i in range(3)]
+    for ride in rides:
+        catalog.add_ride(ride)
+
+    with pytest.raises(RideNotFound):
+        catalog.delete_rides([rides[0].id, "00000000-0000-0000-0000-000000000000"])
+    assert catalog.count() == 3, "should delete nothing when one id is unknown"
+    removed = catalog.delete_rides([rides[0].id, rides[1].id, rides[0].id])
+
+    assert [r.id for r in removed] == [rides[0].id, rides[1].id]
+    assert ids(catalog.search()) == [rides[2].id]
+
+
+def test_deleted_files_are_remembered_until_added_again(catalog: CatalogStore):
+    """A deleted ride's file is remembered, unless asked not to, and forgotten on re-adding.
+
+    Given: two rides deleted, one remembered and one not; then the remembered one added again.
+    Expect: the remembered file's name and a deletion time; nothing for the other; nothing
+        once the ride is back.
+    """
+    kept_record = make_ride(start=at(0))
+    no_record = make_ride(start=at(1))
+    catalog.add_ride(kept_record)
+    catalog.add_ride(no_record)
+    before = datetime.now(UTC).replace(microsecond=0)
+
+    catalog.delete_rides([kept_record.id])
+    catalog.delete_rides([no_record.id], remember=False)
+    record = catalog.deleted_file(kept_record.sha256)
+
+    assert record is not None
+    assert (record.sha256, record.name) == (kept_record.sha256, kept_record.source_name)
+    assert record.deleted_at >= before
+    assert catalog.deleted_file(no_record.sha256) is None
+    catalog.add_ride(kept_record)
+    assert catalog.deleted_file(kept_record.sha256) is None, "re-adding should forget it"
 
 
 # -- route fingerprints -----------------------------------------------------------------------
@@ -484,7 +529,7 @@ def test_replacing_a_summary_replaces_the_route_and_deleting_drops_it(catalog: C
     catalog.replace_summary(second.id, second.summary, 3, route=frozenset({"d000000"}))
     after_recompute = catalog.route_candidates(first.id)
     catalog.replace_summary(second.id, second.summary, 3, route=frozenset({"c000000"}))
-    catalog.delete_ride(second.id)
+    catalog.delete_rides([second.id])
     after_delete = catalog.route_candidates(first.id)
 
     assert after_recompute == []
@@ -1072,7 +1117,7 @@ def test_sqlite_catalog_persists_and_is_migrated(tmp_path: Path):
     reopened.close()
 
     assert loaded == ride, "the ride should survive closing and reopening the catalog"
-    assert version == 7
+    assert version == 8
 
 
 def test_new_library_opened_twice_at_once(tmp_path: Path):
@@ -1103,7 +1148,7 @@ def test_new_library_opened_twice_at_once(tmp_path: Path):
         thread.join()
 
     assert errors == []
-    assert versions == [7] * 8
+    assert versions == [8] * 8
 
 
 def test_phase_1a_database_is_upgraded(tmp_path: Path):
@@ -1134,7 +1179,7 @@ def test_phase_1a_database_is_upgraded(tmp_path: Path):
     version = catalog.schema_version
     catalog.close()
 
-    assert version == 7
+    assert version == 8
     assert ride.metrics_version == 1, "the old ride should be marked for recompute"
     assert ride.summary.np is None and ride.summary.power_curve == ()
 

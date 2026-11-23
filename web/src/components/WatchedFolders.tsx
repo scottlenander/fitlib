@@ -220,7 +220,7 @@ function RecentFiles({ files }: { files: WatchedFile[] }) {
               </th>
               <td>{f.when(file.seen_at)}</td>
               <td>{OUTCOMES[file.outcome]}</td>
-              <td>{file.detail ?? ''}</td>
+              <td>{file.ride_deleted ? 'Ride deleted since' : (file.detail ?? '')}</td>
             </tr>
           ))}
         </tbody>

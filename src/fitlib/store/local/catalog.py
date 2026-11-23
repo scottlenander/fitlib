@@ -8,7 +8,7 @@ import struct
 import tempfile
 import threading
 import time
-from collections.abc import Generator, Iterable, Mapping
+from collections.abc import Generator, Iterable, Mapping, Sequence
 from contextlib import contextmanager
 from datetime import UTC, date, datetime
 from importlib import resources
@@ -22,6 +22,7 @@ from fitlib.models import (
     BikeSlot,
     BikeTotals,
     CurveBest,
+    DeletedFile,
     Filters,
     GeoSummary,
     Lap,
@@ -348,26 +349,56 @@ class SqliteCatalog:
                 self._require_bike(db, ride.meta.bike_id)
             self._write_meta(db, ride.id, ride.meta)
             self._index(db, ride)
+            # Importing a deleted ride's file on purpose brings it back for good.
+            db.execute("DELETE FROM deleted_files WHERE sha256 = ?", (ride.sha256,))
 
-    def delete_ride(self, ride_id: str) -> Ride:
-        """Remove a ride and everything the catalog holds for it, including its metadata.
+    def delete_rides(self, ride_ids: Sequence[str], remember: bool = True) -> list[Ride]:
+        """Remove rides and everything the catalog holds for them, all or none.
 
         Args:
-            ride_id: The ride's full id.
+            ride_ids: The rides' full ids (a repeated id counts once).
+            remember: Record each ride's file in ``deleted_files``, so imports skip it.
 
         Returns:
-            The ride as it was.
+            The rides as they were.
 
         Raises:
-            RideNotFound: No ride has this id.
+            RideNotFound: An id isn't a ride; nothing is deleted.
         """
-        ride = self.get_ride(ride_id)
-        with self._tx() as db:
-            # Laps, location, curves, histograms, metadata and tags go with it (ON DELETE
-            # CASCADE); the search index is maintained by hand.
-            db.execute("DELETE FROM rides_fts WHERE ride_id = ?", (ride_id,))
-            db.execute("DELETE FROM rides WHERE id = ?", (ride_id,))
-        return ride
+        with self._lock:
+            rides = [self.get_ride(i) for i in dict.fromkeys(ride_ids)]
+            now = _ts(datetime.now(UTC))
+            with self._tx() as db:
+                for ride in rides:
+                    # Laps, location, route, curves, histograms, metadata and tags go with it
+                    # (ON DELETE CASCADE); the search index is maintained by hand.
+                    db.execute("DELETE FROM rides_fts WHERE ride_id = ?", (ride.id,))
+                    db.execute("DELETE FROM rides WHERE id = ?", (ride.id,))
+                    if remember:
+                        db.execute(
+                            "INSERT INTO deleted_files (sha256, name, deleted_at) "
+                            "VALUES (?, ?, ?) ON CONFLICT (sha256) DO UPDATE SET "
+                            "name = excluded.name, deleted_at = excluded.deleted_at",
+                            (ride.sha256, ride.source_name, now),
+                        )
+        return rides
+
+    def deleted_file(self, sha256: str) -> DeletedFile | None:
+        """Look up a file whose ride was deleted.
+
+        Args:
+            sha256: The file's hash.
+
+        Returns:
+            When and as what it was deleted, or ``None``.
+        """
+        with self._lock:
+            row = self._db.execute(
+                "SELECT sha256, name, deleted_at FROM deleted_files WHERE sha256 = ?", (sha256,)
+            ).fetchone()
+        if row is None:
+            return None
+        return DeletedFile(row["sha256"], row["name"], _dt(row["deleted_at"]))
 
     def replace_summary(
         self,

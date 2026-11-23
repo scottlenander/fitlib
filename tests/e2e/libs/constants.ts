@@ -155,9 +155,9 @@ export const UPLOADS = {
 } as const
 
 // Rides kept out of the library at start-up (tests/fixtures/extra/): one dropped into a
-// watched folder by the watched folders spec, which deletes it first, and two imported and
-// edited together by the bulk edits spec. Outdoor rides on 3, 4 and 7 Aug (days with no
-// other ride) on a loop of their own, with heart rate but no power, so once imported they
+// watched folder by the watched folders spec, which deletes it first, two imported and
+// edited together by the bulk edits spec, and one imported and deleted by the delete spec.
+// Outdoor rides on 3, 4, 7 and 8 Aug (days with no other ride) on a loop of their own, with heart rate but no power, so once imported they
 // change no other spec's counts (they use rides from 13 Aug on, or indoor rides), best
 // efforts, routes, default bikes or similar efforts.
 export const EXTRA_DIR = path.join(__dirname, '..', '..', 'fixtures', 'extra')
@@ -176,5 +176,10 @@ export const EXTRA = {
     file: 'garmin_arras_bulk_2.fit',
     name: 'Garmin 2025-08-04 07:30',
     usedBy: ['regression/bulkEdits.spec.ts'],
+  },
+  DELETE: {
+    file: 'garmin_arras_delete.fit',
+    name: 'Garmin 2025-08-08 18:00',
+    usedBy: ['regression/rideDelete.spec.ts'],
   },
 } as const

@@ -9,7 +9,7 @@ Methods are added as phases need them.
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from datetime import date, datetime
 from typing import Protocol
 
@@ -20,6 +20,7 @@ from fitlib.models import (
     BikeSlot,
     BikeTotals,
     CurveBest,
+    DeletedFile,
     Filters,
     OffsetSource,
     Page,
@@ -41,7 +42,19 @@ class StoreError(Exception):
 
 
 class RideNotFound(StoreError):
-    """No ride has the given id, or no ride matches the given id prefix."""
+    """No ride has the given id, or no ride matches the given id prefix.
+
+    The first argument is the id or prefix looked for.
+    """
+
+    def __str__(self) -> str:
+        """Say which ride wasn't found, readably.
+
+        Returns:
+            E.g. "No ride matches 'abcd1234' (it may have been deleted)".
+        """
+        ref = self.args[0] if self.args else ""
+        return f"No ride matches {ref!r} (it may have been deleted)"
 
 
 class AmbiguousRideId(StoreError):
@@ -256,19 +269,33 @@ class CatalogStore(Protocol):
         """
         ...
 
-    def delete_ride(self, ride_id: str) -> Ride:
-        """Remove a ride and everything the catalog holds for it, including its metadata.
+    def delete_rides(self, ride_ids: Sequence[str], remember: bool = True) -> list[Ride]:
+        """Remove rides and everything the catalog holds for them, all or none.
 
-        The ride's raw file and stream are blobs; deleting those is up to the caller.
+        The rides' raw files and streams are blobs; deleting those is up to the caller.
 
         Args:
-            ride_id: The ride's full id.
+            ride_ids: The rides' full ids (a repeated id counts once).
+            remember: Record each ride's file in ``deleted_file``, so imports skip it.
 
         Returns:
-            The ride as it was, so the caller can find its blobs.
+            The rides as they were, so the caller can find their blobs.
 
         Raises:
-            RideNotFound: No ride has this id.
+            RideNotFound: An id isn't a ride; nothing is deleted.
+        """
+        ...
+
+    def deleted_file(self, sha256: str) -> DeletedFile | None:
+        """Look up a file whose ride was deleted.
+
+        Adding a ride from the file again forgets it.
+
+        Args:
+            sha256: The file's hash.
+
+        Returns:
+            When and as what it was deleted, or ``None``.
         """
         ...
 

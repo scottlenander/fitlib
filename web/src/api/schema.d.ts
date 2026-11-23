@@ -358,6 +358,7 @@ export interface paths {
      *         request: The request (for the app's worker setting).
      *         stores: The library's stores.
      *         files: The uploads.
+     *         include_deleted: Import files of deleted rides too.
      *
      *     Returns:
      *         What happened to each file.
@@ -411,6 +412,36 @@ export interface paths {
     get: operations['list_rides_api_rides_get']
     put?: never
     post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/rides/bulk-delete': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * Delete Many
+     * @description Delete several rides at once, all or none.
+     *
+     *     Args:
+     *         stores: The library's stores.
+     *         body: The rides.
+     *
+     *     Returns:
+     *         How many rides were deleted (each ride once, however often it was named).
+     *
+     *     Raises:
+     *         RideNotFound: A ride isn't in the library (a 404); nothing is deleted.
+     */
+    post: operations['delete_many_api_rides_bulk_delete_post']
     delete?: never
     options?: never
     head?: never
@@ -473,7 +504,21 @@ export interface paths {
     get: operations['get_ride_api_rides__ref__get']
     put?: never
     post?: never
-    delete?: never
+    /**
+     * Delete Ride
+     * @description Delete a ride, with its stream and original file in the library.
+     *
+     *     Your own copy of the file is kept. Importing it again skips it unless asked to include
+     *     deleted rides.
+     *
+     *     Args:
+     *         stores: The library's stores.
+     *         ref: The ride's id or a unique prefix.
+     *
+     *     Returns:
+     *         One ride deleted.
+     */
+    delete: operations['delete_ride_api_rides__ref__delete']
     options?: never
     head?: never
     patch?: never
@@ -1226,6 +1271,17 @@ export interface components {
       files: string[]
     }
     /**
+     * BulkDelete
+     * @description Rides to delete together.
+     *
+     *     Attributes:
+     *         ids: The rides, by id or unique prefix.
+     */
+    BulkDelete: {
+      /** Ids */
+      ids: string[]
+    }
+    /**
      * BulkMetaPatch
      * @description The same change to several rides' effort, bike and tags.
      *
@@ -1408,6 +1464,17 @@ export interface components {
     DefaultSet: {
       /** Bike Id */
       bike_id: string | null
+    }
+    /**
+     * DeleteResult
+     * @description What a delete did.
+     *
+     *     Attributes:
+     *         deleted: How many rides were deleted (each once, however often it was named).
+     */
+    DeleteResult: {
+      /** Deleted */
+      deleted: number
     }
     /**
      * EfficiencyOut
@@ -1658,8 +1725,15 @@ export interface components {
      *         duplicates: Files already in the library; detail says which ride or file.
      *         skipped: Files left out on purpose: not a ride, or overlapping a ride already there.
      *         failed: Files that couldn't be read, or weren't .fit or .zip files.
+     *         deleted: Files of rides you deleted, left out; import again with
+     *             ``include_deleted`` to bring them back.
      */
     ImportResult: {
+      /**
+       * Deleted
+       * @default []
+       */
+      deleted: components['schemas']['FileOutcome'][]
       /** Duplicates */
       duplicates: components['schemas']['FileOutcome'][]
       /** Failed */
@@ -2401,6 +2475,7 @@ export interface components {
      *         outcome: ``imported``, ``duplicate``, ``skipped`` or ``failed``.
      *         detail: Why it was skipped or failed; for a zip, how many files had each outcome.
      *         ride_id: The ride it became (for a zip, the first), if imported.
+     *         ride_deleted: The ride it became has been deleted since.
      *         seen_at: When it was imported, UTC.
      */
     WatchedFileOut: {
@@ -2413,6 +2488,11 @@ export interface components {
       outcome: components['schemas']['WatchOutcome']
       /** Path */
       path: string
+      /**
+       * Ride Deleted
+       * @default false
+       */
+      ride_deleted: boolean
       /** Ride Id */
       ride_id: string | null
       /**
@@ -2854,7 +2934,10 @@ export interface operations {
   }
   import_files_api_imports_post: {
     parameters: {
-      query?: never
+      query?: {
+        /** @description Also import rides you deleted (skipped otherwise). */
+        include_deleted?: boolean
+      }
       header?: never
       path?: never
       cookie?: never
@@ -2940,6 +3023,39 @@ export interface operations {
       }
     }
   }
+  delete_many_api_rides_bulk_delete_post: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['BulkDelete']
+      }
+    }
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DeleteResult']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
   update_many_api_rides_bulk_meta_post: {
     parameters: {
       query?: never
@@ -2991,6 +3107,37 @@ export interface operations {
         }
         content: {
           'application/json': components['schemas']['RideDetail']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  delete_ride_api_rides__ref__delete: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        ref: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DeleteResult']
         }
       }
       /** @description Validation Error */

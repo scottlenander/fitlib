@@ -1,5 +1,6 @@
 import type { Locator, Page } from '@playwright/test'
 import { ChartZoom } from './components/chartZoom'
+import { ConfirmDelete } from './components/confirmDelete'
 import { Header } from './components/header'
 import { RouteProgress } from './components/routeProgress'
 import { SimilarRides } from './components/similarRides'
@@ -49,6 +50,9 @@ export class RidePage {
   readonly similar: SimilarRides
   readonly progress: RouteProgress
   readonly notFound: Locator
+  // In Details, next to Edit details; opens the confirm dialog.
+  readonly deleteButton: Locator
+  readonly confirmDelete: ConfirmDelete
   readonly backToLibrary: Locator
 
   constructor(page: Page) {
@@ -87,6 +91,8 @@ export class RidePage {
     this.similar = new SimilarRides(page)
     this.progress = new RouteProgress(page)
     this.notFound = page.getByRole('heading', { name: 'Ride not found', level: 1 })
+    this.deleteButton = page.getByRole('button', { name: 'Delete ride' })
+    this.confirmDelete = new ConfirmDelete(page)
     this.backToLibrary = page.getByRole('link', { name: 'Back to the library' })
   }
 

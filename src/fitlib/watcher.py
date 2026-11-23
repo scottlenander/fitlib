@@ -272,6 +272,7 @@ def summarize(report: ImportReport) -> tuple[WatchOutcome, str | None, str | Non
         (WatchOutcome.IMPORTED, report.imported, ("imported", "imported")),
         (WatchOutcome.DUPLICATE, report.duplicates, ("already in the library",) * 2),
         (WatchOutcome.SKIPPED, report.skipped, ("skipped", "skipped")),
+        (WatchOutcome.SKIPPED, report.deleted, ("you deleted", "you deleted")),
         (WatchOutcome.FAILED, report.failed, ("couldn't be read", "couldn't be read")),
     )
     found = [(outcome, rows, words) for outcome, rows, words in groups if rows]

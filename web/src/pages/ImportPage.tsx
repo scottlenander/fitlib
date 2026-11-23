@@ -24,7 +24,14 @@ export function ImportPage() {
 
   function submit(event: FormEvent) {
     event.preventDefault()
-    if (files.length) upload.mutate(files)
+    if (files.length) upload.mutate({ files })
+  }
+
+  // Uploads again the chosen files that held deleted rides (a zip as a whole), this time
+  // importing those rides.
+  function importDeleted(result: ImportResult) {
+    const names = new Set(result.deleted.map((o) => o.file.split(':')[0]))
+    upload.mutate({ files: files.filter((file) => names.has(file.name)), includeDeleted: true })
   }
 
   const skippedTypes = files.filter((file) => !ACCEPTED.test(file.name)).length
@@ -74,18 +81,27 @@ export function ImportPage() {
             The import failed: {upload.error.message}
           </p>
         )}
-        {upload.data && <Results result={upload.data} />}
+        {upload.data && (
+          <Results
+            result={upload.data}
+            busy={upload.isPending}
+            onImportDeleted={() => importDeleted(upload.data)}
+          />
+        )}
       </div>
     </>
   )
 }
 
-function Results({ result }: { result: ImportResult }) {
+type ResultsProps = { result: ImportResult; busy: boolean; onImportDeleted: () => void }
+
+function Results({ result, busy, onImportDeleted }: ResultsProps) {
   const counts = [
     `Imported ${result.imported.length}`,
     `already in library ${result.duplicates.length}`,
     `skipped ${result.skipped.length}`,
     `failed ${result.failed.length}`,
+    ...(result.deleted.length ? [`deleted before ${result.deleted.length}`] : []),
   ]
   return (
     <section aria-labelledby="results-heading" data-testid="import-results">
@@ -117,6 +133,23 @@ function Results({ result }: { result: ImportResult }) {
               ))}
             </Outcomes>
           ),
+      )}
+      {result.deleted.length > 0 && (
+        <>
+          <Outcomes title="Rides you deleted" testId="deleted-files">
+            {result.deleted.map((o) => (
+              <li key={o.file}>
+                {o.file}: {o.detail}
+              </li>
+            ))}
+          </Outcomes>
+          <p>
+            They were left out so deleted rides stay deleted.{' '}
+            <button type="button" disabled={busy} onClick={onImportDeleted}>
+              Import them anyway
+            </button>
+          </p>
+        </>
       )}
     </section>
   )

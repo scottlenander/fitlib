@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import replace
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 
 from fitlib.models import (
     AthleteEntry,
@@ -13,6 +13,7 @@ from fitlib.models import (
     BikeSlot,
     BikeTotals,
     CurveBest,
+    DeletedFile,
     Filters,
     OffsetSource,
     Page,
@@ -137,6 +138,7 @@ class MemoryCatalog:
         self._settings: dict[str, str] = {}
         self._watch_folders: dict[str, WatchFolder] = {}
         self._watched: dict[str, WatchedFile] = {}
+        self._deleted: dict[str, DeletedFile] = {}
 
     def _bike_name(self, ride: Ride) -> str | None:
         """The name of a ride's bike.
@@ -520,23 +522,40 @@ class MemoryCatalog:
             self.get_bike(ride.meta.bike_id)
         self._rides[ride.id] = replace(ride, meta=_stored(ride.meta))
         self._routes[ride.id] = frozenset(route)
+        self._deleted.pop(ride.sha256, None)
 
-    def delete_ride(self, ride_id: str) -> Ride:
-        """Remove a ride and its metadata.
+    def delete_rides(self, ride_ids: Sequence[str], remember: bool = True) -> list[Ride]:
+        """Remove rides and their metadata, all or none.
 
         Args:
-            ride_id: The ride's full id.
+            ride_ids: The rides' full ids (a repeated id counts once).
+            remember: Record each ride's file in ``deleted_file``.
 
         Returns:
-            The ride as it was.
+            The rides as they were.
 
         Raises:
-            RideNotFound: No ride has this id.
+            RideNotFound: An id isn't a ride; nothing is deleted.
         """
-        ride = self.get_ride(ride_id)
-        del self._rides[ride_id]
-        self._routes.pop(ride_id, None)
-        return ride
+        rides = [self.get_ride(i) for i in dict.fromkeys(ride_ids)]
+        now = datetime.now(UTC).replace(microsecond=0)
+        for ride in rides:
+            del self._rides[ride.id]
+            self._routes.pop(ride.id, None)
+            if remember:
+                self._deleted[ride.sha256] = DeletedFile(ride.sha256, ride.source_name, now)
+        return rides
+
+    def deleted_file(self, sha256: str) -> DeletedFile | None:
+        """Look up a file whose ride was deleted.
+
+        Args:
+            sha256: The file's hash.
+
+        Returns:
+            When and as what it was deleted, or ``None``.
+        """
+        return self._deleted.get(sha256)
 
     def get_ride(self, ride_id: str) -> Ride:
         """Load one ride.

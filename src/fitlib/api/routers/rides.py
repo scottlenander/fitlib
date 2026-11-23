@@ -16,8 +16,10 @@ from fitlib.analysis.training import athlete_profile, training
 from fitlib.analysis.trends import route_progress
 from fitlib.api.deps import StoresDep
 from fitlib.api.schemas import (
+    BulkDelete,
     BulkMetaPatch,
     BulkMetaResult,
+    DeleteResult,
     MetaPatch,
     RideDetail,
     RideItem,
@@ -29,6 +31,7 @@ from fitlib.api.schemas import (
     ride_detail,
     ride_item,
 )
+from fitlib.delete import delete_rides
 from fitlib.ingest.normalize import VALUE_COLUMNS
 from fitlib.metadata import KEEP, MetaEdit, apply_edit, normalize_tags
 from fitlib.metrics.zwift import in_world
@@ -362,3 +365,41 @@ def update_many(stores: StoresDep, patch: BulkMetaPatch) -> BulkMetaResult:
     rides = {ride.id: ride for ride in (find_ride(stores, ref) for ref in patch.ids)}
     stores.catalog.update_metas({i: apply_edit(r.meta, change) for i, r in rides.items()})
     return BulkMetaResult(updated=len(rides))
+
+
+@router.delete("/{ref}")
+def delete_ride(stores: StoresDep, ref: str) -> DeleteResult:
+    """Delete a ride, with its stream and original file in the library.
+
+    Your own copy of the file is kept. Importing it again skips it unless asked to include
+    deleted rides.
+
+    Args:
+        stores: The library's stores.
+        ref: The ride's id or a unique prefix.
+
+    Returns:
+        One ride deleted.
+    """
+    ride = find_ride(stores, ref)
+    delete_rides(stores.catalog, stores.blobs, stores.streams, [ride.id])
+    return DeleteResult(deleted=1)
+
+
+@router.post("/bulk-delete")
+def delete_many(stores: StoresDep, body: BulkDelete) -> DeleteResult:
+    """Delete several rides at once, all or none.
+
+    Args:
+        stores: The library's stores.
+        body: The rides.
+
+    Returns:
+        How many rides were deleted (each ride once, however often it was named).
+
+    Raises:
+        RideNotFound: A ride isn't in the library (a 404); nothing is deleted.
+    """
+    ids = list(dict.fromkeys(find_ride(stores, ref).id for ref in body.ids))
+    delete_rides(stores.catalog, stores.blobs, stores.streams, ids)
+    return DeleteResult(deleted=len(ids))

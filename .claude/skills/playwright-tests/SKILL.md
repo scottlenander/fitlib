@@ -53,7 +53,7 @@ The app side: React pages in `web/src/pages/`, components in `web/src/components
   ```
   Skip it when the line already says it, e.g. `expect(ride.heading).toHaveText(RIDE.name)`. Typical cases that need one: `toBeHidden`/`not.` checks, `toHaveCount(0)`, `toBeDisabled()`, and `toBeVisible()` on a locator whose name doesn't say why it matters.
 - **Wait for the result before moving on.** After an action that loads data (a filter, an import), assert the new rows, count or summary before the next action.
-- **Set-up:** use `TestData` to reach a known start. Anything the test is *about* must go through the UI. Each `TestData` shortcut must also be done through the UI in at least one test. The exception is `deleteRide`, until the app can delete rides.
+- **Set-up:** use `TestData` to reach a known start. Anything the test is *about* must go through the UI. Each `TestData` shortcut must also be done through the UI in at least one test.
 - **Re-runnable:** a test must pass when run twice against the same server without re-importing. Reset what it changes at the start, not only at the end (`import.spec.ts` deletes its ride first if it's there).
 - **Browser state:** each test gets a fresh browser context, so the units and dark-mode choices (kept in localStorage) start fresh every time: imperial (the e2e config) and the emulated system colour scheme (`page.emulateMedia({ colorScheme })`).
 - **Shared state in a file** (two tests editing the same ride): `test.describe.configure({ mode: 'serial' })` with a comment saying why.

@@ -48,21 +48,25 @@ class ImportReport:
         skipped: Files left out on purpose; detail is the reason (not a ride, or overlaps a
             ride already in the library).
         failed: Files that couldn't be read; detail is the reason.
+        deleted: Files of rides the user deleted, left out unless asked for; detail says
+            when the ride was deleted.
     """
 
     imported: list[tuple[str, str]] = field(default_factory=list)
     duplicates: list[tuple[str, str]] = field(default_factory=list)
     skipped: list[tuple[str, str]] = field(default_factory=list)
     failed: list[tuple[str, str]] = field(default_factory=list)
+    deleted: list[tuple[str, str]] = field(default_factory=list)
 
     @property
     def total(self) -> int:
         """How many files the import looked at.
 
         Returns:
-            The number of entries across all four lists.
+            The number of entries across all five lists.
         """
-        return len(self.imported) + len(self.duplicates) + len(self.skipped) + len(self.failed)
+        lists = (self.imported, self.duplicates, self.skipped, self.failed, self.deleted)
+        return sum(len(rows) for rows in lists)
 
 
 def file_name(name: str) -> str:
@@ -123,6 +127,7 @@ class Importer:
         self,
         paths: Iterable[Path],
         on_progress: Callable[[str], None] | None = None,
+        include_deleted: bool = False,
     ) -> ImportReport:
         """Import every .fit file under ``paths``.
 
@@ -132,6 +137,8 @@ class Importer:
         Args:
             paths: Folders (searched recursively), .fit files and .zip archives.
             on_progress: Called with each file's name once it has been handled.
+            include_deleted: Import files of rides the user deleted, too (otherwise they're
+                reported in ``deleted``).
 
         Returns:
             What happened to every file.
@@ -160,7 +167,9 @@ class Importer:
             for source in scan(paths):
                 data = source.read()
                 sha = hashlib.sha256(data).hexdigest()
-                if self._is_duplicate(source.name, sha, seen, report):
+                if self._is_duplicate(source.name, sha, seen, report) or (
+                    not include_deleted and self._was_deleted(source.name, sha, report)
+                ):
                     if on_progress:
                         on_progress(source.name)
                     continue
@@ -199,6 +208,24 @@ class Importer:
             log.info("duplicate: %s is the same file as %s", name, seen[sha])
             return True
         return False
+
+    def _was_deleted(self, name: str, sha: str, report: ImportReport) -> bool:
+        """Check whether a file is one whose ride the user deleted, recording it if so.
+
+        Args:
+            name: The file's display name.
+            sha: The file's sha256.
+            report: The import's report.
+
+        Returns:
+            ``True`` if the file should be left out.
+        """
+        record = self._catalog.deleted_file(sha)
+        if record is None:
+            return False
+        report.deleted.append((name, f"You deleted this ride on {record.deleted_at:%Y-%m-%d}"))
+        log.info("skipped: %s is a ride that was deleted", name)
+        return True
 
     def _overlapping(self, summary: RideSummary) -> Ride | None:
         """Find a ride already in the library that records the same ride as ``summary``.

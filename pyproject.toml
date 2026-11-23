@@ -79,19 +79,20 @@ source_modules = [
     "fitlib.metadata",
     "fitlib.watcher",
     "fitlib.sync",
+    "fitlib.delete",
 ]
 forbidden_modules = ["fitlib.store.local", "fitlib.store.memory", "sqlite3"]
 # Going through fitlib.store.factory is the intended route to a backend.
 allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
-name = "Layers: models <- metrics <- ingest <- importer | recompute | analysis | sync <- watcher <- api <- cli"
+name = "Layers: models <- metrics <- ingest <- importer | recompute | analysis | sync | delete <- watcher <- api <- cli"
 type = "layers"
 layers = [
     "fitlib.cli",
     "fitlib.api",
     "fitlib.watcher",
-    "fitlib.importer | fitlib.recompute | fitlib.analysis | fitlib.sync",
+    "fitlib.importer | fitlib.recompute | fitlib.analysis | fitlib.sync | fitlib.delete",
     "fitlib.ingest",
     "fitlib.metrics",
     "fitlib.models",

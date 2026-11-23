@@ -1,12 +1,20 @@
 import { useState, type FormEvent } from 'react'
+import { useNavigate } from 'react-router'
 import { useBikes, useUpdateMeta, type MetaPatch, type RideDetail } from '../api/client'
+import { forgetDeleted } from '../selection'
 import { parseTags } from '../tags'
+import { ConfirmDelete } from './ConfirmDelete'
 import { Stats, type Stat } from './Stats'
+
+// What the library shows after a ride is deleted from its page.
+export type DeletedState = { deleted: string }
 
 // What the rider added to a ride (bike, effort, tags, name, notes), and a form to change it.
 export function RideDetails({ ride }: { ride: RideDetail }) {
   const [editing, setEditing] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const navigate = useNavigate()
   const meta = ride.meta
 
   const details: Stat[] = [
@@ -55,7 +63,21 @@ export function RideDetails({ ride }: { ride: RideDetail }) {
             >
               Edit details
             </button>
+            <button type="button" onClick={() => setDeleting(true)}>
+              Delete ride
+            </button>
           </div>
+          {deleting && (
+            <ConfirmDelete
+              rides={[{ id: ride.id, name: ride.name }]}
+              onCancel={() => setDeleting(false)}
+              onDeleted={() => {
+                forgetDeleted([ride.id])
+                const state: DeletedState = { deleted: ride.name }
+                void navigate('/', { state })
+              }}
+            />
+          )}
           <div aria-live="polite">{saved && <p data-testid="form-notice">Saved.</p>}</div>
         </>
       )}

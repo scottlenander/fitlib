@@ -13,7 +13,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, File, Request, UploadFile
+from fastapi import APIRouter, File, Query, Request, UploadFile
 from pydantic import BaseModel
 
 from fitlib.api.deps import StoresDep
@@ -43,12 +43,15 @@ class ImportResult(BaseModel):
         duplicates: Files already in the library; detail says which ride or file.
         skipped: Files left out on purpose: not a ride, or overlapping a ride already there.
         failed: Files that couldn't be read, or weren't .fit or .zip files.
+        deleted: Files of rides you deleted, left out; import again with
+            ``include_deleted`` to bring them back.
     """
 
     imported: list[FileOutcome]
     duplicates: list[FileOutcome]
     skipped: list[FileOutcome]
     failed: list[FileOutcome]
+    deleted: list[FileOutcome] = []
 
 
 def import_result(report: ImportReport, rejected: Sequence[tuple[str, str]] = ()) -> ImportResult:
@@ -66,6 +69,7 @@ def import_result(report: ImportReport, rejected: Sequence[tuple[str, str]] = ()
         duplicates=_outcomes(report.duplicates),
         skipped=_outcomes(report.skipped),
         failed=_outcomes([*report.failed, *rejected]),
+        deleted=_outcomes(report.deleted),
     )
 
 
@@ -86,6 +90,9 @@ def import_files(
     request: Request,
     stores: StoresDep,
     files: Annotated[list[UploadFile], File(description=".fit files and .zip archives.")],
+    include_deleted: Annotated[
+        bool, Query(description="Also import rides you deleted (skipped otherwise).")
+    ] = False,
 ) -> ImportResult:
     """Import uploaded files.
 
@@ -93,6 +100,7 @@ def import_files(
         request: The request (for the app's worker setting).
         stores: The library's stores.
         files: The uploads.
+        include_deleted: Import files of deleted rides too.
 
     Returns:
         What happened to each file.
@@ -115,5 +123,5 @@ def import_files(
         importer = Importer(
             stores.catalog, stores.blobs, stores.streams, workers=request.app.state.workers
         )
-        report = importer.run(paths)
+        report = importer.run(paths, include_deleted=include_deleted)
     return import_result(report, rejected)

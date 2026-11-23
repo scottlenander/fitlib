@@ -17,6 +17,9 @@ export class ImportPage {
   readonly duplicates: Locator
   readonly skipped: Locator
   readonly failed: Locator
+  // Files of rides you deleted, left out, with "Import them anyway" below.
+  readonly deleted: Locator
+  readonly importAnyway: Locator
 
   constructor(page: Page) {
     this.page = page
@@ -30,6 +33,8 @@ export class ImportPage {
     this.duplicates = page.getByTestId('duplicate-files')
     this.skipped = page.getByTestId('skipped-files')
     this.failed = page.getByTestId('failed-files')
+    this.deleted = page.getByTestId('deleted-files')
+    this.importAnyway = page.getByRole('button', { name: 'Import them anyway' })
   }
 
   async goto() {

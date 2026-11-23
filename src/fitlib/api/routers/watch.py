@@ -60,6 +60,7 @@ class WatchedFileOut(BaseModel):
         outcome: ``imported``, ``duplicate``, ``skipped`` or ``failed``.
         detail: Why it was skipped or failed; for a zip, how many files had each outcome.
         ride_id: The ride it became (for a zip, the first), if imported.
+        ride_deleted: The ride it became has been deleted since.
         seen_at: When it was imported, UTC.
     """
 
@@ -69,6 +70,7 @@ class WatchedFileOut(BaseModel):
     outcome: WatchOutcome
     detail: str | None
     ride_id: str | None
+    ride_deleted: bool = False
     seen_at: datetime
 
 
@@ -131,14 +133,16 @@ def _watcher(request: Request) -> Watcher | None:
     return request.app.state.watcher
 
 
-def _file(file: WatchedFile) -> WatchedFileOut:
+def _file(file: WatchedFile, rides: set[str]) -> WatchedFileOut:
+    deleted = file.ride_id is not None and file.ride_id not in rides
     return WatchedFileOut(
         path=file.path,
         name=Path(file.path).name,
         folder=file.folder,
         outcome=file.outcome,
         detail=file.detail,
-        ride_id=file.ride_id,
+        ride_id=None if deleted else file.ride_id,
+        ride_deleted=deleted,
         seen_at=file.seen_at,
     )
 
@@ -157,10 +161,12 @@ def _status(stores: Stores, watcher: Watcher | None, root: Path | None) -> Watch
     catalog = stores.catalog
     counts = catalog.watched_file_counts()
     folders = catalog.watch_folders()
+    recent = catalog.recent_watched_files(RECENT)
+    rides = set(catalog.ride_ids()) if any(f.ride_id for f in recent) else set()
     return WatchStatus(
         running=watcher is not None,
         folders=[_folder(f.path, watcher, counts) for f in folders],
-        recent=[_file(f) for f in catalog.recent_watched_files(RECENT)],
+        recent=[_file(f, rides) for f in recent],
         waiting=watcher.waiting if watcher is not None else 0,
         last_import=watcher.last_import if watcher is not None else None,
         suggestions=suggested_folders({f.path for f in folders}, root),

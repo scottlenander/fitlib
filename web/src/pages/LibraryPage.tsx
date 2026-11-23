@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router'
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router'
 import {
   useBikes,
   useHealth,
@@ -11,6 +11,8 @@ import {
 } from '../api/client'
 import { rideCount } from '../bulkEdit'
 import { BulkEdit } from '../components/BulkEdit'
+import { ConfirmDelete } from '../components/ConfirmDelete'
+import type { DeletedState } from '../components/RideDetails'
 import { TssNotes, TssValue } from '../components/Tss'
 import { MAX_RIDES, MIN_RIDES, compareUrl } from '../compare'
 import * as f from '../format'
@@ -51,6 +53,12 @@ export function LibraryPage() {
   const outdated = health.data?.outdated_rides ?? 0
   const selection = usePicked()
   const [editing, setEditing] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  // "Deleted …": from a ride's page (navigation state) or from the selection bar.
+  const location = useLocation()
+  const fromRide = (location.state as DeletedState | null)?.deleted
+  const [deletedHere, setDeletedHere] = useState<string | null>(null)
+  const deletedNotice = deletedHere ?? (fromRide ? `Deleted ${fromRide}.` : null)
 
   // The URL state as last set, which may be ahead of this render: two quick changes (such
   // as "Clear filters" then a new filter) must build on each other, not on the same render.
@@ -87,6 +95,13 @@ export function LibraryPage() {
           Run <code>fitlib recompute</code> to bring {outdated === 1 ? 'it' : 'them'} up to date.
         </p>
       )}
+      <div aria-live="polite">
+        {deletedNotice && (
+          <p className="notice" data-testid="deleted-notice">
+            {deletedNotice}
+          </p>
+        )}
+      </div>
       <SearchBox key={state.q} initial={state.q} onSearch={(q) => update({ q })} />
       <Filters state={state} onChange={update} />
 
@@ -112,7 +127,20 @@ export function LibraryPage() {
               picked={selection.picked}
               editing={editing}
               onEdit={() => setEditing(!editing)}
+              onDelete={() => setDeleting(true)}
               onClear={selection.clear}
+            />
+          )}
+          {deleting && selection.picked.length > 0 && (
+            <ConfirmDelete
+              rides={selection.picked}
+              onCancel={() => setDeleting(false)}
+              onDeleted={(count) => {
+                selection.unselectAll(selection.picked)
+                setDeleting(false)
+                setEditing(false)
+                setDeletedHere(`Deleted ${rideCount(count)}.`)
+              }}
             />
           )}
           {editing && selection.picked.length > 0 && (
@@ -214,12 +242,18 @@ export function LibraryPage() {
 }
 
 // What's selected (from any page of the library): compare 2 to 4 rides, or edit them.
-type BarProps = { picked: Picked[]; editing: boolean; onEdit: () => void; onClear: () => void }
+type BarProps = {
+  picked: Picked[]
+  editing: boolean
+  onEdit: () => void
+  onDelete: () => void
+  onClear: () => void
+}
 
-function SelectionBar({ picked, editing, onEdit, onClear }: BarProps) {
+function SelectionBar({ picked, editing, onEdit, onDelete, onClear }: BarProps) {
   const navigate = useNavigate()
   const count = picked.length
-  let status = `Tick ${MIN_RIDES} to ${MAX_RIDES} rides to compare them, or any number to edit them together.`
+  let status = `Tick ${MIN_RIDES} to ${MAX_RIDES} rides to compare them, or any number to edit or delete them together.`
   if (count >= MAX_SELECTED) status = `${MAX_SELECTED} rides is the most you can select at once.`
   else if (count > MAX_RIDES)
     status = `${count} rides selected. Compare takes ${MIN_RIDES} to ${MAX_RIDES}.`
@@ -240,6 +274,9 @@ function SelectionBar({ picked, editing, onEdit, onClear }: BarProps) {
         <>
           <button type="button" aria-expanded={editing} onClick={onEdit}>
             Edit {rideCount(count)}
+          </button>
+          <button type="button" onClick={onDelete}>
+            Delete {rideCount(count)}
           </button>
           <button type="button" onClick={onClear}>
             Clear selection

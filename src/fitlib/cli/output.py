@@ -22,16 +22,22 @@ from fitlib.models import (
 
 
 def print_report(report: ImportReport) -> None:
-    """Print the counts from an import, then the skipped and failed files with reasons.
+    """Print the counts from an import, then the skipped, failed and deleted files.
 
     Args:
         report: The import's outcome.
     """
+    deleted = f", deleted before {len(report.deleted)}" if report.deleted else ""
     out.print(
         f"Imported {len(report.imported)}, already in library {len(report.duplicates)}, "
-        f"skipped {len(report.skipped)}, failed {len(report.failed)}."
+        f"skipped {len(report.skipped)}, failed {len(report.failed)}{deleted}."
     )
-    for title, rows in (("Skipped", report.skipped), ("Failed", report.failed)):
+    groups = (
+        ("Skipped", report.skipped),
+        ("Failed", report.failed),
+        ("Deleted before (--include-deleted brings them back)", report.deleted),
+    )
+    for title, rows in groups:
         if rows:
             table = Table(title=title, title_justify="left", show_header=False, box=None)
             for name, reason in rows:

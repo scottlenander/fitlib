@@ -166,11 +166,18 @@ def test_sync_folder_listing_reveals_nothing(synced: Synced):
 def test_no_plaintext_reaches_the_sync_folder(synced: Synced):
     """Nothing readable about the rides is in any byte of the sync folder.
 
+    Short patterns turn up in random bytes by chance (a given 4 bytes about once per 4 GB,
+    so once in a few dozen runs over this many patterns), so they're judged by how many
+    show up, not by any one.
+
     Given: The fixture library with a note and a tag, pushed.
-    Expect: No ride id, file hash, note, tag, device or source name, SQLite header, or any
-        ride's first GPS point (as float64, float32 or FIT semicircles) in any file.
+    Expect: Every object starts with the encrypted header. No ride id, file hash, note, tag,
+        device or source name, and no GPS point as float64, in any file. Of each GPS ride's
+        first 20 points as float32 or FIT semicircles (4 bytes each), at most 2 turn up
+        (by chance); a stored stream or file would show all of them.
     """
-    secrets: list[bytes] = [NOTE.encode(), TAG.encode(), b"SQLite format 3", b"PAR1"]
+    secrets: list[bytes] = [NOTE.encode(), TAG.encode()]
+    short_patterns: list[tuple[str, list[bytes]]] = []
     with open_stores(synced.config) as stores:
         for ride_id in stores.catalog.ride_ids():
             ride = stores.catalog.get_ride(ride_id)
@@ -179,14 +186,18 @@ def test_no_plaintext_reaches_the_sync_folder(synced: Synced):
                 secrets.append(ride.summary.device.encode())
             if ride.summary.has_gps:
                 frame = stores.streams.get(ride.id, ride.summary.start).drop_nulls("lat")
-                lat, lon = frame["lat"][0], frame["lon"][0]
-                for value in (lat, lon):
-                    secrets += [
-                        struct.pack("<d", value),
-                        struct.pack(">d", value),
-                        struct.pack("<f", value),
-                        struct.pack("<i", round(value * 2**31 / 180)),
-                    ]
+                points = frame.select("lat", "lon").unique(maintain_order=True).head(20)
+                values = [*points["lat"], *points["lon"]]
+                secrets += [struct.pack(order, v) for v in values for order in ("<d", ">d")]
+                short_patterns.append(
+                    (f"{ride.id} float32", [struct.pack("<f", v) for v in values])
+                )
+                short_patterns.append(
+                    (
+                        f"{ride.id} semicircles",
+                        [struct.pack("<i", round(v * 2**31 / 180)) for v in values],
+                    )
+                )
         some_id = stores.catalog.ride_ids()[0]
         stores.catalog.update_meta(
             some_id,
@@ -194,10 +205,16 @@ def test_no_plaintext_reaches_the_sync_folder(synced: Synced):
         )
     push_once(synced)
 
+    objects = [n for n in synced.remote.list() if n.startswith("objects/")]
+    headers = {(synced.folder / n).read_bytes()[:4] for n in objects}
     contents = b"".join((synced.folder / name).read_bytes() for name in synced.remote.list())
 
+    assert headers == {b"FLB1"}, "every object should be encrypted, not a plain file"
     found = [s for s in secrets if s in contents]
     assert found == [], "should find nothing of the library in the sync folder"
+    for label, patterns in short_patterns:
+        hits = sum(p in contents for p in patterns)
+        assert hits <= 2, f"{label}: {hits} of {len(patterns)} points found in the sync folder"
 
 
 def test_second_push_uploads_only_changes(synced: Synced):
