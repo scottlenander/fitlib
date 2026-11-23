@@ -146,7 +146,8 @@ uv run fitlib serve --open     # http://localhost:8000/ ; --port, --host, --no-w
   **Compare** (2 to 4 rides), **Edit** to set the effort, bike or tags of them all at
   once (fields left on Keep stay as each ride has them, and tags are added or taken off
   without touching a ride's other tags), or **Delete**, after a confirmation. Name and notes
-  are edited on the ride's page.
+  are edited on the ride's page. Selected rides deleted elsewhere since (another tab, the
+  command line) are unselected when an edit or delete finds them gone, with nothing changed.
 - **Ride** (`/rides/<id>`): summary and training figures; **Ride Stats**: power, heart rate,
   cadence, speed and altitude stacked on one axis, shown over **time** or **distance**, zoomed
   by dragging the bar's ends or scrolling, and **Show whole ride** to zoom back out; time in
@@ -178,7 +179,8 @@ uv run fitlib serve --open     # http://localhost:8000/ ; --port, --host, --no-w
   the first ride each was, stops included), or by **time**. Power and heart rate are smoothed
   over 10 s by default (off or 30 s to choose). A **Map** overlays the routes in each ride's
   colour: rides in the same place as the first ride with a route (real places, or one Zwift
-  world) share it, and the others are listed.
+  world) share it, and the others are listed. A link naming rides deleted since leaves them
+  out (the link is rewritten, and the page says how many).
 - **Import** (`/import`): choose or drop `.fit` and `.zip` files; the results list what was
   imported (with links), already in the library, skipped and failed, and rides you deleted,
   with **Import them anyway** to bring those back.
@@ -643,7 +645,8 @@ date.
   skipped on re-import (alone or inside a zip), `include_deleted` / `--include-deleted`
   bringing them back for good, test set-up deletes not remembered; the API's single and bulk
   delete (1 to 500 rides, repeats counted once, 404 for unknown rides with a readable
-  message); recent watched-folder files marked when their ride is deleted; `fitlib delete`
+  message); compare, bulk edit and bulk delete listing every missing ride at once
+  (`missing`, in `tests/api/test_missing.py`) and changing nothing; recent watched-folder files marked when their ride is deleted; `fitlib delete`
   asking, `--yes`, unknown rides; the watcher reporting deleted files as skipped.
 - **Metadata** (`tests/unit/test_metadata.py`, `tests/unit/analysis/test_bikes.py`): tag
   normalization; edits (kept, set and cleared fields, tags added and removed, a bike chosen
@@ -767,10 +770,15 @@ being written, and nothing watched),
     ride, drawn on a plain background as Watopia; switched off and kept off across a reload.
     No map for the indoor ride. Compare: two outdoor routes sharing a map, the Zwift and
     indoor rides listed, an accessibility scan.
+  - *Rides that are gone* (an id no ride has, standing for one deleted since; nothing is
+    changed): a compare link naming it compares the other two and says one was left out (no
+    longer in the link); with one ride left, the page asks for more. A selection holding it:
+    an edit unselects it and changes nothing, and deleting a selection of only that ride
+    unselects it and deletes nothing.
   - *Deleting rides* (an extra ride on 8 Aug, imported by the spec): asking from its page,
     Cancel focused, cancelling with the button and with Escape, an accessibility scan of the
-    dialog; deleting, back in the library with "Deleted …", the ride gone and its page not
-    found; importing its file again leaving it out as deleted before, and **Import them
+    dialog; deleting, back in the library with "Deleted …" (not again after a reload), the
+    ride gone and its page not found; importing its file again leaving it out as deleted before, and **Import them
     anyway** bringing it back. Deleting it from the library's selection: "Delete 1 ride",
     gone, unselected and "Deleted 1 ride.".
   - *Bulk edits* (two extra rides on 3 and 4 Aug, imported by the spec): both selected with
