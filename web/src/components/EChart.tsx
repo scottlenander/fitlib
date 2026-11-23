@@ -39,11 +39,17 @@ type Props = {
   zoom?: ZoomControls
   // Called with the data item clicked, e.g. to open the ride a point stands for.
   onItemClick?: (data: unknown) => void
+  // Called with the x value under the pointer, or null when it leaves the chart.
+  onPointer?: (x: number | null) => void
+  // Called with the x range zoomed to, or null when the whole chart shows.
+  onRange?: (range: [number, number] | null) => void
 }
 
-type DataZoomState = { start?: number; end?: number }
+type DataZoomState = { start?: number; end?: number; startValue?: number; endValue?: number }
+type PointerEvent = { axesInfo?: { value?: number }[] }
 
-export function EChart({ option, label, height, testId, zoom, onItemClick }: Props) {
+export function EChart(props: Props) {
+  const { option, label, height, testId, zoom, onItemClick, onPointer, onRange } = props
   const element = useRef<HTMLDivElement>(null)
   const chart = useRef<echarts.ECharts | null>(null)
   const { theme } = useTheme()
@@ -53,9 +59,13 @@ export function EChart({ option, label, height, testId, zoom, onItemClick }: Pro
   const zoomed = zoomedOn?.option === option && zoomedOn.theme === theme
   const drawn = useRef({ option, theme })
   const clicked = useRef(onItemClick)
+  const pointer = useRef(onPointer)
+  const ranged = useRef(onRange)
   useEffect(() => {
     clicked.current = onItemClick
-  }, [onItemClick])
+    pointer.current = onPointer
+    ranged.current = onRange
+  }, [onItemClick, onPointer, onRange])
 
   // Drawn again from scratch when the theme changes, in ECharts' matching colours.
   useEffect(() => {
@@ -66,8 +76,18 @@ export function EChart({ option, label, height, testId, zoom, onItemClick }: Pro
       const [range] = (instance.getOption().dataZoom ?? []) as DataZoomState[]
       const isZoomed = !!range && ((range.start ?? 0) > 0 || (range.end ?? 100) < 100)
       setZoomedOn(isZoomed ? drawn.current : null)
+      const from = range?.startValue
+      const to = range?.endValue
+      ranged.current?.(
+        isZoomed && typeof from === 'number' && typeof to === 'number' ? [from, to] : null,
+      )
     })
     instance.on('click', (event) => clicked.current?.(event.data))
+    instance.on('updateAxisPointer', (event) => {
+      const value = (event as PointerEvent).axesInfo?.[0]?.value
+      pointer.current?.(typeof value === 'number' ? value : null)
+    })
+    instance.on('globalout', () => pointer.current?.(null))
     const observer = new ResizeObserver(() => instance.resize())
     observer.observe(element.current)
     return () => {
@@ -86,6 +106,7 @@ export function EChart({ option, label, height, testId, zoom, onItemClick }: Pro
   function showAll() {
     chart.current?.dispatchAction({ type: 'dataZoom', start: 0, end: 100 })
     setZoomedOn(null)
+    ranged.current?.(null)
   }
 
   const canvas = (

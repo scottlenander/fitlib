@@ -524,6 +524,34 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/rides/{ref}/map': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * Get Map
+     * @description A ride's route for a map, simplified so lines stay within a few metres.
+     *
+     *     Args:
+     *         stores: The library's stores.
+     *         ref: The ride's id or a unique prefix.
+     *
+     *     Returns:
+     *         The route's points with their times and distances, and its bounds; no points for a
+     *         ride without positions. Zwift rides name their world.
+     */
+    get: operations['get_map_api_rides__ref__map_get']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/rides/{ref}/meta': {
     parameters: {
       query?: never
@@ -1776,6 +1804,26 @@ export interface components {
       start_offset_s: number
     }
     /**
+     * MapPoint
+     * @description One point of a ride's route on the map.
+     *
+     *     Attributes:
+     *         t: Seconds from the start, to match the Ride Stats charts.
+     *         lat: Latitude, degrees.
+     *         lon: Longitude, degrees.
+     *         distance_m: Distance ridden by then, if recorded.
+     */
+    MapPoint: {
+      /** Distance M */
+      distance_m: number | null
+      /** Lat */
+      lat: number
+      /** Lon */
+      lon: number
+      /** T */
+      t: number
+    }
+    /**
      * MetaOut
      * @description What the user added to a ride.
      *
@@ -2041,6 +2089,30 @@ export interface components {
       /** Tss */
       tss: number | null
       tss_source: components['schemas']['TssSource'] | null
+      /** Zwift World */
+      zwift_world: string | null
+    }
+    /**
+     * RideMap
+     * @description A ride's route for a map, simplified to at most a couple of thousand points.
+     *
+     *     Attributes:
+     *         ride_id: The ride's id.
+     *         points: The route, in order; empty for rides without positions.
+     *         bounds: ``[south, west, north, east]`` around the route, if it has one.
+     *         start_finish_m: How far apart the first and last positions are.
+     *         zwift_world: For Zwift rides, the world: their positions are Zwift's, not real
+     *             places, so they go on a plain background.
+     */
+    RideMap: {
+      /** Bounds */
+      bounds: number[] | null
+      /** Points */
+      points: components['schemas']['MapPoint'][]
+      /** Ride Id */
+      ride_id: string
+      /** Start Finish M */
+      start_finish_m: number | null
       /** Zwift World */
       zwift_world: string | null
     }
@@ -3138,6 +3210,37 @@ export interface operations {
         }
         content: {
           'application/json': components['schemas']['DeleteResult']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  get_map_api_rides__ref__map_get: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        ref: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['RideMap']
         }
       }
       /** @description Validation Error */

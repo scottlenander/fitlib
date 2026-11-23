@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useStreams, type Streams } from '../api/client'
 import * as f from '../format'
 import { useUnits } from '../units'
@@ -33,11 +33,35 @@ type Props = {
   hasPower: boolean
   hasHr: boolean
   hasDistance: boolean
+  // The moment under the pointer, and the stretch zoomed to, in seconds from the start (for
+  // the map); null when there's none.
+  onMoment?: (t: number | null) => void
+  onSpan?: (span: [number, number] | null) => void
+}
+
+// Seconds from the start at an x value: the chart's x is time or distance, in display units.
+export function secondsAt(xs: number[], ts: number[], x: number): number | null {
+  if (!xs.length) return null
+  let lo = 0
+  let hi = xs.length - 1
+  if (x <= (xs[0] ?? 0)) return ts[0] ?? null
+  if (x >= (xs[hi] ?? 0)) return ts[hi] ?? null
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1
+    if ((xs[mid] ?? 0) <= x) lo = mid
+    else hi = mid
+  }
+  const x0 = xs[lo] ?? 0
+  const x1 = xs[hi] ?? 0
+  const t0 = ts[lo] ?? 0
+  const t1 = ts[hi] ?? 0
+  return x1 === x0 ? t0 : t0 + ((t1 - t0) * (x - x0)) / (x1 - x0)
 }
 
 // One line per recorded channel, stacked, sharing a time or distance axis that zooms
 // together.
-export function TraceChart({ rideId, elapsedS, hasPower, hasHr, hasDistance }: Props) {
+export function TraceChart(props: Props) {
+  const { rideId, elapsedS, hasPower, hasHr, hasDistance, onMoment, onSpan } = props
   const { units } = useUnits()
   const [chosen, setOver] = useState<Over>('time')
   const over = hasDistance ? chosen : 'time'
@@ -61,6 +85,23 @@ export function TraceChart({ rideId, elapsedS, hasPower, hasHr, hasDistance }: P
     () => (streams.data ? chartOption(streams.data, shown, over, units) : null),
     [streams.data, shown, over, units],
   )
+  // The chart's x values with their seconds, to turn the pointer and zoom into moments.
+  const axis = useMemo(() => {
+    const xs: number[] = []
+    const ts: number[] = []
+    if (!streams.data) return { xs, ts }
+    const raw = over === 'distance' ? (streams.data.columns.distance ?? []) : streams.data.t
+    raw.forEach((v, i) => {
+      const t = streams.data.t[i]
+      if (typeof v === 'number' && typeof t === 'number') {
+        xs.push(xValue(v, over, units))
+        ts.push(t)
+      }
+    })
+    return { xs, ts }
+  }, [streams.data, over, units])
+  // A new drawing starts unzoomed.
+  useEffect(() => onSpan?.(null), [option, onSpan])
 
   return (
     <>
@@ -90,6 +131,16 @@ export function TraceChart({ rideId, elapsedS, hasPower, hasHr, hasDistance }: P
           height={stackedHeight(shown.length, 0)}
           testId="trace-chart"
           zoom={ZOOM}
+          onPointer={(x) => onMoment?.(x === null ? null : secondsAt(axis.xs, axis.ts, x))}
+          onRange={(range) => {
+            const from = range && secondsAt(axis.xs, axis.ts, range[0])
+            const to = range && secondsAt(axis.xs, axis.ts, range[1])
+            onSpan?.(
+              from !== null && to !== null && from !== undefined && to !== undefined
+                ? [from, to]
+                : null,
+            )
+          }}
         />
       )}
     </>

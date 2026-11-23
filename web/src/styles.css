@@ -746,3 +746,46 @@ textarea {
   justify-content: flex-end;
   margin-top: 1rem;
 }
+
+/* Maps: the route on a plain background, or over the street map when that's on. */
+.route-map {
+  height: 22rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.route-map.leaflet-container {
+  background: var(--surface);
+  font: inherit;
+}
+.route-map:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+.route-map .leaflet-control-attribution {
+  background: var(--bg);
+  color: var(--muted);
+}
+.route-map .leaflet-control-attribution a,
+.route-map .leaflet-bar a {
+  color: var(--text);
+  background: var(--bg);
+}
+/* Wide screens: the map beside Ride Stats, staying in view while the charts scroll. */
+@media (min-width: 1100px) {
+  .stats-and-map {
+    display: grid;
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    gap: 1.5rem;
+    align-items: start;
+  }
+  .stats-and-map .stats-section {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .stats-and-map .map-section {
+    grid-column: 2;
+    grid-row: 1;
+    position: sticky;
+    top: 1rem;
+  }
+}

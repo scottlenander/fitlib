@@ -1,6 +1,7 @@
 import type { Locator, Page } from '@playwright/test'
 import { ChartZoom } from './components/chartZoom'
 import { Header } from './components/header'
+import { RouteMap } from './components/routeMap'
 
 // The compare page (/compare?ids=a,b[,c,d]): the rides with a Remove button each, how they're
 // lined up, the figures table (one column per ride) and the charts. The time gap chart only
@@ -20,6 +21,8 @@ export class ComparePage {
   readonly zoom: ChartZoom
   readonly gapChart: Locator
   readonly curves: Locator
+  // The routes of the rides in one place, each in its ride's colour; the others listed.
+  readonly map: RouteMap
   // "Pick at least 2 rides to compare: …" when fewer than 2 rides are in the URL.
   readonly empty: Locator
   readonly error: Locator
@@ -38,6 +41,7 @@ export class ComparePage {
     this.zoom = new ChartZoom(page)
     this.gapChart = page.getByTestId('gap-chart')
     this.curves = page.getByTestId('compare-curves')
+    this.map = new RouteMap(page, 'compare-map', 'compare-map-note')
     this.empty = page.getByTestId('compare-empty')
     this.error = page.getByTestId('form-error')
   }

@@ -25,6 +25,8 @@ export class SettingsPage {
   // Named "Light mode" or "Dark mode", the mode in use; clicking switches mode.
   readonly theme: Locator
   readonly metricUnits: Locator
+  // Off by default: routes on a plain background, nothing loaded from OpenStreetMap.
+  readonly streetMap: Locator
   readonly timeZoneForm: Locator
   // The default time zone list: "None (show UTC)" or an IANA name such as America/New_York.
   readonly timeZone: Locator
@@ -74,6 +76,7 @@ export class SettingsPage {
     this.display = page.getByTestId('display-settings')
     this.theme = this.display.getByRole('button', { name: THEME_NAME })
     this.metricUnits = this.display.getByRole('switch', { name: 'Metric units' })
+    this.streetMap = this.display.getByRole('switch', { name: 'Street map under outdoor routes' })
     this.timeZoneForm = page.getByTestId('timezone-form')
     this.timeZone = this.timeZoneForm.getByLabel('Default time zone')
     this.useComputersZone = this.timeZoneForm.getByRole('button', {

@@ -1,6 +1,6 @@
 // Typed calls to the fitlib API (types generated from its OpenAPI description by
 // `npm run api:types`), and the TanStack Query hooks the pages use.
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { components, operations } from './schema'
 
 type Schemas = components['schemas']
@@ -37,6 +37,8 @@ export type Comparison = Schemas['Comparison']
 export type ComparedRide = Schemas['ComparedRide']
 export type Align = Comparison['align']
 export type RouteProgress = Schemas['RouteProgress']
+export type RideMap = Schemas['RideMap']
+export type MapPoint = Schemas['MapPoint']
 export type Span = Schemas['Span']
 export type Volume = Schemas['Volume']
 export type VolumeBucket = Schemas['VolumeBucketOut']
@@ -385,6 +387,27 @@ export function useBackfill() {
     onSuccess: (result) => {
       if (!result.dry_run) void invalidate('bikes', 'ride', 'rides')
     },
+  })
+}
+
+// A ride's route for the map (no points for rides without positions).
+export function useRideMap(rideId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ['map', rideId],
+    queryFn: () => request<RideMap>(`/api/rides/${encodeURIComponent(rideId)}/map`),
+    enabled,
+    staleTime: Infinity,
+  })
+}
+
+// Several rides' routes for one map (compare).
+export function useRideMaps(rideIds: string[]) {
+  return useQueries({
+    queries: rideIds.map((id) => ({
+      queryKey: ['map', id],
+      queryFn: () => request<RideMap>(`/api/rides/${encodeURIComponent(id)}/map`),
+      staleTime: Infinity,
+    })),
   })
 }
 
