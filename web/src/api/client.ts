@@ -26,6 +26,7 @@ export type BackfillResult = Schemas['BackfillResult']
 export type MetaPatch = Schemas['MetaPatch']
 export type BulkMetaPatch = Schemas['BulkMetaPatch']
 export type BulkMetaResult = Schemas['BulkMetaResult']
+export type DeleteResult = Schemas['DeleteResult']
 export type TagCount = Schemas['TagCount']
 export type ZwiftWorld = Schemas['WorldOut']
 export type SimilarRides = Schemas['SimilarRides']
@@ -166,13 +167,21 @@ export function useStreams(rideId: string, fields: string[], step: number, enabl
   })
 }
 
+// Imports files. Rides the user deleted are left out (and listed) unless `includeDeleted`.
 export function useImport() {
   const client = useQueryClient()
   return useMutation({
-    mutationFn: (files: File[]) => {
+    mutationFn: ({
+      files,
+      includeDeleted = false,
+    }: {
+      files: File[]
+      includeDeleted?: boolean
+    }) => {
       const body = new FormData()
       for (const file of files) body.append('files', file)
-      return request<ImportResult>('/api/imports', { method: 'POST', body })
+      const query = includeDeleted ? '?include_deleted=true' : ''
+      return request<ImportResult>(`/api/imports${query}`, { method: 'POST', body })
     },
     // New rides change every list.
     onSuccess: () =>
@@ -223,6 +232,39 @@ export function useBulkEdit() {
     mutationFn: (patch: BulkMetaPatch) =>
       request<BulkMetaResult>('/api/rides/bulk-meta', json('POST', patch)),
     onSuccess: () => invalidate('ride', 'rides', 'tags', 'bikes', 'route-progress'),
+  })
+}
+
+// Deletes rides (all of them, or none), with their streams and original files. Their pages
+// are dropped from the cache so nothing refetches a ride that's gone.
+export function useDeleteRides() {
+  const client = useQueryClient()
+  const invalidate = useInvalidate()
+  return useMutation({
+    mutationFn: (ids: string[]) => {
+      const [only] = ids
+      return ids.length === 1 && only !== undefined
+        ? request<DeleteResult>(`/api/rides/${encodeURIComponent(only)}`, { method: 'DELETE' })
+        : request<DeleteResult>('/api/rides/bulk-delete', json('POST', { ids }))
+    },
+    onSuccess: (_, ids) => {
+      // Anything about a deleted ride (its page, similar rides, route progress, streams)
+      // would only 404 and retry.
+      const gone = new Set(ids)
+      client.removeQueries({ predicate: (q) => q.queryKey.some((k) => gone.has(k as string)) })
+      // Not awaited: the caller moves on while lists refresh.
+      void invalidate(
+        'rides',
+        'tags',
+        'bikes',
+        'trends',
+        'route-progress',
+        'similar',
+        'compare',
+        'watch',
+        'athlete',
+      )
+    },
   })
 }
 

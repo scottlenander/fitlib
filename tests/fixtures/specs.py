@@ -426,11 +426,11 @@ RIDES: tuple[RideSpec, ...] = (
 )
 
 # Rides kept out of the fixture folder (in ``tests/fixtures/extra/``), so they're never in the
-# library at the start: the browser tests drop one into a watched folder, and import two to
-# edit together. Outdoor rides on 3, 4 and 7 Aug (days with no other ride) on a loop of
-# their own, with heart rate but no power, so once imported they change no other test's
-# counts (they use rides from 13 Aug on, or indoor rides), best efforts, routes, default
-# bikes (no test sets an outdoor default) or similar efforts.
+# library at the start: the browser tests drop one into a watched folder, import two to edit
+# together, and import one to delete. Outdoor rides on 3, 4, 7 and 8 Aug (days with no other
+# ride) on a loop of their own, with heart rate but no power, so once imported they change no
+# other test's counts (they use rides from 13 Aug on, or indoor rides), best efforts, routes,
+# default bikes (no test sets an outdoor default) or similar efforts.
 EXTRA_RIDES: tuple[RideSpec, ...] = (
     RideSpec(
         name="garmin_arras_hr_only",
@@ -461,6 +461,16 @@ EXTRA_RIDES: tuple[RideSpec, ...] = (
         loop=ARRAS_LOOP,
         has_power=False,
         serial_number=0x0F17_000E,
+    ),
+    RideSpec(
+        name="garmin_arras_delete",
+        source=Source.GARMIN,
+        utc_offset_s=CEST,
+        start=datetime(2025, 8, 8, 16, 0, tzinfo=UTC),
+        segments=(Segment(seconds=1200, power=145, cadence=85),),
+        loop=ARRAS_LOOP,
+        has_power=False,
+        serial_number=0x0F17_000F,
     ),
 )
 

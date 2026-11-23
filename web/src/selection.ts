@@ -47,6 +47,19 @@ export function readPicked(read: () => string | null): Picked[] {
   }
 }
 
+// Takes deleted rides out of the stored selection, from pages that don't show it.
+export function forgetDeleted(ids: string[]) {
+  try {
+    const drop = new Set(ids)
+    const kept = readPicked(() => sessionStorage.getItem(STORAGE_KEY)).filter(
+      (p) => !drop.has(p.id),
+    )
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(kept))
+  } catch {
+    // Storage blocked: there's no stored selection to update.
+  }
+}
+
 // The selected rides. Kept for the browser tab (sessionStorage), so the selection
 // survives paging, filtering and opening a ride, and is gone in a new tab.
 export function usePicked() {

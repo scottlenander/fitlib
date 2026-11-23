@@ -163,3 +163,18 @@ def test_recent_watched_file_of_a_deleted_ride(writer: Api, tmp_path: Path):
 
     assert before["ride_id"] is not None and before["ride_deleted"] is False
     assert (after["ride_id"], after["ride_deleted"]) == (None, True)
+
+
+def test_deleted_ride_error_is_readable(writer: Api):
+    """Asking for a deleted ride says so in words, not just its id.
+
+    Given: A ride deleted, then deleted again.
+    Expect: 404 with "No ride matches '<id>' (it may have been deleted)".
+    """
+    ride_id = writer.ids[RIDE]
+    writer.client.delete(f"/api/rides/{ride_id}")
+
+    response = writer.client.delete(f"/api/rides/{ride_id}")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == f"No ride matches '{ride_id}' (it may have been deleted)"

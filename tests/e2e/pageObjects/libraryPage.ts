@@ -1,5 +1,6 @@
 import type { Locator, Page } from '@playwright/test'
 import { BulkEdit } from './components/bulkEdit'
+import { ConfirmDelete } from './components/confirmDelete'
 import { Header } from './components/header'
 
 // The ride library (/): search, filters, the rides table and paging. Filters, sort and
@@ -39,6 +40,11 @@ export class LibraryPage {
   readonly compareButton: Locator
   // "Edit 2 rides": opens the bulk edit form for the selected rides.
   readonly editButton: Locator
+  // "Delete 2 rides": asks, then deletes the selected rides.
+  readonly deleteButton: Locator
+  readonly confirmDelete: ConfirmDelete
+  // "Deleted Garmin 2025-08-08 18:00." (from its page) or "Deleted 2 rides."
+  readonly deletedNotice: Locator
   readonly clearSelection: Locator
   // The header checkbox that selects every ride on the page.
   readonly selectPage: Locator
@@ -74,6 +80,9 @@ export class LibraryPage {
     this.selectionStatus = page.getByTestId('selection-status')
     this.compareButton = page.getByRole('button', { name: /^Compare \(\d+\)$/ })
     this.editButton = page.getByRole('button', { name: /^Edit \d+ rides?$/ })
+    this.deleteButton = page.getByRole('button', { name: /^Delete \d+ rides?$/ })
+    this.confirmDelete = new ConfirmDelete(page)
+    this.deletedNotice = page.getByTestId('deleted-notice')
     this.clearSelection = page.getByRole('button', { name: 'Clear selection' })
     this.selectPage = this.table.getByRole('checkbox', { name: 'Select all rides on this page' })
     this.bulkEdit = new BulkEdit(page)

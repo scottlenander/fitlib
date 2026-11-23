@@ -5,8 +5,7 @@ import { expect, type APIRequestContext } from '@playwright/test'
 // Quick set-up and clean-up through the e2e-only routes (src/fitlib/api/routers/e2e.py,
 // on only when scripts/e2e-server runs). Use these to get to a known starting point;
 // anything a spec is testing must still go through the UI, and every change made here is
-// also tested in the UI somewhere (see the README). The exception is `deleteRide`: the app
-// can't delete rides yet.
+// also tested in the UI somewhere (see the README).
 //
 //   test('...', async ({ page, request }) => {
 //     const testData = new TestData(request)
@@ -42,15 +41,17 @@ export class TestData {
     await this.post(`rides/${rideId}/reset-meta`)
   }
 
-  // Deletes a ride and its files, so the same file can be imported again.
+  // Deletes a ride and its files, so the same file can be imported again as new. Unlike
+  // deleting in the app, the file isn't remembered as deleted.
   async deleteRide(rideId: string) {
     await this.post(`rides/${rideId}/delete`)
   }
 
   // Imports a file through the app's own import (as the Import page does), for rides kept
-  // out of the library at start-up. Returns the ride's id.
+  // out of the library at start-up. Imports it even if a run deleted it in the app before.
+  // Returns the ride's id.
   async importFile(path: string): Promise<string> {
-    const response = await this.request.post('/api/imports', {
+    const response = await this.request.post('/api/imports?include_deleted=true', {
       multipart: {
         files: {
           name: basename(path),

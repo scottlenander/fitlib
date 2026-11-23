@@ -42,7 +42,19 @@ class StoreError(Exception):
 
 
 class RideNotFound(StoreError):
-    """No ride has the given id, or no ride matches the given id prefix."""
+    """No ride has the given id, or no ride matches the given id prefix.
+
+    The first argument is the id or prefix looked for.
+    """
+
+    def __str__(self) -> str:
+        """Say which ride wasn't found, readably.
+
+        Returns:
+            E.g. "No ride matches 'abcd1234' (it may have been deleted)".
+        """
+        ref = self.args[0] if self.args else ""
+        return f"No ride matches {ref!r} (it may have been deleted)"
 
 
 class AmbiguousRideId(StoreError):
