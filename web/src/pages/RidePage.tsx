@@ -1,7 +1,8 @@
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { ApiError, useRide, useSettings, type RideDetail } from '../api/client'
 import { RideDetails } from '../components/RideDetails'
+import { RideMapSection } from '../components/RideMapSection'
 import { RouteProgress } from '../components/RouteProgress'
 import { ScrollBox } from '../components/ScrollBox'
 import { SimilarRides } from '../components/SimilarRides'
@@ -134,18 +135,7 @@ function Ride({ ride }: { ride: RideDetail }) {
 
       <RideDetails ride={ride} />
 
-      <section aria-labelledby="traces-heading">
-        <h2 id="traces-heading">Ride Stats</h2>
-        <Suspense fallback={<p>Loading chart…</p>}>
-          <TraceChart
-            rideId={ride.id}
-            elapsedS={ride.elapsed_s}
-            hasPower={ride.has_power}
-            hasHr={ride.has_hr}
-            hasDistance={ride.distance_m !== null && ride.distance_m > 0}
-          />
-        </Suspense>
-      </section>
+      <StatsAndMap ride={ride} />
 
       {(ride.power_zones || ride.hr_zones) && (
         <section aria-labelledby="zones-heading" className="zones-section">
@@ -236,5 +226,32 @@ function TimeZoneNote({ ride }: { ride: RideDetail }) {
         </>
       )}
     </p>
+  )
+}
+
+// Ride Stats with the map beside it (when the ride has positions): pointing at the charts
+// shows where on the route that was, and zooming them highlights the stretch. The state
+// lives here so pointer moves redraw only these two.
+function StatsAndMap({ ride }: { ride: RideDetail }) {
+  const [moment, setMoment] = useState<number | null>(null)
+  const [span, setSpan] = useState<[number, number] | null>(null)
+  return (
+    <div className={ride.has_gps ? 'stats-and-map' : undefined}>
+      {ride.has_gps && <RideMapSection ride={ride} moment={moment} span={span} />}
+      <section aria-labelledby="traces-heading" className="stats-section">
+        <h2 id="traces-heading">Ride Stats</h2>
+        <Suspense fallback={<p>Loading chart…</p>}>
+          <TraceChart
+            rideId={ride.id}
+            elapsedS={ride.elapsed_s}
+            hasPower={ride.has_power}
+            hasHr={ride.has_hr}
+            hasDistance={ride.distance_m !== null && ride.distance_m > 0}
+            onMoment={setMoment}
+            onSpan={setSpan}
+          />
+        </Suspense>
+      </section>
+    </div>
   )
 }

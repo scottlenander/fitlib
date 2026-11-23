@@ -15,6 +15,7 @@ from fitlib.analysis.training import Training
 from fitlib.metadata import MAX_BULK_RIDES
 from fitlib.metrics import zones
 from fitlib.metrics.load import ThresholdSource, TssSource
+from fitlib.metrics.track import Track
 from fitlib.metrics.zwift import zwift_world
 from fitlib.models import (
     Bike,
@@ -930,6 +931,67 @@ class BirthYearIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     birth_year: int | None
+
+
+class MapPoint(BaseModel):
+    """One point of a ride's route on the map.
+
+    Attributes:
+        t: Seconds from the start, to match the Ride Stats charts.
+        lat: Latitude, degrees.
+        lon: Longitude, degrees.
+        distance_m: Distance ridden by then, if recorded.
+    """
+
+    t: int
+    lat: float
+    lon: float
+    distance_m: float | None
+
+
+class RideMap(BaseModel):
+    """A ride's route for a map, simplified to at most a couple of thousand points.
+
+    Attributes:
+        ride_id: The ride's id.
+        points: The route, in order; empty for rides without positions.
+        bounds: ``[south, west, north, east]`` around the route, if it has one.
+        start_finish_m: How far apart the first and last positions are.
+        zwift_world: For Zwift rides, the world: their positions are Zwift's, not real
+            places, so they go on a plain background.
+    """
+
+    ride_id: str
+    points: list[MapPoint]
+    bounds: list[float] | None
+    start_finish_m: float | None
+    zwift_world: str | None
+
+
+def ride_map(ride_id: str, track: Track | None, world: str | None) -> RideMap:
+    """Build a ride's map from its simplified track.
+
+    Args:
+        ride_id: The ride's id.
+        track: Its track, or ``None`` without positions.
+        world: Its Zwift world's name, if any.
+
+    Returns:
+        The map's data.
+    """
+    if track is None:
+        return RideMap(
+            ride_id=ride_id, points=[], bounds=None, start_finish_m=None, zwift_world=world
+        )
+    return RideMap(
+        ride_id=ride_id,
+        points=[
+            MapPoint(t=p.t, lat=p.lat, lon=p.lon, distance_m=p.distance_m) for p in track.points
+        ],
+        bounds=list(track.bounds),
+        start_finish_m=track.start_finish_m,
+        zwift_world=world,
+    )
 
 
 class RouteProgress(BaseModel):

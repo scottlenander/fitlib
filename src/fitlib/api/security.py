@@ -31,13 +31,17 @@ LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 SAME_SITE_FETCHES = frozenset({"same-origin", "none"})
 
+# Where the optional street map under outdoor routes comes from.
+OSM_TILES = "https://tile.openstreetmap.org"
+
 CONTENT_SECURITY_POLICY = "; ".join(
     (
         "default-src 'self'",
         "script-src 'self'",
         # React and ECharts set style attributes.
         "style-src 'self' 'unsafe-inline'",
-        "img-src 'self' data: blob:",
+        # OpenStreetMap's map images, loaded only when the street map is switched on.
+        f"img-src 'self' data: blob: {OSM_TILES}",
         "font-src 'self' data:",
         "connect-src 'self'",
         "object-src 'none'",

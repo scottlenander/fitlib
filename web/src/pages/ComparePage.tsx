@@ -1,6 +1,7 @@
 import { lazy, Suspense, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { useCompare, type Align, type ComparedRide, type Comparison } from '../api/client'
+import { CompareMap } from '../components/CompareMap'
 import { ScrollBox } from '../components/ScrollBox'
 import { Swatch } from '../components/Swatch'
 import { DEFAULT_SMOOTH, MAX_RIDES, MIN_RIDES, SMOOTHING, parseIds } from '../compare'
@@ -166,6 +167,8 @@ function Compared({ comparison, align, onRemove, onAlign, smooth, onSmooth }: Co
       <Suspense fallback={<p>Loading charts…</p>}>
         <CompareCharts comparison={comparison} />
       </Suspense>
+
+      <CompareMap rides={rides} />
     </>
   )
 }

@@ -23,6 +23,7 @@ from fitlib.api.schemas import (
     MetaPatch,
     RideDetail,
     RideItem,
+    RideMap,
     RidePage,
     RouteProgress,
     SimilarRide,
@@ -30,11 +31,13 @@ from fitlib.api.schemas import (
     Streams,
     ride_detail,
     ride_item,
+    ride_map,
 )
 from fitlib.delete import delete_rides
 from fitlib.ingest.normalize import VALUE_COLUMNS
 from fitlib.metadata import KEEP, MetaEdit, apply_edit, normalize_tags
-from fitlib.metrics.zwift import in_world
+from fitlib.metrics.track import ride_track
+from fitlib.metrics.zwift import in_world, zwift_world
 from fitlib.models import Filters, Ride, SortKey, Source
 from fitlib.store.factory import Stores
 
@@ -222,6 +225,26 @@ def get_streams(
         t=frame["t"].to_list(),
         columns={f: frame[f].to_list() for f in chosen},
     )
+
+
+@router.get("/{ref}/map")
+def get_map(stores: StoresDep, ref: str) -> RideMap:
+    """A ride's route for a map, simplified so lines stay within a few metres.
+
+    Args:
+        stores: The library's stores.
+        ref: The ride's id or a unique prefix.
+
+    Returns:
+        The route's points with their times and distances, and its bounds; no points for a
+        ride without positions. Zwift rides name their world.
+    """
+    ride = find_ride(stores, ref)
+    world = zwift_world(ride.summary)
+    track = None
+    if ride.summary.has_gps:
+        track = ride_track(stores.streams.get(ride.id, ride.summary.start))
+    return ride_map(ride.id, track, world.name if world else None)
 
 
 @router.get("/{ref}/similar")

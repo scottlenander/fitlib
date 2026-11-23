@@ -2,6 +2,7 @@ import type { Locator, Page } from '@playwright/test'
 import { ChartZoom } from './components/chartZoom'
 import { ConfirmDelete } from './components/confirmDelete'
 import { Header } from './components/header'
+import { RouteMap } from './components/routeMap'
 import { RouteProgress } from './components/routeProgress'
 import { SimilarRides } from './components/similarRides'
 import { Stats } from './components/stats'
@@ -47,6 +48,8 @@ export class RidePage {
   readonly editError: Locator
   // "No bike, effort, tags or notes yet."
   readonly noDetails: Locator
+  // Beside Ride Stats, for rides with positions.
+  readonly map: RouteMap
   readonly similar: SimilarRides
   readonly progress: RouteProgress
   readonly notFound: Locator
@@ -88,6 +91,7 @@ export class RidePage {
     this.saved = page.getByTestId('form-notice')
     this.editError = this.editForm.getByTestId('form-error')
     this.noDetails = page.getByText('No bike, effort, tags or notes yet.')
+    this.map = new RouteMap(page, 'route-map', 'map-note')
     this.similar = new SimilarRides(page)
     this.progress = new RouteProgress(page)
     this.notFound = page.getByRole('heading', { name: 'Ride not found', level: 1 })

@@ -155,6 +155,12 @@ uv run fitlib serve --open     # http://localhost:8000/ ; --port, --host, --no-w
   asks, then deletes it and returns to the library. **Similar
   rides** lists rides on the same route (newest first, to see progress) and with a similar
   effort, each with a **Compare** link, plus a link comparing the ride with its 3 closest.
+  **Map** (rides with positions): the route with its start (hollow) and finish (filled),
+  beside Ride Stats on wide screens. Pointing at Ride Stats puts a dot where you were at
+  that moment; zooming Ride Stats highlights that stretch. Outdoor routes are drawn on a plain
+  background unless the street map is on (Settings). Zwift routes are always on a plain
+  background, named with their world: Zwift's positions aren't real places, and Zwift's own
+  map artwork can't be bundled.
   **Progress on this route** charts every ride on the route by date (average speed by
   default, or power, heart rate or moving time), this ride marked, with their table.
 - **Trends** (`/trends`): a range (6 weeks, 3 months, 6 months, 1 year, all, or From/To
@@ -170,14 +176,18 @@ uv run fitlib serve --open     # http://localhost:8000/ ; --port, --host, --no-w
   zoomable, with Show whole ride); best efforts overlaid. Rides are lined up by **distance** when they all recorded it, so
   the same point on a route lines up, with a **time gap** chart (how far behind or ahead of
   the first ride each was, stops included), or by **time**. Power and heart rate are smoothed
-  over 10 s by default (off or 30 s to choose).
+  over 10 s by default (off or 30 s to choose). A **Map** overlays the routes in each ride's
+  colour: rides in the same place as the first ride with a route (real places, or one Zwift
+  world) share it, and the others are listed.
 - **Import** (`/import`): choose or drop `.fit` and `.zip` files; the results list what was
   imported (with links), already in the library, skipped and failed, and rides you deleted,
   with **Import them anyway** to bring those back.
 - **Bikes** (`/bikes`): bikes with their rides, distance and time; add, rename, change kind,
   retire and bring back. The dated default-bike timeline, and applying the defaults to
   existing rides (Preview, then Apply; bikes chosen by hand are never changed).
-- **Settings** (`/settings`): the theme, the **Metric units** switch, the default **time
+- **Settings** (`/settings`): the theme, the **Metric units** switch, the **Street map under
+  outdoor routes** switch (off by default; when on, map images load from OpenStreetMap, which
+  then sees the areas you look at; remembered in this browser), the default **time
   zone** (a list, or **Use this computer's time zone**; saving says how many rides moved),
   **Watched folders**, the athlete history (FTP, weight in your units, max and threshold
   heart rate from a date on) and the year of birth (today's estimated threshold heart rate is
@@ -421,8 +431,10 @@ fitlib has no login: it's meant for the account that runs it.
     before.
 - Every response tells the browser not to embed it in other sites, not to guess file types,
   not to send referrers, and (Content-Security-Policy) to run only fitlib's own scripts and
-  talk only to fitlib. The API docs at `/docs` load from a CDN, so they go without the
-  policy.
+  talk only to fitlib. The one outside source allowed is OpenStreetMap's map images, which
+  load only when the street map is switched on; those requests send the page's origin
+  (`http://localhost:8000`) as their referrer, as OpenStreetMap asks of web pages, and
+  nothing else. The API docs at `/docs` load from a CDN, so they go without the policy.
 - The library folder is readable only by your account (mode 700). Existing libraries are
   tightened the next time they're opened.
 
@@ -456,7 +468,7 @@ search find rides by their new names (with the start time).
 |---|---|
 | `fitlib/models.py` | Domain objects shared by every layer |
 | `fitlib/ingest/` | Find files (incl. zips), decode with `fitdecode`, normalize to 1 Hz, summarize |
-| `fitlib/metrics/` | Ride figures from a 1 Hz stream (basic, power, HR, curves, zones), route fingerprints (`route.py`) and FTP-based formulas (`load.py`) |
+| `fitlib/metrics/` | Ride figures from a 1 Hz stream (basic, power, HR, curves, zones), route fingerprints (`route.py`), simplified tracks for maps (`track.py`) and FTP-based formulas (`load.py`) |
 | `fitlib/analysis/` | FTP-based figures for a ride (athlete history or estimated FTP); default-bike backfill; similar rides (`similar.py`); lining rides up to compare (`compare.py`); trends over many rides (`trends.py`) |
 | `fitlib/metadata.py` | Tag rules, ride kinds for default bikes, and which dated default applies |
 | `fitlib/store/` | `CatalogStore` / `BlobStore` interfaces; `local/` (SQLite + files) and `memory/` backends; `factory.py` picks one |
@@ -467,7 +479,7 @@ search find rides by their new names (with the start time).
 | `fitlib/sync/` | Optional encrypted backup: `crypto.py` (sealed objects, object names, the passphrase keyfile), `keys.py` (Keychain), `engine.py` (setup, push, status, restore) |
 | `fitlib/api/` | FastAPI app: `app.py` builds it, `routers/` one per area, `schemas.py` request/response models, `errors.py` error responses, `security.py` refusing other sites and adding security headers, `static.py` the browser app's files |
 | `fitlib/cli/` | The `fitlib` command: `rides`, `bikes`, `athlete`, `timezone`, `trends`, `watch`, `sync` and `serve` commands, shared `common` helpers and `output` printing |
-| `web/` | The browser app (React, Vite, TanStack Query, ECharts): `src/pages/`, `src/components/`, `src/api/` (typed client; `schema.d.ts` is generated), `src/format.ts` (units and figures, as `display.py`) |
+| `web/` | The browser app (React, Vite, TanStack Query, ECharts, Leaflet for maps): `src/pages/`, `src/components/`, `src/api/` (typed client; `schema.d.ts` is generated), `src/format.ts` (units and figures, as `display.py`) |
 | `tests/e2e/` | Playwright tests for the browser app; conventions in `.claude/skills/playwright-tests/` |
 
 Only `store/factory.py` chooses a backend; everything else depends on the interfaces. The API
@@ -599,6 +611,12 @@ date.
 - **Zwift worlds** (`tests/unit/metrics/test_zwift.py`): each world's centre and corners
   found as that world, no two worlds overlapping, real rides and points just outside a world
   in none, only Zwift rides with positions having a world, worlds by name.
+- **Maps** (`tests/unit/metrics/test_track.py`, `tests/api/test_map.py`): a straight road
+  kept as its two ends, wobble within 3 m dropped and corners kept, a closed loop keeping its
+  shape, a wiggly track capped at its point limit with its ends, a fixture loop inside its
+  bounds with rising distances and the right start-to-finish gap, no track without positions
+  and none without distance; the API's route for an outdoor ride, a Zwift ride (named world),
+  an indoor ride (empty) and an unknown ride (404).
 - **Routes and similar rides** (`tests/unit/metrics/test_route.py`,
   `tests/unit/analysis/test_similar.py`): geohash cells against published values,
   neighbours (including across the date line), the fixture loops' fingerprints (same loop
@@ -741,6 +759,14 @@ being written, and nothing watched),
     overlapping recording and a broken file reported.
   - *Ride edits*: every detail edited, shown on the ride and found in the library by name,
     tag, bike and effort; clearing details; a too-long tag refused with nothing saved; Cancel.
+  - *Maps*: an outdoor ride's route on a plain background, named with its distance and
+    start-to-finish gap, pointing at Ride Stats putting a dot on it and zooming highlighting
+    a stretch (cleared by Show whole ride), no map images loaded, accessibility scans in light
+    and dark. The street map switched on in Settings: map images under an outdoor route
+    (answered by the test, never fetched) with OpenStreetMap's credit; none for the Zwift
+    ride, drawn on a plain background as Watopia; switched off and kept off across a reload.
+    No map for the indoor ride. Compare: two outdoor routes sharing a map, the Zwift and
+    indoor rides listed, an accessibility scan.
   - *Deleting rides* (an extra ride on 8 Aug, imported by the spec): asking from its page,
     Cancel focused, cancelling with the button and with Escape, an accessibility scan of the
     dialog; deleting, back in the library with "Deleted …", the ride gone and its page not
