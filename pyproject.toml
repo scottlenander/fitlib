@@ -79,7 +79,6 @@ source_modules = [
     "fitlib.metadata",
     "fitlib.watcher",
     "fitlib.sync",
-    "fitlib.delete",
     "fitlib.services",
 ]
 forbidden_modules = ["fitlib.store.local", "fitlib.store.memory", "sqlite3"]
@@ -87,14 +86,14 @@ forbidden_modules = ["fitlib.store.local", "fitlib.store.memory", "sqlite3"]
 allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
-name = "Layers: models <- metrics <- ingest <- importer | recompute | analysis | sync | delete <- watcher <- services <- api <- cli"
+name = "Layers: models <- metrics <- ingest <- importer | recompute | analysis | sync <- watcher <- services <- api <- cli"
 type = "layers"
 layers = [
     "fitlib.cli",
     "fitlib.api",
     "fitlib.services",
     "fitlib.watcher",
-    "fitlib.importer | fitlib.recompute | fitlib.analysis | fitlib.sync | fitlib.delete",
+    "fitlib.importer | fitlib.recompute | fitlib.analysis | fitlib.sync",
     "fitlib.ingest",
     "fitlib.metrics",
     "fitlib.models",
@@ -110,7 +109,7 @@ forbidden_modules = ["fitlib.store"]
 name = "The web app and the command line do their work through services"
 type = "forbidden"
 source_modules = ["fitlib.api", "fitlib.cli"]
-forbidden_modules = ["fitlib.metrics", "fitlib.ingest", "fitlib.delete"]
+forbidden_modules = ["fitlib.metrics", "fitlib.ingest", "fitlib.services.deleting"]
 # Services use them, so the API and CLI reach them through services.
 allow_indirect_imports = true
 # Names only: types, constants, errors and lookups the API and CLI show or check against.
