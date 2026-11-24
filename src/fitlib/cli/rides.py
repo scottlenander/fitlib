@@ -36,10 +36,10 @@ from fitlib.models import (
     SortKey,
     Source,
 )
-from fitlib.recompute import Recomputer
 from fitlib.services import rides as ride_service
 from fitlib.services.compare import MAX_RIDES, MIN_RIDES, compared_rides
 from fitlib.services.importing import Importer
+from fitlib.services.recompute import Recomputer
 from fitlib.store.interfaces import (
     AmbiguousRideId,
     RideNotFound,
