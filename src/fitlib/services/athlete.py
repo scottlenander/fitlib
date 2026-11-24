@@ -9,7 +9,7 @@ from fitlib.analysis.training import athlete_profile, threshold_today
 from fitlib.metrics.load import AthleteValues, ThresholdSource, estimated_threshold_hr, values_on
 from fitlib.models import AthleteEntry
 from fitlib.services.errors import AthleteEntryNotFound
-from fitlib.store.interfaces import CatalogStore
+from fitlib.store.interfaces import AthleteCatalog, CatalogStore
 
 
 @dataclass(frozen=True)
@@ -60,7 +60,7 @@ def athlete_today(catalog: CatalogStore, today: date | None = None) -> AthleteTo
     )
 
 
-def remove_entry(catalog: CatalogStore, day: date) -> None:
+def remove_entry(catalog: AthleteCatalog, day: date) -> None:
     """Remove the athlete history entry on a date.
 
     Args:

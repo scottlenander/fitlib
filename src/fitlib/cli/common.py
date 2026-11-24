@@ -31,9 +31,10 @@ from fitlib.store.factory import Stores, open_stores
 from fitlib.store.interfaces import (
     AmbiguousBike,
     AmbiguousRideId,
+    BikeCatalog,
     BikeNotFound,
-    CatalogStore,
     MissingRides,
+    RideCatalog,
     RideNotFound,
 )
 
@@ -165,7 +166,7 @@ def handled() -> Generator[None]:
         raise fail(str(exc)) from None
 
 
-def outdated_hint(catalog: CatalogStore) -> None:
+def outdated_hint(catalog: RideCatalog) -> None:
     """Point out rides computed with older calculations, if there are any.
 
     Args:
@@ -179,7 +180,7 @@ def outdated_hint(catalog: CatalogStore) -> None:
         )
 
 
-def find_ride(catalog: CatalogStore, ref: str) -> Ride:
+def find_ride(catalog: RideCatalog, ref: str) -> Ride:
     """Load a ride from an id or id prefix typed by the user.
 
     Args:
@@ -196,7 +197,7 @@ def find_ride(catalog: CatalogStore, ref: str) -> Ride:
         return rides.find_ride(catalog, ref)
 
 
-def find_bike(catalog: CatalogStore, ref: str) -> Bike:
+def find_bike(catalog: BikeCatalog, ref: str) -> Bike:
     """Find a bike from a name or name prefix typed by the user.
 
     Args:

@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from fitlib.metrics.curves import best_at
 from fitlib.metrics.route import dilate, overlap
 from fitlib.models import Filters, Ride, RideSummary
-from fitlib.store.interfaces import CatalogStore
+from fitlib.store.interfaces import RideCatalog
 
 # Both rides cover at least this much of each other's route: the same route.
 SAME_ROUTE = 0.70
@@ -62,7 +62,7 @@ class EffortMatch:
 
 
 def similar_routes(
-    catalog: CatalogStore, ride: Ride, limit: int = 10, candidates: int = ROUTE_CANDIDATES
+    catalog: RideCatalog, ride: Ride, limit: int = 10, candidates: int = ROUTE_CANDIDATES
 ) -> list[RouteMatch]:
     """Find rides that covered at least ``PARTLY_SHARED`` of a ride's route.
 
@@ -153,7 +153,7 @@ def effort_similarity(a: dict[str, float], b: dict[str, float]) -> int:
     return round(100 * math.exp(-(distance**2) / 2))
 
 
-def similar_efforts(catalog: CatalogStore, ride: Ride, limit: int = 10) -> list[EffortMatch]:
+def similar_efforts(catalog: RideCatalog, ride: Ride, limit: int = 10) -> list[EffortMatch]:
     """Find the rides whose effort is most like a ride's.
 
     Rides with power are compared with rides with power; rides with heart rate only, with

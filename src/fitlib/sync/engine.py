@@ -22,7 +22,7 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 
-from fitlib.store.interfaces import BlobNotFound, BlobStore, CatalogStore
+from fitlib.store.interfaces import BlobNotFound, BlobStore, CatalogStore, SettingsStore
 from fitlib.sync.crypto import (
     DEFAULT_KDF,
     CannotDecrypt,
@@ -249,7 +249,7 @@ def _compress(key: str) -> bool:
     return not key.endswith(".parquet")
 
 
-def library_id(catalog: CatalogStore) -> str:
+def library_id(catalog: SettingsStore) -> str:
     """The library's id, made the first time it's asked for.
 
     Args:
@@ -265,7 +265,7 @@ def library_id(catalog: CatalogStore) -> str:
     return found
 
 
-def _device(catalog: CatalogStore) -> str:
+def _device(catalog: SettingsStore) -> str:
     """This computer's random id for this library, made the first time it's asked for.
 
     Args:
@@ -281,7 +281,7 @@ def _device(catalog: CatalogStore) -> str:
     return found
 
 
-def local_generation(catalog: CatalogStore) -> int:
+def local_generation(catalog: SettingsStore) -> int:
     """The generation this library last pushed or restored.
 
     Args:
@@ -402,7 +402,7 @@ def remote_manifest(remote: BlobStore, keys: Keys) -> Manifest | None:
     return Manifest.from_bytes(open_sealed(keys, MANIFEST, sealed))
 
 
-def _remote_ahead(catalog: CatalogStore, manifest: Manifest | None) -> bool:
+def _remote_ahead(catalog: SettingsStore, manifest: Manifest | None) -> bool:
     """Whether another computer pushed after this library last pushed or restored.
 
     Args:
