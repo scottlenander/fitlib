@@ -32,6 +32,9 @@ jobs:
       - name: Check module boundaries
         run: uv run lint-imports
 
+      - name: Check types
+        run: uv run mypy
+
       - name: Test
         run: uv run pytest
 

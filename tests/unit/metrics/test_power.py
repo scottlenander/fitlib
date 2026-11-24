@@ -87,6 +87,7 @@ def test_interval_ride_np_matches_a_reference_calculation():
     np = power.normalized_power(frame)
 
     assert np == pytest.approx(reference_np(spec.powers()), rel=1e-9)
+    assert np is not None
     assert np > mean(spec.powers()) + 30, "surges should push NP well above the average"
     assert power.kilojoules(frame) == pytest.approx(sum(spec.powers()) / 1000)
 

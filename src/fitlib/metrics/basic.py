@@ -10,6 +10,7 @@ from datetime import datetime
 
 import polars as pl
 
+from fitlib.metrics.scalars import as_float
 from fitlib.models import GeoSummary, Lap
 
 # Below this speed the rider is treated as stopped (1.8 km/h).
@@ -90,7 +91,7 @@ def distance_m(frame: pl.DataFrame) -> float | None:
     """
     if has_data(frame, "distance"):
         distance = frame["distance"].drop_nulls()
-        return float(distance.max() - distance.min())
+        return as_float(distance.max()) - as_float(distance.min())
     active = _active(frame)
     if has_data(active, "speed"):
         return float(active["speed"].fill_null(0).sum())

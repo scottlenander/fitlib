@@ -511,6 +511,7 @@ In e2e mode, only folders inside the temp folder can be watched, and no folders 
 uv run ruff check .            # lint
 uv run ruff format --check .   # formatting (`uv run ruff format .` fixes it)
 uv run lint-imports            # module boundaries
+uv run mypy                    # types (src, tests and scripts)
 uv run pytest                  # every Python test
 uv run pytest tests/unit       # or one suite: tests/unit, tests/api
 

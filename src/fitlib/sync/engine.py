@@ -498,7 +498,7 @@ def push(library: LocalLibrary, remote: BlobStore, keys: Keys, force: bool = Fal
     before = remote_manifest(remote, keys)
     if before is not None and before.library_id != lid:
         raise RemoteInUse("This sync folder holds another library's copy.")
-    if not force and _remote_ahead(catalog, before):
+    if not force and before is not None and _remote_ahead(catalog, before):
         raise RemoteAhead(
             f"Another computer pushed copy {before.generation} after this library's last "
             "sync. Pushing would replace it; use --force to do so anyway."

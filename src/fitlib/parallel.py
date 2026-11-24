@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
 from concurrent.futures import Executor, Future, ProcessPoolExecutor
 
 
 class _InlineExecutor(Executor):
     """Runs work immediately in this process: for one worker, and for tests."""
 
-    def submit(self, fn, /, *args, **kwargs):  # type: ignore[override]
+    def submit[**P, T](self, fn: Callable[P, T], /, *args: P.args, **kwargs: P.kwargs) -> Future[T]:
         """Run ``fn`` now and wrap its result in a completed future.
 
         Args:
@@ -20,7 +21,7 @@ class _InlineExecutor(Executor):
         Returns:
             A future that already holds ``fn``'s result or exception.
         """
-        future: Future = Future()
+        future: Future[T] = Future()
         try:
             future.set_result(fn(*args, **kwargs))
         except BaseException as exc:  # pragma: no cover - analyse() returns Failed instead

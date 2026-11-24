@@ -88,7 +88,8 @@ def offset_from_name(name: str | None, start: datetime) -> int | None:
     if not match:
         return None
     try:
-        local = datetime(*(int(part) for part in match.groups()), tzinfo=UTC)
+        year, month, day, hour, minute, second = (int(part) for part in match.groups())
+        local = datetime(year, month, day, hour, minute, second, tzinfo=UTC)
     except ValueError:  # not a real date, e.g. 2026-02-30
         return None
     seconds = (local - start).total_seconds()

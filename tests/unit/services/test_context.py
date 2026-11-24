@@ -75,7 +75,7 @@ def test_a_list_loads_the_athlete_and_bikes_once(imported: ImportedLibrary):
         for the whole page.
     """
     counting = CountingCatalog(imported.catalog)
-    stores = Stores(counting, imported.blobs, imported.streams)  # type: ignore[arg-type]
+    stores = Stores(counting, imported.blobs, imported.streams)
 
     found = rides.list_rides(stores, Filters(), limit=50)
 
@@ -111,7 +111,7 @@ def test_a_page_makes_the_same_queries_whatever_its_size(imported: ImportedLibra
 
     def calls_for(limit: int) -> Counter[str]:
         counting = CountingCatalog(imported.catalog)
-        stores = Stores(counting, imported.blobs, imported.streams)  # type: ignore[arg-type]
+        stores = Stores(counting, imported.blobs, imported.streams)
         found = rides.list_rides(stores, Filters(), limit=limit)
         assert len(found.views) == limit
         return counting.calls
