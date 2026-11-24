@@ -31,9 +31,24 @@ dev = [
     "fit-tool>=0.9.17",
     "httpx2>=2.16.0",
     "import-linter>=2.16",
+    "mypy>=2.4.1",
     "pytest>=9.2.0",
     "ruff>=0.17.5",
 ]
+
+[tool.mypy]
+python_version = "3.14"
+files = ["src/fitlib", "tests", "scripts"]
+exclude = ["tests/e2e/"]
+check_untyped_defs = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_unused_configs = true
+
+# FIT libraries that ship no type information.
+[[tool.mypy.overrides]]
+module = ["fitdecode", "fit_tool.*"]
+ignore_missing_imports = true
 
 [tool.ruff]
 line-length = 100
