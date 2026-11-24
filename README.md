@@ -606,7 +606,8 @@ date.
   follow it, with daylight saving; changing and clearing it; an unknown zone changing
   nothing; rides moved to another day with a default bike counted.
 - **Training** (`tests/unit/analysis/`): FTP, weight and max HR from the history; estimated FTP
-  from the best ride in the window; FTP changes applying without a recompute; a ride without
+  from the best ride in the window (both ends of the six weeks included, matching a brute
+  force over every fixture ride's stored curve); FTP changes applying without a recompute; a ride without
   power getting TSS from a set threshold heart rate or one estimated from age (a set one
   winning); power TSS kept for rides with power; impossible years of birth refused; the
   threshold from your rides (making heart-rate TSS equal power TSS on them, using the set or
@@ -654,7 +655,8 @@ date.
   by hand); ride kinds; dated default bikes by local date; backfill never overwriting a
   bike set by hand, dry runs, and repeat runs.
 - **Services** (`tests/unit/services/`): a list of rides loading the athlete's values and the
-  bikes once (with the same figures as one ride on its own); every missing ride named at
+  bikes once (with the same figures as one ride on its own), and making the same queries for
+  one ride as for eight (estimated FTPs come from the loaded profile); every missing ride named at
   once; the Zwift world filter and its errors; sample columns (positions only when asked,
   unknown ones refused); matches by route and by effort; editing and deleting all or nothing,
   each ride once; compare's checks (2 to 4 rides, no repeats, offered smoothing, distance only
@@ -846,7 +848,8 @@ being written, and nothing watched),
 
 Not part of CI. Generates synthetic rides over six years, imports them into a temporary
 library and times some searches, similar rides and every trend over the six years (each
-under 0.2 s for 2,000 rides), then an encrypted sync to a local folder (setup, first push,
+under 0.2 s for 2,000 rides), whole API requests for a library page of 50 rides and a ride
+page (about 20 ms and 15 ms), then an encrypted sync to a local folder (setup, first push,
 an unchanged push and a restore):
 
 ```bash
