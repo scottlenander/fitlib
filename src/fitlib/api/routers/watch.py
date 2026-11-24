@@ -15,8 +15,7 @@ from pydantic import BaseModel, ConfigDict
 
 from fitlib.api.deps import ConfigDep, StoresDep
 from fitlib.models import WatchedFile, WatchOutcome
-from fitlib.store.factory import Stores
-from fitlib.watcher import (
+from fitlib.services.watching import (
     AlreadyWatched,
     FolderState,
     NotWatched,
@@ -26,6 +25,7 @@ from fitlib.watcher import (
     suggested_folders,
     watch_folder,
 )
+from fitlib.store.factory import Stores
 
 router = APIRouter(prefix="/watch", tags=["watch"])
 

@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from fitlib.config import Config
+from fitlib.services.watching import watch_folder
 from fitlib.store.factory import (
     catalog_path,
     library_has_data,
@@ -18,7 +19,6 @@ from fitlib.store.factory import (
 )
 from fitlib.store.interfaces import BadSnapshot
 from fitlib.store.local.catalog import latest_schema_version
-from fitlib.watcher import watch_folder
 
 
 @pytest.fixture

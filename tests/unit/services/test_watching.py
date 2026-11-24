@@ -12,12 +12,9 @@ from pathlib import Path
 
 import pytest
 
-from fitlib.importer import ImportReport
 from fitlib.models import WatchFolder, WatchOutcome
-from fitlib.store.factory import Stores
-from fitlib.store.memory import MemoryBlobStore, MemoryCatalog
-from fitlib.store.streams import StreamStore
-from fitlib.watcher import (
+from fitlib.services.importing import ImportReport
+from fitlib.services.watching import (
     BadWatchFolder,
     FolderState,
     Watcher,
@@ -26,6 +23,9 @@ from fitlib.watcher import (
     summarize,
     wanted,
 )
+from fitlib.store.factory import Stores
+from fitlib.store.memory import MemoryBlobStore, MemoryCatalog
+from fitlib.store.streams import StreamStore
 from tests.fixtures.generate import FIT_DIR
 
 ZWIFT = "2025-08-02-08-29-42.fit"

@@ -15,6 +15,7 @@ from fitlib.ingest.localtime import UnknownTimeZone
 from fitlib.metadata import InvalidTag
 from fitlib.metrics.zwift import UnknownWorld
 from fitlib.services.errors import NotFound, ServiceError
+from fitlib.services.watching import AlreadyWatched, BadWatchFolder, NotWatched
 from fitlib.store.interfaces import (
     AmbiguousBike,
     AmbiguousRideId,
@@ -24,7 +25,6 @@ from fitlib.store.interfaces import (
     MissingRides,
     RideNotFound,
 )
-from fitlib.watcher import AlreadyWatched, BadWatchFolder, NotWatched
 
 STATUS: dict[type[Exception], int] = {
     RideNotFound: 404,

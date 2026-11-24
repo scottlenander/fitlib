@@ -6,8 +6,8 @@ import os
 import time
 from pathlib import Path
 
+from fitlib.services.watching import watch_folder
 from fitlib.store.factory import open_stores
-from fitlib.watcher import watch_folder
 from tests.api.conftest import Api
 from tests.fixtures.generate import FIT_DIR
 

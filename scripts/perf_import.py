@@ -27,8 +27,8 @@ from fitlib.analysis import trends  # noqa: E402
 from fitlib.analysis.similar import similar_efforts, similar_routes  # noqa: E402
 from fitlib.analysis.training import athlete_profile, training  # noqa: E402
 from fitlib.config import Config  # noqa: E402
-from fitlib.importer import Importer  # noqa: E402
 from fitlib.models import Filters, SortKey  # noqa: E402
+from fitlib.services.importing import Importer  # noqa: E402
 from fitlib.store.factory import (  # noqa: E402
     latest_schema_version,
     library_blobs,

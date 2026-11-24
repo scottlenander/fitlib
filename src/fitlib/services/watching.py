@@ -29,8 +29,8 @@ from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 from watchdog.observers.api import BaseObserver, ObservedWatch
 
-from fitlib.importer import Importer, ImportReport
 from fitlib.models import WatchedFile, WatchFolder, WatchOutcome
+from fitlib.services.importing import Importer, ImportReport
 from fitlib.store.factory import Stores
 
 log = logging.getLogger(__name__)

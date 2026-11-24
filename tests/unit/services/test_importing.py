@@ -11,9 +11,9 @@ from pathlib import Path
 
 import pytest
 
-from fitlib.importer import Importer, ImportReport, overlap_fraction
 from fitlib.ingest.localtime import DEFAULT_ZONE_SETTING
 from fitlib.models import Bike, BikeDefault, BikeSlot, OffsetSource, Ride, Source
+from fitlib.services.importing import Importer, ImportReport, overlap_fraction
 from fitlib.store.interfaces import BlobStore, CatalogStore
 from fitlib.store.local import FsBlobStore, SqliteCatalog
 from fitlib.store.memory import MemoryBlobStore, MemoryCatalog

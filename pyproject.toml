@@ -69,7 +69,6 @@ source_modules = [
     "fitlib.models",
     "fitlib.ingest",
     "fitlib.metrics",
-    "fitlib.importer",
     "fitlib.cli",
     "fitlib.api",
     "fitlib.display",
@@ -77,7 +76,6 @@ source_modules = [
     "fitlib.recompute",
     "fitlib.analysis",
     "fitlib.metadata",
-    "fitlib.watcher",
     "fitlib.sync",
     "fitlib.services",
 ]
@@ -86,14 +84,13 @@ forbidden_modules = ["fitlib.store.local", "fitlib.store.memory", "sqlite3"]
 allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
-name = "Layers: models <- metrics <- ingest <- importer | recompute | analysis | sync <- watcher <- services <- api <- cli"
+name = "Layers: models <- metrics <- ingest <- recompute | analysis | sync <- services <- api <- cli"
 type = "layers"
 layers = [
     "fitlib.cli",
     "fitlib.api",
     "fitlib.services",
-    "fitlib.watcher",
-    "fitlib.importer | fitlib.recompute | fitlib.analysis | fitlib.sync",
+    "fitlib.recompute | fitlib.analysis | fitlib.sync",
     "fitlib.ingest",
     "fitlib.metrics",
     "fitlib.models",

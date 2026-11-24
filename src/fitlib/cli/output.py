@@ -9,7 +9,6 @@ from rich.table import Table
 from fitlib import display
 from fitlib.analysis.training import Training
 from fitlib.cli.common import SHOWN_EFFORTS, out
-from fitlib.importer import ImportReport
 from fitlib.metrics import zones
 from fitlib.metrics.curves import best_at
 from fitlib.metrics.load import TssSource
@@ -18,6 +17,7 @@ from fitlib.models import (
     Units,
 )
 from fitlib.services.context import RideView
+from fitlib.services.importing import ImportReport
 
 
 def print_report(report: ImportReport) -> None:

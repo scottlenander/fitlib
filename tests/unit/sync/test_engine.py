@@ -12,7 +12,8 @@ from pathlib import Path
 import pytest
 
 from fitlib.config import Config
-from fitlib.importer import Importer
+from fitlib.services.importing import Importer
+from fitlib.services.watching import watch_folder
 from fitlib.store.factory import (
     catalog_path,
     latest_schema_version,
@@ -45,7 +46,6 @@ from fitlib.sync.engine import (
     unlock,
 )
 from fitlib.sync.keys import MemoryKeyStore
-from fitlib.watcher import watch_folder
 from tests.fixtures.generate import FIT_DIR
 from tests.unit.sync.conftest import FAST_KDF, PASSPHRASE, Synced, local, restore_into
 

@@ -14,8 +14,8 @@ from fastapi.testclient import TestClient
 
 from fitlib.api.app import create_app
 from fitlib.config import Config
+from fitlib.services.watching import Watcher
 from fitlib.store.factory import open_stores
-from fitlib.watcher import Watcher
 from tests.clients import LOCAL
 from tests.fixtures.generate import FIT_DIR
 

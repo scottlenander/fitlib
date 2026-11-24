@@ -16,7 +16,7 @@ from fastapi.testclient import TestClient
 
 from fitlib.api import create_app
 from fitlib.config import Config
-from fitlib.importer import Importer
+from fitlib.services.importing import Importer
 from fitlib.store.factory import open_stores
 from tests.clients import LOCAL
 from tests.fixtures.generate import FIT_DIR
