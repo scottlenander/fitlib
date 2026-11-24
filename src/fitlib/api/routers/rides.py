@@ -6,15 +6,11 @@ the command line.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
 from datetime import UTC, datetime
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Query
 
-from fitlib.analysis.similar import similar_efforts, similar_routes
-from fitlib.analysis.training import athlete_profile, training
-from fitlib.analysis.trends import route_progress
 from fitlib.api.deps import StoresDep
 from fitlib.api.schemas import (
     BulkDelete,
@@ -23,7 +19,6 @@ from fitlib.api.schemas import (
     DeleteResult,
     MetaPatch,
     RideDetail,
-    RideItem,
     RideMap,
     RidePage,
     RouteProgress,
@@ -34,21 +29,14 @@ from fitlib.api.schemas import (
     ride_item,
     ride_map,
 )
-from fitlib.delete import delete_rides
-from fitlib.ingest.normalize import VALUE_COLUMNS
-from fitlib.metadata import KEEP, MetaEdit, apply_edit, normalize_tags
-from fitlib.metrics.track import ride_track
-from fitlib.metrics.zwift import in_world, zwift_world
-from fitlib.models import Filters, Ride, SortKey, Source
-from fitlib.store.factory import Stores
-from fitlib.store.interfaces import MissingRides, RideNotFound
+from fitlib.metadata import KEEP, MetaEdit, normalize_tags
+from fitlib.models import Filters, SortKey, Source
+from fitlib.services import rides
+from fitlib.services.rides import STREAM_FIELDS
 
 router = APIRouter(prefix="/rides", tags=["rides"])
 
 MAX_PAGE = 200
-STREAM_FIELDS = ("active", *VALUE_COLUMNS)
-LOCATION_FIELDS = ("lat", "lon")
-DEFAULT_STREAM_FIELDS = tuple(f for f in STREAM_FIELDS if f not in LOCATION_FIELDS)
 
 
 def _utc(moment: datetime | None) -> datetime | None:
@@ -63,49 +51,6 @@ def _utc(moment: datetime | None) -> datetime | None:
     if moment is None or moment.tzinfo is not None:
         return moment
     return moment.replace(tzinfo=UTC)
-
-
-def find_ride(stores: Stores, ref: str) -> Ride:
-    """Load a ride from an id or id prefix.
-
-    Args:
-        stores: The library's stores.
-        ref: A full id or a unique prefix.
-
-    Returns:
-        The ride.
-
-    Raises:
-        RideNotFound: Nothing matches (a 404).
-        AmbiguousRideId: The prefix matches several rides (a 409 listing them).
-    """
-    return stores.catalog.get_ride(stores.catalog.resolve_id(ref))
-
-
-def find_rides(stores: Stores, refs: Iterable[str]) -> list[Ride]:
-    """Load several rides from ids or prefixes, reporting every one that's missing at once.
-
-    Args:
-        stores: The library's stores.
-        refs: Full ids or unique prefixes.
-
-    Returns:
-        The rides, in order.
-
-    Raises:
-        MissingRides: Some match no ride (a 404 listing them).
-        AmbiguousRideId: A prefix matches several rides (a 409).
-    """
-    found: list[Ride] = []
-    missing: list[str] = []
-    for ref in refs:
-        try:
-            found.append(find_ride(stores, ref))
-        except RideNotFound:
-            missing.append(ref)
-    if missing:
-        raise MissingRides(missing)
-    return found
 
 
 @router.get("")
@@ -181,17 +126,12 @@ def list_rides(
         min_rpe=min_rpe,
         max_rpe=max_rpe,
     )
-    if world:
-        filters = in_world(filters, world)
-    catalog = stores.catalog
-    page = catalog.search(filters, sort=sort, descending=desc, offset=offset, limit=limit)
-    athlete = athlete_profile(catalog)
-    bikes = {b.id: b for b in catalog.list_bikes()}
+    found = rides.list_rides(stores, filters, world, sort, desc, offset, limit)
     return RidePage(
-        items=[ride_item(r, training(catalog, r, athlete), bikes) for r in page.items],
-        total=page.total,
-        offset=page.offset,
-        limit=page.limit,
+        items=[ride_item(view) for view in found.views],
+        total=found.page.total,
+        offset=found.page.offset,
+        limit=found.page.limit,
     )
 
 
@@ -206,9 +146,7 @@ def get_ride(stores: StoresDep, ref: str) -> RideDetail:
     Returns:
         The ride's summary, training figures, zones, curves, laps and metadata.
     """
-    ride = find_ride(stores, ref)
-    bikes = {b.id: b for b in stores.catalog.list_bikes()}
-    return ride_detail(ride, training(stores.catalog, ride), bikes)
+    return ride_detail(rides.ride_view(stores, ref))
 
 
 @router.get("/{ref}/streams")
@@ -236,22 +174,14 @@ def get_streams(
         The time column and each requested column.
 
     Raises:
-        HTTPException: 422 if a field isn't one of ``STREAM_FIELDS``.
+        UnknownStreamFields: A field isn't one of ``STREAM_FIELDS`` (a 422).
     """
-    unknown = [f for f in fields if f not in STREAM_FIELDS]
-    if unknown:
-        raise HTTPException(
-            status_code=422,
-            detail=f"Unknown stream fields {unknown}; expected any of {list(STREAM_FIELDS)}",
-        )
-    chosen = list(dict.fromkeys(fields)) or list(DEFAULT_STREAM_FIELDS)
-    ride = find_ride(stores, ref)
-    frame = stores.streams.get(ride.id, ride.summary.start).gather_every(step)
+    ride, frame = rides.ride_streams(stores, ref, fields, step)
     return Streams(
         ride_id=ride.id,
         step=step,
         t=frame["t"].to_list(),
-        columns={f: frame[f].to_list() for f in chosen},
+        columns={f: frame[f].to_list() for f in frame.columns if f != "t"},
     )
 
 
@@ -267,12 +197,8 @@ def get_map(stores: StoresDep, ref: str) -> RideMap:
         The route's points with their times and distances, and its bounds; no points for a
         ride without positions. Zwift rides name their world.
     """
-    ride = find_ride(stores, ref)
-    world = zwift_world(ride.summary)
-    track = None
-    if ride.summary.has_gps:
-        track = ride_track(stores.streams.get(ride.id, ride.summary.start))
-    return ride_map(ride.id, track, world.name if world else None)
+    found = rides.ride_map(stores, ref)
+    return ride_map(found.ride.id, found.track, found.world)
 
 
 @router.get("/{ref}/similar")
@@ -293,39 +219,21 @@ def get_similar(
     Returns:
         The matches, with their overlap or similarity.
     """
-    catalog = stores.catalog
-    ride = find_ride(stores, ref)
-    athlete = athlete_profile(catalog)
-    bikes = {b.id: b for b in catalog.list_bikes()}
-
-    def item(other: Ride) -> RideItem:
-        """Build a list entry for a matching ride.
-
-        Args:
-            other: The matching ride.
-
-        Returns:
-            Its list entry, with TSS.
-        """
-        return ride_item(other, training(catalog, other, athlete), bikes)
-
-    has_route = bool(catalog.route_cells(ride.id))
-    if kind == "route":
-        items = [
+    found = rides.similar(stores, ref, kind, limit)
+    return SimilarRides(
+        kind=kind,
+        has_route=found.has_route,
+        items=[
             SimilarRide(
-                ride=item(m.ride),
-                overlap=round(m.overlap, 3),
-                other_overlap=round(m.other_overlap, 3),
+                ride=ride_item(m.view),
+                overlap=round(m.overlap, 3) if m.overlap is not None else None,
+                other_overlap=round(m.other_overlap, 3) if m.other_overlap is not None else None,
                 same_route=m.same_route,
+                similarity=m.similarity,
             )
-            for m in similar_routes(catalog, ride, limit)
-        ]
-    else:
-        items = [
-            SimilarRide(ride=item(m.ride), similarity=m.similarity)
-            for m in similar_efforts(catalog, ride, limit)
-        ]
-    return SimilarRides(kind=kind, has_route=has_route, items=items)
+            for m in found.matches
+        ],
+    )
 
 
 @router.get("/{ref}/route-progress")
@@ -339,17 +247,8 @@ def get_route_progress(stores: StoresDep, ref: str) -> RouteProgress:
     Returns:
         The same-route rides, this one included, oldest first, with TSS.
     """
-    catalog = stores.catalog
-    ride = find_ride(stores, ref)
-    athlete = athlete_profile(catalog)
-    bikes = {b.id: b for b in catalog.list_bikes()}
-    return RouteProgress(
-        has_route=bool(catalog.route_cells(ride.id)),
-        items=[
-            ride_item(r, training(catalog, r, athlete), bikes)
-            for r in route_progress(catalog, ride)
-        ],
-    )
+    found = rides.route_progress(stores, ref)
+    return RouteProgress(has_route=found.has_route, items=[ride_item(view) for view in found.views])
 
 
 @router.patch("/{ref}/meta")
@@ -371,8 +270,6 @@ def update_meta(stores: StoresDep, ref: str, patch: MetaPatch) -> RideDetail:
         BikeNotFound: ``bike_id`` isn't a bike (a 404).
         InvalidTag: A tag is empty, too long or has a comma (a 422).
     """
-    catalog = stores.catalog
-    ride = find_ride(stores, ref)
     sent = patch.model_fields_set
     change = MetaEdit(
         name=patch.name if "name" in sent else KEEP,
@@ -381,8 +278,8 @@ def update_meta(stores: StoresDep, ref: str, patch: MetaPatch) -> RideDetail:
         bike_id=patch.bike_id if "bike_id" in sent else KEEP,
         tags=normalize_tags(patch.tags or ()) if "tags" in sent else KEEP,
     )
-    catalog.update_meta(ride.id, apply_edit(ride.meta, change))
-    return get_ride(stores, ride.id)
+    ride = rides.edit_ride(stores, ref, change)
+    return ride_detail(rides.ride_view(stores, ride.id))
 
 
 @router.post("/bulk-meta")
@@ -399,7 +296,7 @@ def update_many(stores: StoresDep, patch: BulkMetaPatch) -> BulkMetaResult:
         How many rides changed (each ride once, however often it was named).
 
     Raises:
-        HTTPException: The patch changes nothing (a 422).
+        NothingToChange: The patch changes nothing (a 422).
         MissingRides: Rides aren't in the library (a 404 listing them).
         BikeNotFound: ``bike_id`` isn't a bike (a 404).
         InvalidTag: A tag is empty, too long or has a comma (a 422).
@@ -411,11 +308,7 @@ def update_many(stores: StoresDep, patch: BulkMetaPatch) -> BulkMetaResult:
         add_tags=normalize_tags(patch.add_tags),
         remove_tags=normalize_tags(patch.remove_tags),
     )
-    if change.is_empty:
-        raise HTTPException(422, "Choose an effort, a bike or tags to change.")
-    rides = {ride.id: ride for ride in find_rides(stores, patch.ids)}
-    stores.catalog.update_metas({i: apply_edit(r.meta, change) for i, r in rides.items()})
-    return BulkMetaResult(updated=len(rides))
+    return BulkMetaResult(updated=len(rides.edit_rides(stores, patch.ids, change)))
 
 
 @router.delete("/{ref}")
@@ -432,8 +325,9 @@ def delete_ride(stores: StoresDep, ref: str) -> DeleteResult:
     Returns:
         One ride deleted.
     """
-    ride = find_ride(stores, ref)
-    delete_rides(stores.catalog, stores.blobs, stores.streams, [ride.id])
+    # Found on its own first, so a missing ride is the single-ride 404.
+    ride = rides.find_ride(stores.catalog, ref)
+    rides.delete_rides(stores, [ride.id])
     return DeleteResult(deleted=1)
 
 
@@ -451,6 +345,4 @@ def delete_many(stores: StoresDep, body: BulkDelete) -> DeleteResult:
     Raises:
         MissingRides: Rides aren't in the library (a 404 listing them); nothing is deleted.
     """
-    ids = list(dict.fromkeys(ride.id for ride in find_rides(stores, body.ids)))
-    delete_rides(stores.catalog, stores.blobs, stores.streams, ids)
-    return DeleteResult(deleted=len(ids))
+    return DeleteResult(deleted=len(rides.delete_rides(stores, body.ids)))

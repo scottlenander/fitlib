@@ -13,7 +13,8 @@ from fitlib.analysis.training import BadBirthYear
 from fitlib.analysis.trends import BadRange
 from fitlib.ingest.localtime import UnknownTimeZone
 from fitlib.metadata import InvalidTag
-from fitlib.metrics.zwift import UnknownWorld, WorldNeedsZwift
+from fitlib.metrics.zwift import UnknownWorld
+from fitlib.services.errors import NotFound, ServiceError
 from fitlib.store.interfaces import (
     AmbiguousBike,
     AmbiguousRideId,
@@ -38,7 +39,8 @@ STATUS: dict[type[Exception], int] = {
     BadRange: 422,
     BadBirthYear: 422,
     UnknownWorld: 422,
-    WorldNeedsZwift: 422,
+    ServiceError: 422,
+    NotFound: 404,
     BadWatchFolder: 422,
     AlreadyWatched: 409,
     NotWatched: 404,
@@ -61,7 +63,9 @@ def _respond(request: Request, exc: Exception) -> JSONResponse:
         body["candidates"] = exc.candidates
     if isinstance(exc, MissingRides):
         body["missing"] = exc.refs
-    return JSONResponse(body, status_code=STATUS[type(exc)])
+    # The closest class listed: services' errors are listed by their base class.
+    status = next(STATUS[c] for c in type(exc).__mro__ if c in STATUS)
+    return JSONResponse(body, status_code=status)
 
 
 def install(app: FastAPI) -> None:

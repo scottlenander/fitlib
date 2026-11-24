@@ -478,6 +478,7 @@ search find rides by their new names (with the start time).
 | `fitlib/delete.py` | Deleting rides with their streams and original files |
 | `fitlib/recompute.py` | Rebuild rides from their raw files when calculations change |
 | `fitlib/watcher.py` | Watched folders: which files, settling, scans, and the background watcher the server runs |
+| `fitlib/services/` | The tasks the browser app and the command line share: `rides.py` (finding, listing, samples, maps, similar rides, route progress, editing, deleting), `compare.py`, `bikes.py`, `athlete.py`; `context.py` loads the athlete's values and the bikes once for showing many rides; `errors.py` the requests a person can fix |
 | `fitlib/sync/` | Optional encrypted backup: `crypto.py` (sealed objects, object names, the passphrase keyfile), `keys.py` (Keychain), `engine.py` (setup, push, status, restore) |
 | `fitlib/api/` | FastAPI app: `app.py` builds it, `routers/` one per area, `schemas.py` request/response models, `errors.py` error responses, `security.py` refusing other sites and adding security headers, `static.py` the browser app's files |
 | `fitlib/cli/` | The `fitlib` command: `rides`, `bikes`, `athlete`, `timezone`, `trends`, `watch`, `sync` and `serve` commands, shared `common` helpers and `output` printing |
@@ -485,9 +486,12 @@ search find rides by their new names (with the start time).
 | `tests/e2e/` | Playwright tests for the browser app; conventions in `.claude/skills/playwright-tests/` |
 
 Only `store/factory.py` chooses a backend; everything else depends on the interfaces. The API
-opens the stores per request. `import-linter` enforces this and the layering
-(`models ← metrics ← ingest ← importer | recompute | analysis | sync | delete ← api ← cli`; sync gets
-the catalog snapshot through the factory, never SQLite itself).
+opens the stores per request. API routers and CLI commands read their input, call a service and
+show the result; the work itself is in `services/`, so both behave the same. `import-linter`
+enforces this and the layering
+(`models ← metrics ← ingest ← importer | recompute | analysis | sync | delete ← watcher ← services ← api ← cli`;
+sync gets the catalog snapshot through the factory, never SQLite itself; the API and CLI import
+only names such as types and constants from `metrics` and `ingest`).
 
 **E2E mode** (for the browser tests): with `FITLIB_E2E=1` and `FITLIB_E2E_FIXTURES` pointing
 at a fixtures folder, `fitlib serve` adds `/e2e` shortcuts. It only runs over a library inside
@@ -652,6 +656,13 @@ date.
   normalization; edits (kept, set and cleared fields, tags added and removed, a bike chosen
   by hand); ride kinds; dated default bikes by local date; backfill never overwriting a
   bike set by hand, dry runs, and repeat runs.
+- **Services** (`tests/unit/services/`): a list of rides loading the athlete's values and the
+  bikes once (with the same figures as one ride on its own); every missing ride named at
+  once; the Zwift world filter and its errors; sample columns (positions only when asked,
+  unknown ones refused); matches by route and by effort; editing and deleting all or nothing,
+  each ride once; compare's checks (2 to 4 rides, no repeats, offered smoothing, distance only
+  when every ride has it); bike names tidied, partial bike changes, the default timeline;
+  the athlete today; removing entries that aren't there.
 - **Recompute** (`tests/unit/test_recompute.py`): outdated rides brought up to date with metadata
   kept; streams rewritten; a Zwift ride dated 1989 repaired (its time zone from its name); a Zwift ride without distance
   given it; missing raw files reported.

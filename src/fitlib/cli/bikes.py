@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import uuid
-from dataclasses import replace
 from datetime import datetime
 from typing import Annotated
 
@@ -11,18 +9,11 @@ import typer
 from rich.table import Table
 
 from fitlib import display
-from fitlib.analysis.bikes import NO_BIKE, backfill_bikes
+from fitlib.analysis.bikes import NO_BIKE
 from fitlib.cli.common import UnitsOption, bikes_app, fail, find_bike, library, out
-from fitlib.models import (
-    Bike,
-    BikeDefault,
-    BikeKind,
-    BikeSlot,
-)
-from fitlib.store.interfaces import (
-    CatalogStore,
-    DuplicateBike,
-)
+from fitlib.models import BikeDefault, BikeKind, BikeSlot
+from fitlib.services import bikes as bike_service
+from fitlib.store.interfaces import DuplicateBike
 
 
 @bikes_app.command("add", help='Add a bike. Quote names with spaces: "Giant Contend 1".')
@@ -51,20 +42,18 @@ def bikes_add(
     Raises:
         typer.Exit: The name is empty or taken, or ``--default-for`` lacks ``--from`` (code 2).
     """
-    clean = " ".join(name.split())
-    if not clean:
-        raise fail("Bike names can't be empty.")
     if default_for is not None and from_date is None:
         raise fail("--default-for needs --from (the first day it applies).")
-    bike = Bike(id=str(uuid.uuid4()), name=clean, kind=kind)
     with library(ctx) as lib:
         try:
-            lib.stores.catalog.add_bike(bike)
+            bike = bike_service.add_bike(lib.stores.catalog, name, kind)
         except DuplicateBike:
-            raise fail(f"There is already a bike called {clean!r}.") from None
+            raise fail(f"There is already a bike called {' '.join(name.split())!r}.") from None
         if default_for is not None and from_date is not None:
-            lib.stores.catalog.set_bike_default(BikeDefault(default_for, from_date.date(), bike.id))
-    out.print(f"Added {clean}.")
+            bike_service.set_default(
+                lib.stores.catalog, BikeDefault(default_for, from_date.date(), bike.id)
+            )
+    out.print(f"Added {bike.name}.")
     if default_for is not None and from_date is not None:
         out.print(f"Default for {default_for.value} rides from {from_date:%Y-%m-%d}.")
 
@@ -118,16 +107,13 @@ def bikes_rename(
     Raises:
         typer.Exit: The bike isn't found, or the new name is empty or taken (code 2).
     """
-    clean = " ".join(new_name.split())
-    if not clean:
-        raise fail("Bike names can't be empty.")
     with library(ctx) as lib:
         found = find_bike(lib.stores.catalog, bike)
         try:
-            lib.stores.catalog.update_bike(replace(found, name=clean))
+            renamed = bike_service.change_bike(lib.stores.catalog, found, name=new_name)
         except DuplicateBike:
-            raise fail(f"There is already a bike called {clean!r}.") from None
-    out.print(f"Renamed {found.name} to {clean}.")
+            raise fail(f"There is already a bike called {' '.join(new_name.split())!r}.") from None
+    out.print(f"Renamed {found.name} to {renamed.name}.")
 
 
 def _set_retired(ctx: typer.Context, bike: str, retired: bool) -> None:
@@ -144,8 +130,8 @@ def _set_retired(ctx: typer.Context, bike: str, retired: bool) -> None:
     with library(ctx) as lib:
         catalog = lib.stores.catalog
         found = find_bike(catalog, bike)
-        catalog.update_bike(replace(found, retired=retired))
-        current = current_defaults(catalog)
+        bike_service.change_bike(catalog, found, retired=retired)
+        current = bike_service.current_defaults(catalog)
     out.print(f"{'Retired' if retired else 'Brought back'} {found.name}.")
     slots = [slot.value for slot, bike_id in current.items() if bike_id == found.id]
     if retired and slots:
@@ -181,22 +167,6 @@ def bikes_unretire(
         bike: The bike's name or a unique prefix.
     """
     _set_retired(ctx, bike, retired=False)
-
-
-def current_defaults(catalog: CatalogStore) -> dict[BikeSlot, str | None]:
-    """Find each slot's most recent default-bike entry.
-
-    Args:
-        catalog: The library's catalog.
-
-    Returns:
-        The bike id (or ``None`` for "stop defaulting") of the latest entry per slot that has
-        any entries.
-    """
-    latest: dict[BikeSlot, str | None] = {}
-    for entry in catalog.bike_defaults():  # by slot, then date
-        latest[entry.slot] = entry.bike_id
-    return latest
 
 
 @bikes_app.command(
@@ -238,12 +208,11 @@ def bikes_default(
     with library(ctx) as lib:
         catalog = lib.stores.catalog
         if remove:
-            if not catalog.delete_bike_default(slot, day):
-                raise fail(f"No {slot.value} default starts on {day:%Y-%m-%d}.")
+            bike_service.remove_default(catalog, slot, day)
             out.print(f"Removed the {slot.value} default from {day:%Y-%m-%d}.")
             return
         found = find_bike(catalog, bike) if bike is not None else None
-        catalog.set_bike_default(BikeDefault(slot, day, found.id if found else None))
+        bike_service.set_default(catalog, BikeDefault(slot, day, found.id if found else None))
     if found is None:
         out.print(f"No default bike for {slot.value} rides from {day:%Y-%m-%d}.")
     else:
@@ -258,19 +227,18 @@ def bikes_defaults(ctx: typer.Context) -> None:
         ctx: Typer context holding the config path.
     """
     with library(ctx) as lib:
-        entries = lib.stores.catalog.bike_defaults()
-        names = {b.id: b.name for b in lib.stores.catalog.list_bikes()}
+        entries = bike_service.default_timeline(lib.stores.catalog)
     if not entries:
         out.print(
             "No default bikes. Set one with `fitlib bikes default NAME --for SLOT --from DATE`."
         )
         return
     table = Table("For", "From", "Bike", box=None)
-    for entry in entries:
+    for d in entries:
         table.add_row(
-            entry.slot.value,
-            f"{entry.effective_from:%Y-%m-%d}",
-            names.get(entry.bike_id, "?") if entry.bike_id else "(none)",
+            d.entry.slot.value,
+            f"{d.entry.effective_from:%Y-%m-%d}",
+            d.bike.name if d.bike else "(none)",
         )
     out.print(table)
 
@@ -293,16 +261,15 @@ def bikes_backfill(
         dry_run: Only count what would change.
     """
     with library(ctx) as lib:
-        assigned = backfill_bikes(lib.stores.catalog, dry_run=dry_run)
-        names = {b.id: b.name for b in lib.stores.catalog.list_bikes()}
+        assigned = bike_service.backfill(lib.stores.catalog, dry_run=dry_run)
     if not assigned:
         out.print("No rides to update.")
         return
     verb = "Would set" if dry_run else "Set"
-    for bike_id, count in sorted(assigned.items(), key=lambda kv: names.get(kv[0], kv[0])):
-        if bike_id == NO_BIKE:
+    for bike, count in sorted(assigned, key=lambda pair: pair[0].name if pair[0] else NO_BIKE):
+        if bike is None:
             out.print(
                 f"{'Would clear' if dry_run else 'Cleared'} the default bike on {count} ride(s)."
             )
         else:
-            out.print(f"{verb} {names.get(bike_id, bike_id)} on {count} ride(s).")
+            out.print(f"{verb} {bike.name} on {count} ride(s).")

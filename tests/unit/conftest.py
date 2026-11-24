@@ -8,6 +8,7 @@ import pytest
 
 from fitlib.importer import Importer, ImportReport
 from fitlib.models import Ride
+from fitlib.store.factory import Stores
 from fitlib.store.memory import MemoryBlobStore, MemoryCatalog
 from fitlib.store.streams import StreamStore
 from tests.fixtures.generate import FIT_DIR
@@ -28,6 +29,11 @@ class ImportedLibrary:
     blobs: MemoryBlobStore
     streams: StreamStore
     report: ImportReport
+
+    @property
+    def stores(self) -> Stores:
+        """The library's stores together, as services take them."""
+        return Stores(self.catalog, self.blobs, self.streams)
 
     def ride(self, file_name: str) -> Ride:
         """Look up the ride imported from a fixture file.

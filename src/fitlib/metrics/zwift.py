@@ -29,9 +29,9 @@ License:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 
-from fitlib.models import Box, Filters, RideSummary, Source
+from fitlib.models import Box, RideSummary, Source
 
 
 @dataclass(frozen=True)
@@ -95,36 +95,6 @@ class UnknownWorld(ValueError):
         """
         names = ", ".join(w.slug for w in WORLDS)
         super().__init__(f"No Zwift world called {slug!r}. Worlds: {names}.")
-
-
-class WorldNeedsZwift(ValueError):
-    """A world filter combined with a source other than Zwift."""
-
-
-def in_world(filters: Filters, slug: str) -> Filters:
-    """Narrow library filters to Zwift rides in one world.
-
-    Some worlds lie on the real city they show, so the source matters: a real ride in London
-    starts in London's box too.
-
-    Args:
-        filters: The other filters.
-        slug: The world's short name.
-
-    Returns:
-        The filters, limited to Zwift rides starting in the world.
-
-    Raises:
-        UnknownWorld: No world has that name.
-        WorldNeedsZwift: The filters ask for another source.
-    """
-    world = world_by_slug(slug)
-    if filters.source not in (None, Source.ZWIFT):
-        raise WorldNeedsZwift(
-            f"Zwift worlds are for Zwift rides; leave out the source or choose Zwift, not "
-            f"{filters.source.value}."
-        )
-    return replace(filters, source=Source.ZWIFT, starts_in=world.box)
 
 
 def world_by_slug(slug: str) -> World:

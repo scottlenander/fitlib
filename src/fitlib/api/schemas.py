@@ -11,12 +11,10 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from fitlib.analysis.training import Training
 from fitlib.metadata import MAX_BULK_RIDES
 from fitlib.metrics import zones
 from fitlib.metrics.load import ThresholdSource, TssSource
 from fitlib.metrics.track import Track
-from fitlib.metrics.zwift import zwift_world
 from fitlib.models import (
     Bike,
     BikeKind,
@@ -25,9 +23,9 @@ from fitlib.models import (
     GeoSummary,
     Lap,
     OffsetSource,
-    Ride,
     Source,
 )
+from fitlib.services.context import RideView
 
 
 class BikeRef(BaseModel):
@@ -415,21 +413,6 @@ class BikeOut(BaseModel):
     retired: bool
 
 
-def bike_ref(bike_id: str | None, bikes: dict[str, Bike]) -> BikeRef | None:
-    """Name a ride's bike.
-
-    Args:
-        bike_id: The ride's bike id, if any.
-        bikes: Every bike, by id.
-
-    Returns:
-        The bike's id and name, or ``None`` if the ride has no bike.
-    """
-    if bike_id is None or bike_id not in bikes:
-        return None
-    return BikeRef(id=bike_id, name=bikes[bike_id].name)
-
-
 def _naive(moment: datetime | None) -> datetime | None:
     """Drop a time zone label, for clock times that aren't really UTC.
 
@@ -442,17 +425,28 @@ def _naive(moment: datetime | None) -> datetime | None:
     return moment.replace(tzinfo=None) if moment is not None else None
 
 
-def ride_item(ride: Ride, figures: Training, bikes: dict[str, Bike]) -> RideItem:
+def bike_ref(bike: Bike | None) -> BikeRef | None:
+    """Name a ride's bike.
+
+    Args:
+        bike: The bike, if the ride has one.
+
+    Returns:
+        The bike's id and name, or ``None``.
+    """
+    return BikeRef(id=bike.id, name=bike.name) if bike is not None else None
+
+
+def ride_item(view: RideView) -> RideItem:
     """Build a list entry for a ride.
 
     Args:
-        ride: The ride.
-        figures: Its FTP-based figures.
-        bikes: Every bike, by id.
+        view: The ride with its figures and bike.
 
     Returns:
         The list entry.
     """
+    ride, figures = view.ride, view.figures
     s, m = ride.summary, ride.meta
     return RideItem(
         id=ride.id,
@@ -462,7 +456,7 @@ def ride_item(ride: Ride, figures: Training, bikes: dict[str, Bike]) -> RideItem
         local_start=_naive(s.local_start),
         time_zone_source=s.utc_offset_source,
         source=s.source,
-        zwift_world=world.name if (world := zwift_world(s)) else None,
+        zwift_world=view.world,
         indoor=s.indoor,
         device=s.device,
         moving_s=s.moving_s,
@@ -477,7 +471,7 @@ def ride_item(ride: Ride, figures: Training, bikes: dict[str, Bike]) -> RideItem
         ftp_estimated=figures.ftp_estimated,
         threshold_hr_estimated=figures.threshold_hr_estimated,
         rpe=m.rpe,
-        bike=bike_ref(m.bike_id, bikes),
+        bike=bike_ref(view.bike),
         tags=list(m.tags),
     )
 
@@ -554,20 +548,19 @@ def _geo(geo: GeoSummary | None) -> GeoOut | None:
     )
 
 
-def ride_detail(ride: Ride, figures: Training, bikes: dict[str, Bike]) -> RideDetail:
+def ride_detail(view: RideView) -> RideDetail:
     """Build the full view of a ride.
 
     Args:
-        ride: The ride.
-        figures: Its FTP-based figures.
-        bikes: Every bike, by id.
+        view: The ride with its figures and bike.
 
     Returns:
         Everything about the ride.
     """
+    ride, figures = view.ride, view.figures
     s, m = ride.summary, ride.meta
     return RideDetail(
-        **ride_item(ride, figures, bikes).model_dump(),
+        **ride_item(view).model_dump(),
         source_name=ride.source_name,
         imported_at=ride.imported_at,
         metrics_version=ride.metrics_version,
@@ -609,7 +602,7 @@ def ride_detail(ride: Ride, figures: Training, bikes: dict[str, Bike]) -> RideDe
             name=m.name,
             notes=m.notes,
             rpe=m.rpe,
-            bike=bike_ref(m.bike_id, bikes),
+            bike=bike_ref(view.bike),
             bike_from_default=m.bike_from_default,
             tags=list(m.tags),
         ),
