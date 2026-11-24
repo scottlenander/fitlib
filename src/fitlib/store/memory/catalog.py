@@ -402,28 +402,6 @@ class MemoryCatalog:
         rides = sorted(self._rides.values(), key=lambda r: (r.summary.start, r.id))
         return [r.id for r in rides if below_version is None or r.metrics_version < below_version]
 
-    def best_effort_between(
-        self, kind: str, duration_s: int, start: datetime, end: datetime
-    ) -> float | None:
-        """Find the best effort over one duration among rides in a time window.
-
-        Args:
-            kind: ``"power"`` or ``"hr"``.
-            duration_s: One of ``CURVE_DURATIONS_S``.
-            start: Earliest ride start (inclusive).
-            end: Latest ride start (inclusive).
-
-        Returns:
-            The highest best average, or ``None`` if no ride in the window has one.
-        """
-        values = [
-            value
-            for ride in self.rides_starting_between(start, end)
-            for d, value in (ride.summary.power_curve if kind == "power" else ride.summary.hr_curve)
-            if d == duration_s
-        ]
-        return max(values, default=None)
-
     def trend_rows(self, start: datetime | None, end: datetime | None) -> list[TrendRow]:
         """Read the figures trends need for every ride in a time window, in one go.
 
