@@ -6,21 +6,66 @@ effect on its date and the rider's year of birth.
 
 from __future__ import annotations
 
+from bisect import bisect_left, bisect_right
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
 
 from fitlib.metrics import load, zones
 from fitlib.metrics.load import CalibrationRide, ThresholdSource, TssSource
-from fitlib.models import AthleteEntry, Ride
+from fitlib.models import AthleteEntry, Ride, TrendRow
 from fitlib.store.interfaces import CatalogStore
 
-EFTP_DURATION_S = 20 * 60
 BIRTH_YEAR_KEY = "birth_year"
 EARLIEST_BIRTH_YEAR = 1900
 
 
 class BadBirthYear(ValueError):
     """A year of birth that can't be right (before 1900 or in the future)."""
+
+
+@dataclass(frozen=True)
+class EffortHistory:
+    """Each ride's best 20 minutes of power by its start, for estimating FTP without a query.
+
+    Attributes:
+        starts: Ride starts with a best 20 minutes, oldest first.
+        best: Each one's best 20-minute power, in watts, in the same order.
+    """
+
+    starts: tuple[datetime, ...] = ()
+    best: tuple[float, ...] = ()
+
+    @classmethod
+    def from_rows(cls, rows: Iterable[TrendRow]) -> EffortHistory:
+        """Collect the rides' best 20 minutes.
+
+        Args:
+            rows: Rides' trend rows, in any order.
+
+        Returns:
+            The history, with rides lacking a best 20 minutes left out.
+        """
+        pairs = sorted(
+            (row.start, row.best_20min_power) for row in rows if row.best_20min_power is not None
+        )
+        return cls(tuple(p[0] for p in pairs), tuple(p[1] for p in pairs))
+
+    def estimated_ftp(self, at: datetime) -> float | None:
+        """Estimate FTP at a moment from the best 20 minutes in the six weeks up to it.
+
+        The window takes in rides starting from ``EFTP_LOOKBACK_DAYS`` before ``at`` up to and
+        including ``at`` itself, so a ride's own effort counts towards its estimate.
+
+        Args:
+            at: The moment, e.g. a ride's start.
+
+        Returns:
+            ``EFTP_FACTOR`` × the best 20 minutes in the window, or ``None`` if there is none.
+        """
+        lo = bisect_left(self.starts, at - timedelta(days=load.EFTP_LOOKBACK_DAYS))
+        hi = bisect_right(self.starts, at)
+        return load.estimated_ftp(max(self.best[lo:hi], default=None))
 
 
 @dataclass(frozen=True)
@@ -32,15 +77,20 @@ class AthleteProfile:
         birth_year: The year the rider was born, for estimating threshold heart rate.
         calibration: Rides with power and heart rate, oldest first, for the threshold heart
             rate from your rides.
+        efforts: Every ride's best 20 minutes, for estimated FTPs.
     """
 
     history: tuple[AthleteEntry, ...] = ()
     birth_year: int | None = None
     calibration: tuple[CalibrationRide, ...] = ()
+    efforts: EffortHistory = EffortHistory()
 
 
 def athlete_profile(catalog: CatalogStore) -> AthleteProfile:
-    """Read the athlete history and year of birth.
+    """Read the athlete history, year of birth, and what estimates come from.
+
+    One pass over every ride's trend row gives the calibration rides and the best efforts
+    for estimated FTPs, so working out figures for any number of rides needs no more queries.
 
     Args:
         catalog: The library's catalog.
@@ -49,13 +99,17 @@ def athlete_profile(catalog: CatalogStore) -> AthleteProfile:
         The profile (load it once when working through many rides).
     """
     year = catalog.get_setting(BIRTH_YEAR_KEY)
+    rows = catalog.trend_rows(None, None)
     rides = (
         load.calibration_ride(row.local_date, row.moving_s, row.np, row.hr_squared_s)
-        for row in catalog.trend_rows(None, None)
+        for row in rows
     )
     calibration = sorted((r for r in rides if r is not None), key=lambda r: r.day)
     return AthleteProfile(
-        tuple(catalog.athlete_history()), int(year) if year else None, tuple(calibration)
+        tuple(catalog.athlete_history()),
+        int(year) if year else None,
+        tuple(calibration),
+        EffortHistory.from_rows(rows),
     )
 
 
@@ -103,12 +157,11 @@ def threshold_hr_on(
 
 
 def threshold_today(
-    catalog: CatalogStore, athlete: AthleteProfile, today: date | None = None
+    athlete: AthleteProfile, today: date | None = None
 ) -> tuple[int | None, ThresholdSource | None]:
     """Today's threshold heart rate and where it comes from, as a ride today would use it.
 
     Args:
-        catalog: The library's catalog (for today's FTP estimate).
         athlete: The athlete's profile.
         today: The day (for tests); the real date by default.
 
@@ -118,11 +171,9 @@ def threshold_today(
     day = today or date.today()
     ftp: float | None = load.values_on(athlete.history, day).ftp
     if ftp is None:
-        end = datetime.combine(day + timedelta(days=1), time(), tzinfo=UTC)
-        best = catalog.best_effort_between(
-            "power", EFTP_DURATION_S, end - timedelta(days=load.EFTP_LOOKBACK_DAYS), end
+        ftp = athlete.efforts.estimated_ftp(
+            datetime.combine(day + timedelta(days=1), time(), tzinfo=UTC)
         )
-        ftp = load.estimated_ftp(best)
     return threshold_hr_on(athlete, day, ftp)
 
 
@@ -180,25 +231,6 @@ def ride_date(ride: Ride) -> date:
     return (ride.summary.local_start or ride.summary.start).date()
 
 
-def estimated_ftp(catalog: CatalogStore, ride: Ride) -> float | None:
-    """Estimate FTP for a ride from the best 20 minutes in the six weeks up to it.
-
-    The window ends at the ride's start and includes the ride itself.
-
-    Args:
-        catalog: Where the other rides are.
-        ride: The ride.
-
-    Returns:
-        0.95 × the best 20-minute power in the window, or ``None`` if there is none.
-    """
-    start = ride.summary.start
-    best = catalog.best_effort_between(
-        "power", EFTP_DURATION_S, start - timedelta(days=load.EFTP_LOOKBACK_DAYS), start
-    )
-    return load.estimated_ftp(best)
-
-
 def training(catalog: CatalogStore, ride: Ride, athlete: AthleteProfile | None = None) -> Training:
     """Work out a ride's training figures.
 
@@ -209,7 +241,7 @@ def training(catalog: CatalogStore, ride: Ride, athlete: AthleteProfile | None =
     power and an FTP, else from heart rate.
 
     Args:
-        catalog: The library's catalog (for the athlete's values and the FTP estimate).
+        catalog: The library's catalog (for the athlete's profile, if not given).
         ride: The ride.
         athlete: The athlete's profile, if already loaded (saves queries per ride when
             working through a list).
@@ -226,7 +258,7 @@ def training(catalog: CatalogStore, ride: Ride, athlete: AthleteProfile | None =
     ftp: float | None = values.ftp
     ftp_estimated = False
     if ftp is None and s.has_power:
-        ftp = estimated_ftp(catalog, ride)
+        ftp = athlete.efforts.estimated_ftp(s.start)
         ftp_estimated = ftp is not None
 
     power_zones = None
@@ -238,7 +270,7 @@ def training(catalog: CatalogStore, ride: Ride, athlete: AthleteProfile | None =
     # A ride without power still has an FTP on its day, for the threshold from your rides.
     day_ftp = ftp
     if day_ftp is None and athlete.calibration and load.hr_per_watt(athlete.calibration, day):
-        day_ftp = estimated_ftp(catalog, ride)
+        day_ftp = athlete.efforts.estimated_ftp(s.start)
     threshold_hr, threshold_source = threshold_hr_on(athlete, day, day_ftp)
     tss, source = load.ride_tss(
         s.moving_s, s.np, ftp, load.hr_squared_seconds(s.hr_histogram), threshold_hr
