@@ -80,17 +80,19 @@ source_modules = [
     "fitlib.watcher",
     "fitlib.sync",
     "fitlib.delete",
+    "fitlib.services",
 ]
 forbidden_modules = ["fitlib.store.local", "fitlib.store.memory", "sqlite3"]
 # Going through fitlib.store.factory is the intended route to a backend.
 allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
-name = "Layers: models <- metrics <- ingest <- importer | recompute | analysis | sync | delete <- watcher <- api <- cli"
+name = "Layers: models <- metrics <- ingest <- importer | recompute | analysis | sync | delete <- watcher <- services <- api <- cli"
 type = "layers"
 layers = [
     "fitlib.cli",
     "fitlib.api",
+    "fitlib.services",
     "fitlib.watcher",
     "fitlib.importer | fitlib.recompute | fitlib.analysis | fitlib.sync | fitlib.delete",
     "fitlib.ingest",
@@ -103,3 +105,32 @@ name = "Metrics and ingest never touch storage"
 type = "forbidden"
 source_modules = ["fitlib.metrics", "fitlib.ingest", "fitlib.models", "fitlib.metadata"]
 forbidden_modules = ["fitlib.store"]
+
+[[tool.importlinter.contracts]]
+name = "The web app and the command line do their work through services"
+type = "forbidden"
+source_modules = ["fitlib.api", "fitlib.cli"]
+forbidden_modules = ["fitlib.metrics", "fitlib.ingest", "fitlib.delete"]
+# Services use them, so the API and CLI reach them through services.
+allow_indirect_imports = true
+# Names only: types, constants, errors and lookups the API and CLI show or check against.
+ignore_imports = [
+    "fitlib.api.errors -> fitlib.ingest.localtime",  # UnknownTimeZone
+    "fitlib.api.errors -> fitlib.metrics.zwift",  # UnknownWorld
+    "fitlib.api.schemas -> fitlib.metrics.zones",  # zone names
+    "fitlib.api.schemas -> fitlib.metrics.load",  # ThresholdSource, TssSource
+    "fitlib.api.schemas -> fitlib.metrics.track",  # Track
+    "fitlib.api.routers.worlds -> fitlib.metrics.zwift",  # WORLDS
+    "fitlib.api.routers.imports -> fitlib.ingest.scanner",  # FIT_SUFFIX, ZIP_SUFFIX
+    "fitlib.api.routers.health -> fitlib.ingest.summarize",  # METRICS_VERSION
+    "fitlib.api.routers.settings -> fitlib.ingest.localtime",  # time_zones
+    "fitlib.cli.common -> fitlib.ingest.summarize",  # METRICS_VERSION
+    "fitlib.cli.common -> fitlib.metrics.zwift",  # UnknownWorld
+    "fitlib.cli.output -> fitlib.metrics.zones",  # zone names
+    "fitlib.cli.output -> fitlib.metrics.curves",  # best_at, reading a stored curve
+    "fitlib.cli.output -> fitlib.metrics.load",  # TssSource
+    "fitlib.cli.rides -> fitlib.ingest.summarize",  # METRICS_VERSION
+    "fitlib.cli.rides -> fitlib.metrics.curves",  # best_at, reading a stored curve
+    "fitlib.cli.rides -> fitlib.ingest.scanner",  # scan, for `import` (moves with the importer)
+    "fitlib.cli.timezone -> fitlib.ingest.localtime",  # UnknownTimeZone
+]
