@@ -19,7 +19,7 @@ from fitlib.services import deleting
 from fitlib.services.context import RideContext, RideView
 from fitlib.services.errors import NothingToChange, UnknownStreamFields, WorldNeedsZwift
 from fitlib.store.factory import Stores
-from fitlib.store.interfaces import CatalogStore, MissingRides, RideNotFound
+from fitlib.store.interfaces import MissingRides, RideCatalog, RideNotFound
 
 # Stream columns a ride's samples can be read in; positions only when asked for.
 STREAM_FIELDS = ("active", *VALUE_COLUMNS)
@@ -27,7 +27,7 @@ LOCATION_FIELDS = ("lat", "lon")
 DEFAULT_STREAM_FIELDS = tuple(f for f in STREAM_FIELDS if f not in LOCATION_FIELDS)
 
 
-def find_ride(catalog: CatalogStore, ref: str) -> Ride:
+def find_ride(catalog: RideCatalog, ref: str) -> Ride:
     """Load a ride from an id or id prefix.
 
     Args:
@@ -44,7 +44,7 @@ def find_ride(catalog: CatalogStore, ref: str) -> Ride:
     return catalog.get_ride(catalog.resolve_id(ref))
 
 
-def find_rides(catalog: CatalogStore, refs: Iterable[str]) -> list[Ride]:
+def find_rides(catalog: RideCatalog, refs: Iterable[str]) -> list[Ride]:
     """Load several rides from ids or prefixes, reporting every one that's missing at once.
 
     Args:

@@ -12,7 +12,7 @@ from datetime import date, datetime, timedelta
 
 from fitlib.ingest.localtime import DEFAULT_ZONE_SETTING, check_zone, offset_in_zone
 from fitlib.models import OffsetSource
-from fitlib.store.interfaces import CatalogStore
+from fitlib.store.interfaces import CatalogStore, SettingsStore
 
 # Rides that follow the default: those that used it, and those with no time zone at all.
 _FOLLOWS_DEFAULT = (OffsetSource.DEFAULT, OffsetSource.NONE)
@@ -35,7 +35,7 @@ class ZoneChange:
     bikes_to_check: int
 
 
-def default_zone(catalog: CatalogStore) -> str | None:
+def default_zone(catalog: SettingsStore) -> str | None:
     """Read the library's default time zone.
 
     Args:

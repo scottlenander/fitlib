@@ -10,14 +10,14 @@ import logging
 from collections.abc import Sequence
 
 from fitlib.models import Ride
-from fitlib.store.interfaces import BlobStore, CatalogStore
+from fitlib.store.interfaces import BlobStore, RideCatalog
 from fitlib.store.streams import StreamStore, raw_key
 
 log = logging.getLogger(__name__)
 
 
 def delete_rides(
-    catalog: CatalogStore,
+    catalog: RideCatalog,
     blobs: BlobStore,
     streams: StreamStore,
     ride_ids: Sequence[str],

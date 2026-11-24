@@ -13,7 +13,7 @@ from datetime import date
 from fitlib.metadata import KEEP, Keep, default_bike
 from fitlib.models import Bike, BikeDefault, BikeKind, BikeSlot
 from fitlib.services.errors import DefaultNotFound, EmptyBikeName
-from fitlib.store.interfaces import CatalogStore
+from fitlib.store.interfaces import BikeCatalog, CatalogStore
 
 # Counted for rides whose default bike is taken away, in ``backfill_bikes``.
 NO_BIKE = "none"
@@ -37,7 +37,7 @@ def clean_name(name: str) -> str:
     return clean
 
 
-def add_bike(catalog: CatalogStore, name: str, kind: BikeKind | None = None) -> Bike:
+def add_bike(catalog: BikeCatalog, name: str, kind: BikeKind | None = None) -> Bike:
     """Add a bike.
 
     Args:
@@ -58,7 +58,7 @@ def add_bike(catalog: CatalogStore, name: str, kind: BikeKind | None = None) -> 
 
 
 def change_bike(
-    catalog: CatalogStore,
+    catalog: BikeCatalog,
     bike: Bike,
     name: str | None = None,
     kind: BikeKind | None | Keep = KEEP,
@@ -90,7 +90,7 @@ def change_bike(
     return updated
 
 
-def current_defaults(catalog: CatalogStore) -> dict[BikeSlot, str | None]:
+def current_defaults(catalog: BikeCatalog) -> dict[BikeSlot, str | None]:
     """Find each kind of ride's most recent default-bike entry.
 
     Args:
@@ -119,7 +119,7 @@ class DefaultEntry:
     bike: Bike | None
 
 
-def default_timeline(catalog: CatalogStore) -> list[DefaultEntry]:
+def default_timeline(catalog: BikeCatalog) -> list[DefaultEntry]:
     """List the default-bike timeline with each entry's bike.
 
     Args:
@@ -135,7 +135,7 @@ def default_timeline(catalog: CatalogStore) -> list[DefaultEntry]:
     ]
 
 
-def set_default(catalog: CatalogStore, entry: BikeDefault) -> DefaultEntry:
+def set_default(catalog: BikeCatalog, entry: BikeDefault) -> DefaultEntry:
     """Set the default bike for one kind of ride from a date, replacing any entry then.
 
     Args:
@@ -153,7 +153,7 @@ def set_default(catalog: CatalogStore, entry: BikeDefault) -> DefaultEntry:
     return DefaultEntry(entry=entry, bike=bike)
 
 
-def remove_default(catalog: CatalogStore, slot: BikeSlot, day: date) -> None:
+def remove_default(catalog: BikeCatalog, slot: BikeSlot, day: date) -> None:
     """Remove a default-bike entry.
 
     Args:

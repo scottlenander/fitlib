@@ -14,7 +14,7 @@ from datetime import UTC, date, datetime, time, timedelta
 from fitlib.metrics import load, zones
 from fitlib.metrics.load import CalibrationRide, ThresholdSource, TssSource
 from fitlib.models import AthleteEntry, Ride, TrendRow
-from fitlib.store.interfaces import CatalogStore
+from fitlib.store.interfaces import CatalogStore, SettingsStore
 
 BIRTH_YEAR_KEY = "birth_year"
 EARLIEST_BIRTH_YEAR = 1900
@@ -113,7 +113,7 @@ def athlete_profile(catalog: CatalogStore) -> AthleteProfile:
     )
 
 
-def set_birth_year(catalog: CatalogStore, year: int | None, today: date | None = None) -> None:
+def set_birth_year(catalog: SettingsStore, year: int | None, today: date | None = None) -> None:
     """Set or clear the rider's year of birth.
 
     Args:

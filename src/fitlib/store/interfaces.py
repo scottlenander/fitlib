@@ -1,6 +1,8 @@
 """Storage interfaces. Everything outside ``fitlib.store`` depends on these, never on a backend.
 
-- ``CatalogStore``: one entry per ride (summary, laps, location, user metadata), searchable.
+- ``CatalogStore``: one entry per ride (summary, laps, location, user metadata), searchable;
+  the sum of its roles ``RideCatalog``, ``BikeCatalog``, ``AthleteCatalog``, ``SettingsStore``
+  and ``WatchState``, which functions take when they need only part of it.
 - ``BlobStore``: opaque bytes by key (original .fit files and per-ride streams).
 
 Methods are added as phases need them.
@@ -11,7 +13,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable, Mapping, Sequence
 from datetime import date, datetime
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 from fitlib.models import (
     AthleteEntry,
@@ -149,8 +151,9 @@ class BadSnapshot(StoreError):
     """A catalog snapshot is damaged, or is from a newer fitlib."""
 
 
-class CatalogStore(Protocol):
-    """One searchable entry per ride: summary, laps, location and the user's metadata."""
+@runtime_checkable
+class RideCatalog(Protocol):
+    """Rides: adding, reading, searching and deleting them, and figures across many."""
 
     def add_ride(self, ride: Ride, route: Route = frozenset()) -> None:
         """Store a new ride, all or nothing.
@@ -251,33 +254,6 @@ class CatalogStore(Protocol):
         """
         ...
 
-    def athlete_history(self) -> list[AthleteEntry]:
-        """List the athlete history.
-
-        Returns:
-            Every entry, oldest first.
-        """
-        ...
-
-    def set_athlete_entry(self, entry: AthleteEntry) -> None:
-        """Add an athlete history entry, replacing any entry on the same date.
-
-        Args:
-            entry: The entry.
-        """
-        ...
-
-    def delete_athlete_entry(self, effective_from: date) -> bool:
-        """Remove the athlete history entry on a date.
-
-        Args:
-            effective_from: The entry's date.
-
-        Returns:
-            ``True`` if there was an entry to remove.
-        """
-        ...
-
     def delete_rides(self, ride_ids: Sequence[str], remember: bool = True) -> list[Ride]:
         """Remove rides and everything the catalog holds for them, all or none.
 
@@ -333,113 +309,11 @@ class CatalogStore(Protocol):
         """
         ...
 
-    def add_bike(self, bike: Bike) -> None:
-        """Add a bike.
-
-        Args:
-            bike: The bike. Its id must be new.
-
-        Raises:
-            DuplicateBike: Another bike has the same name (ignoring case).
-        """
-        ...
-
-    def update_bike(self, bike: Bike) -> None:
-        """Change a bike's name, kind or retired flag; renaming refreshes its rides' search.
-
-        Args:
-            bike: The bike with its new values, matched by id.
-
-        Raises:
-            BikeNotFound: No bike has this id.
-            DuplicateBike: Another bike has the new name (ignoring case).
-        """
-        ...
-
-    def get_bike(self, bike_id: str) -> Bike:
-        """Load one bike.
-
-        Args:
-            bike_id: The bike's id.
-
-        Returns:
-            The bike.
-
-        Raises:
-            BikeNotFound: No bike has this id.
-        """
-        ...
-
-    def list_bikes(self, include_retired: bool = True) -> list[Bike]:
-        """List bikes, sorted by name (ignoring case).
-
-        Args:
-            include_retired: Include retired bikes.
-
-        Returns:
-            The bikes.
-        """
-        ...
-
-    def resolve_bike(self, ref: str) -> Bike:
-        """Find a bike by name: an exact match ignoring case, else a unique prefix.
-
-        Args:
-            ref: A bike name or the start of one, e.g. ``"giant"``.
-
-        Returns:
-            The one matching bike.
-
-        Raises:
-            BikeNotFound: No bike matches.
-            AmbiguousBike: The prefix matches several bikes.
-        """
-        ...
-
-    def bike_totals(self) -> list[BikeTotals]:
-        """Add up rides, distance and riding time for every bike, retired included.
-
-        Returns:
-            One entry per bike, sorted by name (ignoring case); bikes without rides count 0.
-        """
-        ...
-
     def tag_counts(self) -> list[tuple[str, int]]:
         """Count how many rides use each tag.
 
         Returns:
             ``(tag, rides)`` for every tag in use, sorted by tag.
-        """
-        ...
-
-    def bike_defaults(self) -> list[BikeDefault]:
-        """List the dated default-bike entries.
-
-        Returns:
-            Every entry, by slot then date.
-        """
-        ...
-
-    def set_bike_default(self, entry: BikeDefault) -> None:
-        """Add a default-bike entry, replacing any for the same slot and date.
-
-        Args:
-            entry: The entry.
-
-        Raises:
-            BikeNotFound: ``entry.bike_id`` isn't a bike.
-        """
-        ...
-
-    def delete_bike_default(self, slot: BikeSlot, effective_from: date) -> bool:
-        """Remove the default-bike entry for a slot and date.
-
-        Args:
-            slot: The entry's slot.
-            effective_from: The entry's date.
-
-        Returns:
-            ``True`` if there was an entry to remove.
         """
         ...
 
@@ -518,26 +392,6 @@ class CatalogStore(Protocol):
         """
         ...
 
-    def get_setting(self, key: str) -> str | None:
-        """Read a library setting.
-
-        Args:
-            key: The setting's name.
-
-        Returns:
-            Its value, or ``None`` if it isn't set.
-        """
-        ...
-
-    def set_setting(self, key: str, value: str | None) -> None:
-        """Set or clear a library setting.
-
-        Args:
-            key: The setting's name.
-            value: Its new value; ``None`` clears it.
-        """
-        ...
-
     def rides_by_offset_source(
         self, sources: Iterable[OffsetSource]
     ) -> list[tuple[str, datetime, int | None]]:
@@ -561,6 +415,183 @@ class CatalogStore(Protocol):
             RideNotFound: A ride doesn't exist (nothing is changed).
         """
         ...
+
+    def count(self) -> int:
+        """Count the rides in the catalog.
+
+        Returns:
+            The number of rides.
+        """
+        ...
+
+
+@runtime_checkable
+class BikeCatalog(Protocol):
+    """Bikes, their totals, and the dated default-bike timeline."""
+
+    def add_bike(self, bike: Bike) -> None:
+        """Add a bike.
+
+        Args:
+            bike: The bike. Its id must be new.
+
+        Raises:
+            DuplicateBike: Another bike has the same name (ignoring case).
+        """
+        ...
+
+    def update_bike(self, bike: Bike) -> None:
+        """Change a bike's name, kind or retired flag; renaming refreshes its rides' search.
+
+        Args:
+            bike: The bike with its new values, matched by id.
+
+        Raises:
+            BikeNotFound: No bike has this id.
+            DuplicateBike: Another bike has the new name (ignoring case).
+        """
+        ...
+
+    def get_bike(self, bike_id: str) -> Bike:
+        """Load one bike.
+
+        Args:
+            bike_id: The bike's id.
+
+        Returns:
+            The bike.
+
+        Raises:
+            BikeNotFound: No bike has this id.
+        """
+        ...
+
+    def list_bikes(self, include_retired: bool = True) -> list[Bike]:
+        """List bikes, sorted by name (ignoring case).
+
+        Args:
+            include_retired: Include retired bikes.
+
+        Returns:
+            The bikes.
+        """
+        ...
+
+    def resolve_bike(self, ref: str) -> Bike:
+        """Find a bike by name: an exact match ignoring case, else a unique prefix.
+
+        Args:
+            ref: A bike name or the start of one, e.g. ``"giant"``.
+
+        Returns:
+            The one matching bike.
+
+        Raises:
+            BikeNotFound: No bike matches.
+            AmbiguousBike: The prefix matches several bikes.
+        """
+        ...
+
+    def bike_totals(self) -> list[BikeTotals]:
+        """Add up rides, distance and riding time for every bike, retired included.
+
+        Returns:
+            One entry per bike, sorted by name (ignoring case); bikes without rides count 0.
+        """
+        ...
+
+    def bike_defaults(self) -> list[BikeDefault]:
+        """List the dated default-bike entries.
+
+        Returns:
+            Every entry, by slot then date.
+        """
+        ...
+
+    def set_bike_default(self, entry: BikeDefault) -> None:
+        """Add a default-bike entry, replacing any for the same slot and date.
+
+        Args:
+            entry: The entry.
+
+        Raises:
+            BikeNotFound: ``entry.bike_id`` isn't a bike.
+        """
+        ...
+
+    def delete_bike_default(self, slot: BikeSlot, effective_from: date) -> bool:
+        """Remove the default-bike entry for a slot and date.
+
+        Args:
+            slot: The entry's slot.
+            effective_from: The entry's date.
+
+        Returns:
+            ``True`` if there was an entry to remove.
+        """
+        ...
+
+
+@runtime_checkable
+class AthleteCatalog(Protocol):
+    """The athlete's dated FTP, weight and heart rates."""
+
+    def athlete_history(self) -> list[AthleteEntry]:
+        """List the athlete history.
+
+        Returns:
+            Every entry, oldest first.
+        """
+        ...
+
+    def set_athlete_entry(self, entry: AthleteEntry) -> None:
+        """Add an athlete history entry, replacing any entry on the same date.
+
+        Args:
+            entry: The entry.
+        """
+        ...
+
+    def delete_athlete_entry(self, effective_from: date) -> bool:
+        """Remove the athlete history entry on a date.
+
+        Args:
+            effective_from: The entry's date.
+
+        Returns:
+            ``True`` if there was an entry to remove.
+        """
+        ...
+
+
+@runtime_checkable
+class SettingsStore(Protocol):
+    """The library's own settings, by key."""
+
+    def get_setting(self, key: str) -> str | None:
+        """Read a library setting.
+
+        Args:
+            key: The setting's name.
+
+        Returns:
+            Its value, or ``None`` if it isn't set.
+        """
+        ...
+
+    def set_setting(self, key: str, value: str | None) -> None:
+        """Set or clear a library setting.
+
+        Args:
+            key: The setting's name.
+            value: Its new value; ``None`` clears it.
+        """
+        ...
+
+
+@runtime_checkable
+class WatchState(Protocol):
+    """Watched folders and the files seen in them: this computer's, left out of backups."""
 
     def watch_folders(self) -> list[WatchFolder]:
         """List the watched folders.
@@ -631,13 +662,15 @@ class CatalogStore(Protocol):
         """
         ...
 
-    def count(self) -> int:
-        """Count the rides in the catalog.
 
-        Returns:
-            The number of rides.
-        """
-        ...
+@runtime_checkable
+class CatalogStore(RideCatalog, BikeCatalog, AthleteCatalog, SettingsStore, WatchState, Protocol):
+    """The whole catalog: every role, over one connection.
+
+    Changes that touch several roles are one transaction (deleting rides records their
+    files; renaming a bike refreshes search). Functions that need only part of it take that
+    role instead, e.g. ``BikeCatalog``.
+    """
 
     def close(self) -> None:
         """Release the catalog's resources. It can't be used afterwards."""

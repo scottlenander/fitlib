@@ -16,7 +16,7 @@ from fitlib.analysis.training import AthleteProfile, athlete_profile, threshold_
 from fitlib.metrics import load
 from fitlib.metrics.load import TssSource
 from fitlib.models import CurveBest, Ride, TrendRow
-from fitlib.store.interfaces import CatalogStore
+from fitlib.store.interfaces import CatalogStore, RideCatalog
 
 # Fitness (CTL) and fatigue (ATL): exponentially weighted averages of daily TSS over these.
 FITNESS_DAYS = 42
@@ -450,7 +450,7 @@ def ftp_history(catalog: CatalogStore, period: Period, since: date, until: date)
     return points
 
 
-def efficiency(catalog: CatalogStore, since: date, until: date) -> list[EfficiencyPoint]:
+def efficiency(catalog: RideCatalog, since: date, until: date) -> list[EfficiencyPoint]:
     """List each ride's efficiency factor (Normalized Power per heartbeat per minute).
 
     Only rides with power and heart rate, at least ``EFFICIENCY_MIN_MOVING_S`` long, count.
@@ -481,7 +481,7 @@ def efficiency(catalog: CatalogStore, since: date, until: date) -> list[Efficien
     ]
 
 
-def best_curve(catalog: CatalogStore, kind: str, since: date, until: date) -> list[CurveBest]:
+def best_curve(catalog: RideCatalog, kind: str, since: date, until: date) -> list[CurveBest]:
     """Find the best effort at each duration among rides in a local date range.
 
     Args:
@@ -505,7 +505,7 @@ def best_curve(catalog: CatalogStore, kind: str, since: date, until: date) -> li
     return catalog.best_curve_between(kind, inside[0], inside[-1])
 
 
-def route_progress(catalog: CatalogStore, ride: Ride) -> list[Ride]:
+def route_progress(catalog: RideCatalog, ride: Ride) -> list[Ride]:
     """List every ride on the same route as this one, including it, oldest first.
 
     Args:
