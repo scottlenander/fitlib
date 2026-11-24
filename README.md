@@ -471,14 +471,10 @@ search find rides by their new names (with the start time).
 | `fitlib/models.py` | Domain objects shared by every layer |
 | `fitlib/ingest/` | Find files (incl. zips), decode with `fitdecode`, normalize to 1 Hz, summarize |
 | `fitlib/metrics/` | Ride figures from a 1 Hz stream (basic, power, HR, curves, zones), route fingerprints (`route.py`), simplified tracks for maps (`track.py`) and FTP-based formulas (`load.py`) |
-| `fitlib/analysis/` | FTP-based figures for a ride (athlete history or estimated FTP); default-bike backfill; similar rides (`similar.py`); lining rides up to compare (`compare.py`); trends over many rides (`trends.py`) |
+| `fitlib/analysis/` | FTP-based figures for a ride (athlete history or estimated FTP); similar rides (`similar.py`); lining rides up to compare (`compare.py`); trends over many rides (`trends.py`) |
 | `fitlib/metadata.py` | Tag rules, ride kinds for default bikes, and which dated default applies |
 | `fitlib/store/` | `CatalogStore` / `BlobStore` interfaces; `local/` (SQLite + files) and `memory/` backends; `factory.py` picks one |
-| `fitlib/importer.py` | Hash, dedupe, analyse in worker processes, store |
-| `fitlib/delete.py` | Deleting rides with their streams and original files |
-| `fitlib/recompute.py` | Rebuild rides from their raw files when calculations change |
-| `fitlib/watcher.py` | Watched folders: which files, settling, scans, and the background watcher the server runs |
-| `fitlib/services/` | The tasks the browser app and the command line share: `rides.py` (finding, listing, samples, maps, similar rides, route progress, editing, deleting), `compare.py`, `bikes.py`, `athlete.py`; `context.py` loads the athlete's values and the bikes once for showing many rides; `errors.py` the requests a person can fix |
+| `fitlib/services/` | The tasks the browser app and the command line share: `rides.py` (finding, listing, samples, maps, similar rides, route progress, editing, deleting), `compare.py`, `bikes.py` (bikes, the default timeline and backfill), `athlete.py`, `importing.py` (hash, dedupe, analyse in worker processes, store), `recompute.py` (rebuild rides from their raw files when calculations change), `deleting.py` (rides with their streams and original files), `watching.py` (watched folders: which files, settling, scans, and the background watcher the server runs); `context.py` loads the athlete's values and the bikes once for showing many rides; `errors.py` the requests a person can fix |
 | `fitlib/sync/` | Optional encrypted backup: `crypto.py` (sealed objects, object names, the passphrase keyfile), `keys.py` (Keychain), `engine.py` (setup, push, status, restore) |
 | `fitlib/api/` | FastAPI app: `app.py` builds it, `routers/` one per area, `schemas.py` request/response models, `errors.py` error responses, `security.py` refusing other sites and adding security headers, `static.py` the browser app's files |
 | `fitlib/cli/` | The `fitlib` command: `rides`, `bikes`, `athlete`, `timezone`, `trends`, `watch`, `sync` and `serve` commands, shared `common` helpers and `output` printing |
@@ -489,7 +485,8 @@ Only `store/factory.py` chooses a backend; everything else depends on the interf
 opens the stores per request. API routers and CLI commands read their input, call a service and
 show the result; the work itself is in `services/`, so both behave the same. `import-linter`
 enforces this and the layering
-(`models ← metrics ← ingest ← importer | recompute | analysis | sync | delete ← watcher ← services ← api ← cli`;
+(`models ← metrics ← ingest ← analysis | sync ← services ← api ← cli`, and inside services
+`errors ← importing | recompute | deleting | context ← rides | bikes | athlete | watching ← compare`;
 sync gets the catalog snapshot through the factory, never SQLite itself; the API and CLI import
 only names such as types and constants from `metrics` and `ingest`).
 
@@ -643,7 +640,7 @@ date.
   ending early) and by distance (to the shortest ride); the time gap, between whole seconds
   and with a 60 s step at a stop; no distance refused; smoothing that flattens spikes but
   never fills a pause; only recorded channels returned.
-- **Deleting rides** (`tests/unit/test_delete.py`, `tests/api/test_delete.py`, catalog
+- **Deleting rides** (`tests/unit/services/test_deleting.py`, `tests/api/test_delete.py`, catalog
   contract and CLI tests): the ride, its stream and original file gone, others untouched;
   several at once all or none (an unknown id deletes nothing); deleted files remembered and
   skipped on re-import (alone or inside a zip), `include_deleted` / `--include-deleted`
@@ -652,7 +649,7 @@ date.
   message); compare, bulk edit and bulk delete listing every missing ride at once
   (`missing`, in `tests/api/test_missing.py`) and changing nothing; recent watched-folder files marked when their ride is deleted; `fitlib delete`
   asking, `--yes`, unknown rides; the watcher reporting deleted files as skipped.
-- **Metadata** (`tests/unit/test_metadata.py`, `tests/unit/analysis/test_bikes.py`): tag
+- **Metadata** (`tests/unit/test_metadata.py`, `tests/unit/services/test_backfill.py`): tag
   normalization; edits (kept, set and cleared fields, tags added and removed, a bike chosen
   by hand); ride kinds; dated default bikes by local date; backfill never overwriting a
   bike set by hand, dry runs, and repeat runs.
@@ -663,7 +660,7 @@ date.
   each ride once; compare's checks (2 to 4 rides, no repeats, offered smoothing, distance only
   when every ride has it); bike names tidied, partial bike changes, the default timeline;
   the athlete today; removing entries that aren't there.
-- **Recompute** (`tests/unit/test_recompute.py`): outdated rides brought up to date with metadata
+- **Recompute** (`tests/unit/services/test_recompute.py`): outdated rides brought up to date with metadata
   kept; streams rewritten; a Zwift ride dated 1989 repaired (its time zone from its name); a Zwift ride without distance
   given it; missing raw files reported.
 - **Encrypted backup** (`tests/unit/sync/`, `tests/unit/store/test_snapshot.py`): sealed objects
@@ -688,7 +685,7 @@ date.
   on the API docs; any host answered (writes still checked) when serving on a network
   address; `fitlib serve` refusing other hosts by default. Library folders created or
   tightened to 0700, including by restore.
-- **Watched folders** (`tests/unit/test_watcher.py`): which folders can be watched (full
+- **Watched folders** (`tests/unit/services/test_watching.py`): which folders can be watched (full
   paths, `~`, not the library or near it, inside the temp folder in e2e mode); which files
   (`.fit`/`.zip`, not Zwift's in-progress file or hidden ones); summing up a file's or a zip's
   import; scans importing new files once, retrying a failed file once it changes, leaving
@@ -698,7 +695,7 @@ date.
   with the real file watcher, a dropped-in ride imported, also after a restart. The store's
   watched folders and files are in the catalog contract tests, with opening a new library
   from several threads at once.
-- **Importer** (`tests/unit/test_importer.py`): the whole fixture folder (imports, duplicates,
+- **Importer** (`tests/unit/services/test_importing.py`): the whole fixture folder (imports, duplicates,
   skips, failures), re-import, stored files and streams, overlapping recordings, the process
   pool, cleanup after a failed write, and no coordinates in logs; time zones from a Zwift
   file's name (also inside a zip) and from the default for a renamed file.
