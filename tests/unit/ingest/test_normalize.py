@@ -3,12 +3,26 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import polars as pl
 
 from fitlib.ingest.normalize import SCHEMA, to_frame
 
 START = datetime(2025, 8, 2, 6, 30, tzinfo=UTC)
+
+
+def odometer(metres: float, on: bool) -> dict[str, Any]:
+    """An odometer reading for some records only.
+
+    Args:
+        metres: The reading.
+        on: Whether this record has it.
+
+    Returns:
+        ``distance`` for ``record``'s fields, or nothing.
+    """
+    return {"distance": metres} if on else {}
 
 
 def record(second: float, power: int | None = 200, **fields) -> dict:
@@ -124,10 +138,7 @@ def test_distance_is_rebuilt_from_speed_when_the_odometer_is_rare():
     Expect: each second has the distance ridden before it: 0, 5, … 50 at the change, 122 at
         the last; not the lone 0 copied to every second.
     """
-    records = [
-        record(s, speed=5.0 if s < 10 else 8.0, **({"distance": 0.0} if s == 0 else {}))
-        for s in range(20)
-    ]
+    records = [record(s, speed=5.0 if s < 10 else 8.0, **odometer(0.0, s == 0)) for s in range(20)]
 
     frame = to_frame(records)
 
@@ -145,8 +156,7 @@ def test_rebuilt_distance_starts_from_the_odometer_and_skips_pauses():
     Expect: 1000-1040 m before the pause, nothing during it, 1050-1090 m after.
     """
     records = [
-        record(s, speed=10.0, **({"distance": 1000.0} if s == 0 else {}))
-        for s in [*range(5), *range(20, 25)]
+        record(s, speed=10.0, **odometer(1000.0, s == 0)) for s in [*range(5), *range(20, 25)]
     ]
 
     frame = to_frame(records)

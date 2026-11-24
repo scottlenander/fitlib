@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta
+from typing import Any
 
 import pytest
 
@@ -218,7 +219,7 @@ def steady(day: int, *, np: float | None = 200.0, bpm: int = 150, minutes: int =
         The ride.
     """
     seconds = minutes * 60
-    power = {} if np else {"has_power": False, "avg_power": None, "power_curve": (),
+    power: dict[str, Any] = {} if np else {"has_power": False, "avg_power": None, "power_curve": (),
                            "power_histogram": (), "kj": None}  # fmt: skip
     return make_ride(start=datetime(2025, month, day, 8, tzinfo=UTC), moving_s=seconds, np=np,
                      hr_histogram=((bpm, seconds),), **power)  # fmt: skip

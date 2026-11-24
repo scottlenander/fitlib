@@ -279,6 +279,7 @@ def summarize(report: ImportReport) -> tuple[WatchOutcome, str | None, str | Non
     if not found:
         return WatchOutcome.SKIPPED, "No .fit files inside", None
     outcome, rows, _ = found[0]
+    detail: str | None
     if report.total > 1:
         detail = ", ".join(_plural(len(r), "file " + w[0], "files " + w[1]) for _, r, w in found)
     else:

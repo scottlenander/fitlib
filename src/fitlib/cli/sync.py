@@ -73,7 +73,7 @@ def key_store() -> KeyStore:
     return KeychainKeyStore()
 
 
-def _size(n: int) -> str:
+def _size(n: float) -> str:
     """Format a byte count.
 
     Args:

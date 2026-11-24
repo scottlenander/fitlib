@@ -623,10 +623,10 @@ class MemoryCatalog:
         found = [r for r in self._rides.values() if _matches(r, self._bike_name(r), filters)]
         # Tie-break on start then id; rides with no value for the sort key always go last.
         found.sort(key=lambda r: (r.summary.start, r.id), reverse=descending)
-        with_value = [r for r in found if _sort_value(r, sort) is not None]
+        valued = [(v, r) for r in found if (v := _sort_value(r, sort)) is not None]
         without = [r for r in found if _sort_value(r, sort) is None]
-        with_value.sort(key=lambda r: _sort_value(r, sort), reverse=descending)
-        ordered = with_value + without
+        valued.sort(key=lambda pair: pair[0], reverse=descending)
+        ordered = [r for _, r in valued] + without
         return Page(tuple(ordered[offset : offset + limit]), len(ordered), offset, limit)
 
     def get_setting(self, key: str) -> str | None:

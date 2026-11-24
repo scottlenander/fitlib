@@ -274,7 +274,8 @@ def test_scan_retries_a_failed_file_once_it_changes(folder: Path):
     assert [f.outcome for f in failed.files] == [WatchOutcome.FAILED]
     assert unchanged.files == []
     assert [f.outcome for f in fixed.files] == [WatchOutcome.IMPORTED]
-    assert s.catalog.watched_file(str(path)).outcome is WatchOutcome.IMPORTED
+    recorded = s.catalog.watched_file(str(path))
+    assert recorded is not None and recorded.outcome is WatchOutcome.IMPORTED
 
 
 def test_scan_leaves_files_still_being_written(folder: Path):
@@ -574,7 +575,8 @@ def test_watcher_imports_a_file_dropped_into_a_folder(folder: Path):
     finally:
         watcher.stop()
 
-    assert s.catalog.watched_file(str(folder / ZWIFT)).outcome is WatchOutcome.IMPORTED
+    recorded = s.catalog.watched_file(str(folder / ZWIFT))
+    assert recorded is not None and recorded.outcome is WatchOutcome.IMPORTED
 
 
 def test_watcher_can_be_started_again_after_stopping(folder: Path):

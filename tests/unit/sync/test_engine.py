@@ -428,6 +428,7 @@ def test_restore_refuses_an_object_swapped_for_an_older_one(synced: Synced, tmp_
     with open_stores(synced.config) as stores:
         keys = unlock(stores.catalog, synced.remote, synced.keystore)
     manifest = remote_manifest(synced.remote, keys)
+    assert manifest is not None
     first, second = [e.name for k, e in manifest.objects.items() if k.startswith("streams/")][:2]
     (synced.folder / second).write_bytes((synced.folder / first).read_bytes())
 
@@ -458,6 +459,7 @@ def test_status_reports_what_a_push_would_do(synced: Synced):
 
     assert (before.remote, before.to_upload) == (None, blob_count)
     assert before.to_upload_bytes > 0
+    assert after.remote is not None
     assert (after.local_generation, after.remote.generation, after.to_upload) == (1, 1, 0)
     assert after.remote_ahead is False
 
@@ -508,4 +510,5 @@ def test_manifest_is_encrypted_under_its_own_name(synced: Synced):
     with pytest.raises(CannotDecrypt):
         open_sealed(keys, "catalog.sqlite3", synced.remote.get(MANIFEST))
     manifest = remote_manifest(synced.remote, keys)
+    assert manifest is not None
     assert {k: e.sha256 for k, e in manifest.objects.items()} == blobs

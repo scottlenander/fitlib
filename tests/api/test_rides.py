@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from typing import Any
 
 import pytest
 
@@ -290,7 +291,7 @@ def test_streams_can_be_downsampled_and_narrowed(reader: Api):
     Given: ``step=10`` and only the power field.
     Expect: samples 10 s apart, with only the power column.
     """
-    params = {"step": 10, "fields": ["power"]}
+    params: dict[str, Any] = {"step": 10, "fields": ["power"]}
 
     response = reader.client.get(f"/api/rides/{reader.ids[ZWIFT]}/streams", params=params)
 

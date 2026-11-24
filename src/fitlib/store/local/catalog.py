@@ -597,7 +597,7 @@ class SqliteCatalog:
             BikeNotFound: A ``bike_id`` isn't a bike; nothing is changed.
         """
         with self._tx() as db:
-            for bike_id in {m.bike_id for m in metas.values()} - {None}:
+            for bike_id in {m.bike_id for m in metas.values() if m.bike_id is not None}:
                 self._require_bike(db, bike_id)
             for ride_id, meta in metas.items():
                 row = db.execute("SELECT * FROM rides WHERE id = ?", (ride_id,)).fetchone()

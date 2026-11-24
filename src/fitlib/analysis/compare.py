@@ -146,7 +146,7 @@ def align_time(frames: list[pl.DataFrame], points: int = DEFAULT_POINTS) -> Alig
     series = []
     for frame, fields in zip(frames, _recorded(frames), strict=True):
         sampled = frame.gather_every(step)
-        padding = [None] * (len(x) - sampled.height)
+        padding: list[float | None] = [None] * (len(x) - sampled.height)
         series.append({f: _values(sampled[f]) + padding for f in fields})
     return Aligned(align="time", x=[float(v) for v in x], series=series, gap=None)
 

@@ -17,26 +17,30 @@ from typing import Any
 
 import polars as pl
 
+from fitlib.metrics.scalars import as_float
+
 MAX_FILL_GAP_S = 5
 # The device's odometer is used when at least this share of records carry it; otherwise
 # distance is worked out from speed. Zwift writes speed every second but the odometer on
 # only a few records.
 MIN_ODOMETER_SHARE = 0.9
 
-SCHEMA: dict[str, pl.DataType] = {
-    "t": pl.Int32(),  # seconds since the first record
-    "timestamp": pl.Datetime("us", "UTC"),
-    "active": pl.Boolean(),  # recorded, or inside a short gap; False during pauses
-    "power": pl.Int32(),
-    "heart_rate": pl.Int32(),
-    "cadence": pl.Int32(),
-    "speed": pl.Float64(),  # m/s
-    "distance": pl.Float64(),  # m, cumulative
-    "altitude": pl.Float64(),  # m
-    "lat": pl.Float64(),  # degrees
-    "lon": pl.Float64(),  # degrees
-    "temperature": pl.Int32(),  # °C
-}
+SCHEMA = pl.Schema(
+    {
+        "t": pl.Int32(),  # seconds since the first record
+        "timestamp": pl.Datetime("us", "UTC"),
+        "active": pl.Boolean(),  # recorded, or inside a short gap; False during pauses
+        "power": pl.Int32(),
+        "heart_rate": pl.Int32(),
+        "cadence": pl.Int32(),
+        "speed": pl.Float64(),  # m/s
+        "distance": pl.Float64(),  # m, cumulative
+        "altitude": pl.Float64(),  # m
+        "lat": pl.Float64(),  # degrees
+        "lon": pl.Float64(),  # degrees
+        "temperature": pl.Int32(),  # °C
+    }
+)
 VALUE_COLUMNS = [c for c in SCHEMA if c not in ("t", "timestamp", "active")]
 
 
@@ -72,7 +76,7 @@ def to_frame(records: list[dict[str, Any]]) -> pl.DataFrame:
         orient="row",
     )
     # Measured before gaps are filled, which would copy a lone reading onto every second.
-    odometer_share = raw["distance"].is_not_null().mean() or 0.0
+    odometer_share = as_float(raw["distance"].is_not_null().mean() or 0.0)
     raw = (
         raw.with_columns(pl.col("timestamp").dt.truncate("1s"))
         .unique("timestamp", keep="last", maintain_order=True)
