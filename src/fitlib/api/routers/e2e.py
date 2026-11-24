@@ -18,12 +18,11 @@ from fastapi import APIRouter, HTTPException, Request, Response
 
 from fitlib.api.deps import ConfigDep, StoresDep
 from fitlib.api.routers.imports import ImportResult, import_result
-from fitlib.api.routers.rides import find_ride
 from fitlib.config import Config
-from fitlib.delete import delete_rides
 from fitlib.importer import Importer
 from fitlib.metadata import default_bike
 from fitlib.models import RideMeta
+from fitlib.services.rides import delete_rides, find_ride
 from fitlib.store.factory import open_stores
 
 
@@ -116,7 +115,7 @@ def make_router(fixtures: Path) -> APIRouter:
         Returns:
             An empty response.
         """
-        ride = find_ride(stores, ref)
+        ride = find_ride(stores.catalog, ref)
         bike_id = default_bike(stores.catalog.bike_defaults(), ride.summary)
         stores.catalog.update_meta(ride.id, RideMeta(bike_id=bike_id, bike_from_default=True))
         return Response(status_code=204)
@@ -135,8 +134,8 @@ def make_router(fixtures: Path) -> APIRouter:
         Returns:
             An empty response.
         """
-        ride_id = find_ride(stores, ref).id
-        delete_rides(stores.catalog, stores.blobs, stores.streams, [ride_id], remember=False)
+        ride_id = find_ride(stores.catalog, ref).id
+        delete_rides(stores, [ride_id], remember=False)
         return Response(status_code=204)
 
     @router.post("/import/{name}")

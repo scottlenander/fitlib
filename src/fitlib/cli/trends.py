@@ -10,10 +10,10 @@ from rich.table import Table
 
 from fitlib import display
 from fitlib.analysis import trends
-from fitlib.analysis.training import athlete_profile, training
 from fitlib.analysis.trends import BadRange, Period, View, resolve_range
-from fitlib.cli.common import UnitsOption, app, fail, find_ride, library, out
+from fitlib.cli.common import UnitsOption, app, fail, library, out
 from fitlib.cli.output import print_tss_notes, section, tss_text
+from fitlib.services.rides import route_progress
 
 trends_app = typer.Typer(
     help="Trends: volume, fitness, FTP, efficiency and best efforts over time.",
@@ -284,14 +284,10 @@ def progress(
         typer.Exit: No ride matches, or the prefix matches several (code 2).
     """
     with library(ctx) as lib:
-        catalog = lib.stores.catalog
-        found = find_ride(catalog, ride)
+        progress = route_progress(lib.stores, ride)
         chosen = lib.units(units)
-        has_route = bool(catalog.route_cells(found.id))
-        rides = trends.route_progress(catalog, found)
-        athlete = athlete_profile(catalog)
-        figures = {r.id: training(catalog, r, athlete) for r in rides}
-    if not has_route:
+    found = progress.ride
+    if not progress.has_route:
         out.print(f"{found.display_name} has no GPS positions, so it has no route to follow.")
         return
     section(f"Progress on the route of {found.display_name}")
@@ -299,8 +295,8 @@ def progress(
     for column in ("Date", "ID", "Time", "Distance", "Speed", "Power", "NP", "HR", "TSS"):
         table.add_column(column, no_wrap=True)
     table.add_column("")
-    for r in rides:
-        s = r.summary
+    for view in progress.views:
+        r, s = view.ride, view.ride.summary
         speed = s.distance_m / s.moving_s if s.distance_m and s.moving_s else None
         table.add_row(
             display.date(s.local_start or s.start),
@@ -311,10 +307,10 @@ def progress(
             display.watts(s.avg_power),
             display.watts(s.np),
             display.bpm(s.avg_hr),
-            tss_text(figures[r.id]),
+            tss_text(view.figures),
             "this ride" if r.id == found.id else "",
         )
     out.print(table)
-    print_tss_notes(figures.values())
-    if len(rides) == 1:
+    print_tss_notes(v.figures for v in progress.views)
+    if len(progress.views) == 1:
         out.print("No other rides on this route yet.")

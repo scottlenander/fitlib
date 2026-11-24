@@ -11,11 +11,11 @@ from datetime import date
 
 from fastapi import APIRouter, HTTPException, Response
 
-from fitlib.analysis.training import athlete_profile, set_birth_year, threshold_today
+from fitlib.analysis.training import set_birth_year
 from fitlib.api.deps import StoresDep
 from fitlib.api.schemas import Athlete, AthleteEntryOut, AthleteValuesIn, BirthYearIn
-from fitlib.metrics.load import estimated_threshold_hr, values_on
 from fitlib.models import AthleteEntry
+from fitlib.services import athlete as athlete_service
 from fitlib.store.interfaces import CatalogStore
 
 router = APIRouter(prefix="/athlete", tags=["athlete"])
@@ -49,20 +49,20 @@ def _athlete(catalog: CatalogStore) -> Athlete:
         Every entry, oldest first, the values in effect today (local date), the year of
         birth and today's threshold heart rate estimated from it.
     """
-    profile = athlete_profile(catalog)
-    history = sorted(profile.history, key=lambda e: e.effective_from)
-    today = date.today()
-    now = values_on(history, today)
-    threshold, source = threshold_today(catalog, profile, today)
+    now = athlete_service.athlete_today(catalog)
+    values = now.values
     return Athlete(
-        history=[_entry_out(e) for e in history],
+        history=[_entry_out(e) for e in now.history],
         today=AthleteValuesIn(
-            ftp=now.ftp, weight_kg=now.weight_kg, max_hr=now.max_hr, threshold_hr=now.threshold_hr
+            ftp=values.ftp,
+            weight_kg=values.weight_kg,
+            max_hr=values.max_hr,
+            threshold_hr=values.threshold_hr,
         ),
-        birth_year=profile.birth_year,
-        estimated_threshold_hr=estimated_threshold_hr(profile.birth_year, today),
-        threshold_hr_today=threshold,
-        threshold_hr_source_today=source,
+        birth_year=now.birth_year,
+        estimated_threshold_hr=now.estimated_threshold_hr,
+        threshold_hr_today=now.threshold_hr,
+        threshold_hr_source_today=now.threshold_source,
     )
 
 
@@ -139,8 +139,7 @@ def delete_entry(stores: StoresDep, effective_from: date) -> Response:
         An empty response.
 
     Raises:
-        HTTPException: 404 if there is no entry on that date.
+        AthleteEntryNotFound: There is no entry on that date (a 404).
     """
-    if not stores.catalog.delete_athlete_entry(effective_from):
-        raise HTTPException(status_code=404, detail=f"No athlete entry on {effective_from}")
+    athlete_service.remove_entry(stores.catalog, effective_from)
     return Response(status_code=204)

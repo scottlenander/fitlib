@@ -5,13 +5,10 @@ Bikes are never deleted, only retired, so rides keep them.
 
 from __future__ import annotations
 
-import uuid
-from dataclasses import replace
 from datetime import date
 
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, Response
 
-from fitlib.analysis.bikes import NO_BIKE, backfill_bikes
 from fitlib.api.deps import StoresDep
 from fitlib.api.schemas import (
     BackfillChange,
@@ -25,7 +22,9 @@ from fitlib.api.schemas import (
     bike_out,
     bike_ref,
 )
-from fitlib.models import Bike, BikeDefault, BikeSlot
+from fitlib.metadata import KEEP
+from fitlib.models import BikeDefault, BikeSlot
+from fitlib.services import bikes as bike_service
 
 router = APIRouter(prefix="/bikes", tags=["bikes"])
 
@@ -67,9 +66,7 @@ def add_bike(stores: StoresDep, new: BikeCreate) -> BikeOut:
     Raises:
         DuplicateBike: Another bike has the name, ignoring case (a 409).
     """
-    bike = Bike(id=str(uuid.uuid4()), name=new.name, kind=new.kind)
-    stores.catalog.add_bike(bike)
-    return bike_out(bike)
+    return bike_out(bike_service.add_bike(stores.catalog, new.name, new.kind))
 
 
 # Declared before ``/{bike_id}`` so "defaults" and "backfill" are never taken for bike ids.
@@ -85,10 +82,9 @@ def list_defaults(stores: StoresDep) -> list[DefaultOut]:
     Returns:
         Every entry, by slot and then date.
     """
-    bikes = {b.id: b for b in stores.catalog.list_bikes()}
     return [
-        DefaultOut(slot=d.slot, effective_from=d.effective_from, bike=bike_ref(d.bike_id, bikes))
-        for d in stores.catalog.bike_defaults()
+        DefaultOut(slot=d.entry.slot, effective_from=d.entry.effective_from, bike=bike_ref(d.bike))
+        for d in bike_service.default_timeline(stores.catalog)
     ]
 
 
@@ -110,9 +106,10 @@ def set_default(
     Raises:
         BikeNotFound: ``bike_id`` isn't a bike (a 404).
     """
-    stores.catalog.set_bike_default(BikeDefault(slot, effective_from, body.bike_id))
-    bikes = {b.id: b for b in stores.catalog.list_bikes()}
-    return DefaultOut(slot=slot, effective_from=effective_from, bike=bike_ref(body.bike_id, bikes))
+    saved = bike_service.set_default(
+        stores.catalog, BikeDefault(slot, effective_from, body.bike_id)
+    )
+    return DefaultOut(slot=slot, effective_from=effective_from, bike=bike_ref(saved.bike))
 
 
 @router.delete("/defaults/{slot}/{effective_from}", status_code=204)
@@ -128,12 +125,9 @@ def delete_default(stores: StoresDep, slot: BikeSlot, effective_from: date) -> R
         An empty response.
 
     Raises:
-        HTTPException: 404 if there is no such entry.
+        DefaultNotFound: There is no such entry (a 404).
     """
-    if not stores.catalog.delete_bike_default(slot, effective_from):
-        raise HTTPException(
-            status_code=404, detail=f"No {slot.value} default starts on {effective_from}"
-        )
+    bike_service.remove_default(stores.catalog, slot, effective_from)
     return Response(status_code=204)
 
 
@@ -150,14 +144,10 @@ def backfill(stores: StoresDep, dry_run: bool = False) -> BackfillResult:
     Returns:
         How many rides each bike gains.
     """
-    changed = backfill_bikes(stores.catalog, dry_run=dry_run)
-    bikes = {b.id: b for b in stores.catalog.list_bikes()}
+    changed = bike_service.backfill(stores.catalog, dry_run=dry_run)
     return BackfillResult(
         dry_run=dry_run,
-        changes=[
-            BackfillChange(bike=None if key == NO_BIKE else bike_ref(key, bikes), rides=count)
-            for key, count in changed.most_common()
-        ],
+        changes=[BackfillChange(bike=bike_ref(bike), rides=count) for bike, count in changed],
     )
 
 
@@ -177,13 +167,12 @@ def update_bike(stores: StoresDep, bike_id: str, patch: BikePatch) -> BikeOut:
         BikeNotFound: No bike has this id (a 404).
         DuplicateBike: Another bike has the new name (a 409).
     """
-    bike = stores.catalog.get_bike(bike_id)
     sent = patch.model_fields_set
-    updated = replace(
-        bike,
-        name=patch.name if patch.name is not None else bike.name,
-        kind=patch.kind if "kind" in sent else bike.kind,
-        retired=patch.retired if patch.retired is not None else bike.retired,
+    updated = bike_service.change_bike(
+        stores.catalog,
+        stores.catalog.get_bike(bike_id),
+        name=patch.name,
+        kind=patch.kind if "kind" in sent else KEEP,
+        retired=patch.retired,
     )
-    stores.catalog.update_bike(updated)
     return bike_out(updated)

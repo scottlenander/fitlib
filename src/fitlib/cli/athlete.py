@@ -5,24 +5,17 @@ Threshold heart rate is estimated from the year of birth on days without one set
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import datetime
 from typing import Annotated
 
 import typer
 from rich.table import Table
 
 from fitlib import display
-from fitlib.analysis.training import (
-    BadBirthYear,
-    athlete_profile,
-    set_birth_year,
-    threshold_today,
-)
+from fitlib.analysis.training import BadBirthYear, set_birth_year
 from fitlib.cli.common import UnitsOption, athlete_app, fail, library, out
-from fitlib.metrics import load
-from fitlib.models import (
-    AthleteEntry,
-)
+from fitlib.models import AthleteEntry
+from fitlib.services.athlete import athlete_today, remove_entry
 
 
 @athlete_app.command(
@@ -88,16 +81,14 @@ def athlete_show(ctx: typer.Context, units: UnitsOption = None) -> None:
         units: Units to show weight in; the config's by default.
     """
     with library(ctx) as lib:
-        profile = athlete_profile(lib.stores.catalog)
-        threshold, source = threshold_today(lib.stores.catalog, profile)
+        athlete = athlete_today(lib.stores.catalog)
         chosen = lib.units(units)
-    history = profile.history
-    today = date.today()
-    estimate = load.estimated_threshold_hr(profile.birth_year, today)
-    if profile.birth_year is not None:
+    history = athlete.history
+    if athlete.birth_year is not None:
         out.print(
-            f"Born {profile.birth_year}: threshold heart rate estimated at "
-            f"{display.bpm(estimate)} when none is set and your rides don't give one."
+            f"Born {athlete.birth_year}: threshold heart rate estimated at "
+            f"{display.bpm(athlete.estimated_threshold_hr)} when none is set and your rides "
+            "don't give one."
         )
     if not history:
         out.print("No athlete history yet. Add some with `fitlib athlete set`.")
@@ -112,11 +103,11 @@ def athlete_show(ctx: typer.Context, units: UnitsOption = None) -> None:
             display.bpm(entry.threshold_hr),
         )
     out.print(table)
-    now = load.values_on(history, today)
+    now = athlete.values
     out.print(
         f"\nToday: FTP {display.watts(now.ftp)}, weight {display.weight(now.weight_kg, chosen)}, "
         f"max HR {display.bpm(now.max_hr)}, threshold HR "
-        f"{display.bpm(threshold)}{display.threshold_source(source)}."
+        f"{display.bpm(athlete.threshold_hr)}{display.threshold_source(athlete.threshold_source)}."
     )
 
 
@@ -135,9 +126,7 @@ def athlete_remove(
         typer.Exit: There is no entry for that date (code 2).
     """
     with library(ctx) as lib:
-        removed = lib.stores.catalog.delete_athlete_entry(entry_date.date())
-    if not removed:
-        raise fail(f"No athlete entry on {entry_date:%Y-%m-%d}.")
+        remove_entry(lib.stores.catalog, entry_date.date())
     out.print(f"Removed the athlete entry for {entry_date:%Y-%m-%d}.")
 
 
@@ -168,8 +157,8 @@ def athlete_born(
             set_birth_year(lib.stores.catalog, year)
         except BadBirthYear as exc:
             raise fail(str(exc)) from None
+        estimate = athlete_today(lib.stores.catalog).estimated_threshold_hr
     if year is None:
         out.print("Cleared the year of birth: rides without power need a set threshold HR for TSS.")
         return
-    estimate = load.estimated_threshold_hr(year, date.today())
     out.print(f"Saved: born {year}. Estimated threshold heart rate today: {display.bpm(estimate)}.")

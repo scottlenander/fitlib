@@ -19,17 +19,21 @@ from rich.console import Console
 from fitlib.config import Config, ConfigError, load_config
 from fitlib.ingest.summarize import METRICS_VERSION
 from fitlib.metadata import InvalidTag, normalize_tags
+from fitlib.metrics.zwift import UnknownWorld
 from fitlib.models import (
     Bike,
     Ride,
     Units,
 )
+from fitlib.services import rides
+from fitlib.services.errors import NotFound, ServiceError
 from fitlib.store.factory import Stores, open_stores
 from fitlib.store.interfaces import (
     AmbiguousBike,
     AmbiguousRideId,
     BikeNotFound,
     CatalogStore,
+    MissingRides,
     RideNotFound,
 )
 
@@ -128,14 +132,37 @@ def library(ctx: typer.Context) -> Generator[Library]:
         The config and the library's stores.
 
     Raises:
-        typer.Exit: The config file is missing or invalid (exit code 2).
+        typer.Exit: The config file is missing or invalid, or a service turned down the
+            request (code 2).
     """
     try:
         config = load_config(ctx.obj)
     except ConfigError as exc:
         raise fail(str(exc)) from None
-    with open_stores(config) as opened:
+    with open_stores(config) as opened, handled():
         yield Library(config, opened)
+
+
+@contextmanager
+def handled() -> Generator[None]:
+    """Turn a request the services turned down into an error message and exit code 2.
+
+    Raises:
+        typer.Exit: A ``ServiceError``, ``NotFound``, unknown Zwift world, a ride that isn't
+            in the library, or an id prefix matching several rides (code 2).
+    """
+    try:
+        yield
+    except MissingRides as exc:
+        if len(exc.refs) == 1:
+            raise fail(f"No ride matches {exc.refs[0]!r}.") from None
+        raise fail(f"No rides match {', '.join(repr(r) for r in exc.refs)}.") from None
+    except RideNotFound as exc:
+        raise fail(f"No ride matches {exc.args[0]!r}.") from None
+    except AmbiguousRideId as exc:
+        raise fail(f"{exc}: {', '.join(c[:8] for c in exc.candidates)}") from None
+    except (ServiceError, NotFound, UnknownWorld) as exc:
+        raise fail(str(exc)) from None
 
 
 def outdated_hint(catalog: CatalogStore) -> None:
@@ -165,12 +192,8 @@ def find_ride(catalog: CatalogStore, ref: str) -> Ride:
     Raises:
         typer.Exit: No ride matches, or the prefix matches several (code 2).
     """
-    try:
-        return catalog.get_ride(catalog.resolve_id(ref))
-    except RideNotFound:
-        raise fail(f"No ride matches {ref!r}.") from None
-    except AmbiguousRideId as exc:
-        raise fail(f"{exc}: {', '.join(c[:8] for c in exc.candidates)}") from None
+    with handled():
+        return rides.find_ride(catalog, ref)
 
 
 def find_bike(catalog: CatalogStore, ref: str) -> Bike:

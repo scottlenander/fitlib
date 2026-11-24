@@ -97,7 +97,7 @@ export interface paths {
      *         An empty response.
      *
      *     Raises:
-     *         HTTPException: 404 if there is no entry on that date.
+     *         AthleteEntryNotFound: There is no entry on that date (a 404).
      */
     delete: operations['delete_entry_api_athlete__effective_from__delete']
     options?: never
@@ -240,7 +240,7 @@ export interface paths {
      *         An empty response.
      *
      *     Raises:
-     *         HTTPException: 404 if there is no such entry.
+     *         DefaultNotFound: There is no such entry (a 404).
      */
     delete: operations['delete_default_api_bikes_defaults__slot___effective_from__delete']
     options?: never
@@ -302,9 +302,9 @@ export interface paths {
      *         The shared axis and each ride's figures, samples and (by distance) time gap.
      *
      *     Raises:
-     *         HTTPException: 422 for too few or too many rides, the same ride twice, a smoothing
+     *         ServiceError: A 422 for too few or too many rides, the same ride twice, a smoothing
      *             window not in ``SMOOTHING_S``, or lining up by distance when a ride has none.
-     *             Unknown rides are a 404 listing them all (``missing``).
+     *         MissingRides: Unknown rides, a 404 listing them all (``missing``).
      */
     get: operations['compare_api_compare_get']
     put?: never
@@ -471,7 +471,7 @@ export interface paths {
      *         How many rides changed (each ride once, however often it was named).
      *
      *     Raises:
-     *         HTTPException: The patch changes nothing (a 422).
+     *         NothingToChange: The patch changes nothing (a 422).
      *         MissingRides: Rides aren't in the library (a 404 listing them).
      *         BikeNotFound: ``bike_id`` isn't a bike (a 404).
      *         InvalidTag: A tag is empty, too long or has a comma (a 422).
@@ -664,7 +664,7 @@ export interface paths {
      *         The time column and each requested column.
      *
      *     Raises:
-     *         HTTPException: 422 if a field isn't one of ``STREAM_FIELDS``.
+     *         UnknownStreamFields: A field isn't one of ``STREAM_FIELDS`` (a 422).
      */
     get: operations['get_streams_api_rides__ref__streams_get']
     put?: never

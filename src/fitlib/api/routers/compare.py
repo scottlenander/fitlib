@@ -4,21 +4,12 @@ from __future__ import annotations
 
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Query
 
-from fitlib.analysis.compare import (
-    DEFAULT_POINTS,
-    MAX_RIDES,
-    MIN_RIDES,
-    SMOOTHING_S,
-    NoDistance,
-    align,
-    has_distance,
-)
-from fitlib.analysis.training import athlete_profile, training
 from fitlib.api.deps import StoresDep
-from fitlib.api.routers.rides import find_rides
 from fitlib.api.schemas import ComparedRide, Comparison, ride_detail
+from fitlib.services import compare as comparing
+from fitlib.services.compare import DEFAULT_POINTS, MAX_RIDES, MIN_RIDES, SMOOTHING_S
 
 router = APIRouter(prefix="/compare", tags=["compare"])
 
@@ -61,47 +52,23 @@ def compare(
         The shared axis and each ride's figures, samples and (by distance) time gap.
 
     Raises:
-        HTTPException: 422 for too few or too many rides, the same ride twice, a smoothing
+        ServiceError: A 422 for too few or too many rides, the same ride twice, a smoothing
             window not in ``SMOOTHING_S``, or lining up by distance when a ride has none.
-            Unknown rides are a 404 listing them all (``missing``).
+        MissingRides: Unknown rides, a 404 listing them all (``missing``).
     """
-    if not MIN_RIDES <= len(ids) <= MAX_RIDES:
-        raise HTTPException(
-            status_code=422,
-            detail=f"Compare {MIN_RIDES} to {MAX_RIDES} rides; got {len(ids)}",
-        )
-    if smooth not in SMOOTHING_S:
-        raise HTTPException(
-            status_code=422,
-            detail=f"Smoothing must be one of {list(SMOOTHING_S)} seconds; got {smooth}",
-        )
-    rides = find_rides(stores, ids)
-    if len({r.id for r in rides}) < len(rides):
-        raise HTTPException(status_code=422, detail="The same ride is asked for more than once")
-    frames = [stores.streams.get(r.id, r.summary.start) for r in rides]
-    can_align_distance = all(has_distance(frame) for frame in frames)
-    by = align_by or ("distance" if can_align_distance else "time")
-    try:
-        aligned = align(frames, by, smooth, points)
-    except NoDistance as exc:
-        raise HTTPException(
-            status_code=422,
-            detail=f"{rides[exc.index].display_name} recorded no distance, so the rides "
-            "can't be lined up by it; line them up by time instead",
-        ) from exc
-    bikes = {b.id: b for b in stores.catalog.list_bikes()}
-    athlete = athlete_profile(stores.catalog)
+    found = comparing.compare(stores, ids, align_by, smooth, points)
+    aligned = found.aligned
     return Comparison(
         align=aligned.align,
-        smooth=smooth,
-        can_align_distance=can_align_distance,
+        smooth=found.smooth,
+        can_align_distance=found.can_align_distance,
         x=aligned.x,
         rides=[
             ComparedRide(
-                ride=ride_detail(ride, training(stores.catalog, ride, athlete), bikes),
+                ride=ride_detail(view),
                 series=series,
                 gap=aligned.gap[i] if aligned.gap is not None else None,
             )
-            for i, (ride, series) in enumerate(zip(rides, aligned.series, strict=True))
+            for i, (view, series) in enumerate(zip(found.views, aligned.series, strict=True))
         ],
     )

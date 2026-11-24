@@ -12,10 +12,7 @@ from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn
 from rich.table import Table
 
 from fitlib import display
-from fitlib.analysis.compare import MAX_RIDES, MIN_RIDES
-from fitlib.analysis.similar import similar_efforts, similar_routes
 from fitlib.analysis.timezone import default_zone
-from fitlib.analysis.training import athlete_profile, training
 from fitlib.cli.common import (
     EXIT_IMPORT_FAILURES,
     UnitsOption,
@@ -30,19 +27,19 @@ from fitlib.cli.common import (
     tags_from,
 )
 from fitlib.cli.output import print_report, print_ride, print_tss_notes, section, tss_text
-from fitlib.delete import delete_rides
 from fitlib.importer import Importer
 from fitlib.ingest.scanner import scan
 from fitlib.ingest.summarize import METRICS_VERSION
-from fitlib.metadata import KEEP, MetaEdit, apply_edit
+from fitlib.metadata import KEEP, MetaEdit
 from fitlib.metrics.curves import best_at
-from fitlib.metrics.zwift import UnknownWorld, WorldNeedsZwift, in_world
 from fitlib.models import (
     Filters,
     SortKey,
     Source,
 )
 from fitlib.recompute import Recomputer
+from fitlib.services import rides as ride_service
+from fitlib.services.compare import MAX_RIDES, MIN_RIDES, compared_rides
 from fitlib.store.interfaces import (
     AmbiguousRideId,
     RideNotFound,
@@ -189,20 +186,13 @@ def list_(
         min_rpe=min_rpe,
         max_rpe=max_rpe,
     )
-    if world is not None:
-        try:
-            filters = in_world(filters, world)
-        except (UnknownWorld, WorldNeedsZwift) as exc:
-            raise fail(str(exc)) from None
     with library(ctx) as lib:
-        catalog = lib.stores.catalog
         if bike is not None:
-            filters = replace(filters, bike_id=find_bike(catalog, bike).id)
-        page = catalog.search(filters, sort=sort, descending=not asc, offset=offset, limit=limit)
-        athlete = athlete_profile(catalog)
-        loads = {ride.id: training(catalog, ride, athlete) for ride in page.items}
+            filters = replace(filters, bike_id=find_bike(lib.stores.catalog, bike).id)
+        found = ride_service.list_rides(lib.stores, filters, world, sort, not asc, offset, limit)
         chosen = lib.units(units)
 
+    page = found.page
     if not page.items:
         out.print("No rides found.")
         return
@@ -211,9 +201,8 @@ def list_(
     for column in ("ID", "Date", "Time", "Distance", "Power", "HR", "TSS"):
         table.add_column(column, no_wrap=True)
     table.add_column("Name")
-    for ride in page.items:
-        r = ride.summary
-        t = loads[ride.id]
+    for view in found.views:
+        ride, r = view.ride, view.ride.summary
         table.add_row(
             ride.short_id,
             display.date(r.local_start or r.start),
@@ -221,13 +210,13 @@ def list_(
             display.distance(r.distance_m, chosen),
             display.watts(r.avg_power),
             display.bpm(r.avg_hr),
-            tss_text(t),
+            tss_text(view.figures),
             ride.display_name,
         )
     out.print(table)
     shown_to = page.offset + len(page.items)
     out.print(f"Showing {page.offset + 1}–{shown_to} of {page.total}.")
-    print_tss_notes(loads.values())
+    print_tss_notes(v.figures for v in found.views)
 
 
 @app.command(help="Show one ride's summary.")
@@ -247,13 +236,10 @@ def show(
         typer.Exit: No ride matches, or the prefix matches several (code 2).
     """
     with library(ctx) as lib:
-        catalog = lib.stores.catalog
-        found = find_ride(catalog, ride)
-        figures = training(catalog, found)
-        bike = catalog.get_bike(found.meta.bike_id) if found.meta.bike_id else None
+        view = ride_service.ride_view(lib.stores, ride)
         chosen = lib.units(units)
-        zone = default_zone(catalog)
-    print_ride(found, figures, chosen, bike, zone)
+        zone = default_zone(lib.stores.catalog)
+    print_ride(view, chosen, zone)
 
 
 @app.command(help="List rides on the same route as a ride, or with a similar effort (--effort).")
@@ -279,69 +265,65 @@ def similar(
         typer.Exit: No ride matches, or the prefix matches several (code 2).
     """
     with library(ctx) as lib:
-        catalog = lib.stores.catalog
-        found = find_ride(catalog, ride)
+        matched = ride_service.similar(lib.stores, ride, "effort" if effort else "route", limit)
         chosen = lib.units(units)
-        athlete = athlete_profile(catalog)
-        if effort:
-            efforts = similar_efforts(catalog, found, limit)
-            figures = {m.ride.id: training(catalog, m.ride, athlete) for m in efforts}
-        else:
-            routes = similar_routes(catalog, found, limit)
-            has_route = bool(catalog.route_cells(found.id))
+
+    found, matches = matched.ride, matched.matches
 
     # Default names have the date and time already; a name set by hand gets the date added.
     title = found.display_name
     if found.meta.name:
         title += f" ({display.date(found.summary.local_start or found.summary.start)})"
     if effort:
-        if not efforts:
+        if not matches:
             out.print(f"No rides with a similar effort to {title}.")
             return
         section(f"Similar efforts to {title}")
         table = Table(box=None)
         for column in ("ID", "Date", "Time", "Distance", "NP", "TSS", "Similarity", "Name"):
             table.add_column(column, no_wrap=column != "Name")
-        for match in efforts:
-            r = match.ride.summary
+        for match in matches:
+            other = match.view.ride
+            r = other.summary
             table.add_row(
-                match.ride.short_id,
+                other.short_id,
                 display.date(r.local_start or r.start),
                 display.duration(r.moving_s),
                 display.distance(r.distance_m, chosen),
                 display.watts(r.np),
-                tss_text(figures[match.ride.id]),
+                tss_text(match.view.figures),
                 f"{match.similarity}",
-                match.ride.display_name,
+                other.display_name,
             )
         out.print(table)
-        print_tss_notes(figures.values())
+        print_tss_notes(m.view.figures for m in matches)
         return
 
-    if not has_route:
+    if not matched.has_route:
         if found.metrics_version < METRICS_VERSION and found.summary.has_gps:
             out.print("This ride was imported before routes were recorded; run `fitlib recompute`.")
         else:
             out.print(f"{title} has no GPS positions, so it has no route to match.")
         return
-    if not routes:
+    if not matches:
         out.print(f"No other rides share the route of {title}.")
         return
     section(f"Rides on the route of {title}")
     table = Table(box=None)
     for column in ("ID", "Date", "Time", "Distance", "Power", "Overlap", "Route", "Name"):
         table.add_column(column, no_wrap=column != "Name")
-    for match in routes:
-        r = match.ride.summary
+    for match in matches:
+        other = match.view.ride
+        r = other.summary
         table.add_row(
-            match.ride.short_id,
+            other.short_id,
             display.date(r.local_start or r.start),
             display.duration(r.moving_s),
             display.distance(r.distance_m, chosen),
             display.watts(r.avg_power),
-            f"{match.overlap:.0%}",
+            f"{match.overlap or 0:.0%}",
             "same" if match.same_route else "partly",
-            match.ride.display_name,
+            other.display_name,
         )
     out.print(table)
     out.print("Overlap: how much of this ride's route the other ride covered.")
@@ -367,16 +349,11 @@ def compare(
         typer.Exit: Too few or too many rides, the same ride twice, or a ride that can't be
             found (code 2).
     """
-    if not MIN_RIDES <= len(rides) <= MAX_RIDES:
-        raise fail(f"Compare {MIN_RIDES} to {MAX_RIDES} rides; got {len(rides)}.")
     with library(ctx) as lib:
-        catalog = lib.stores.catalog
-        found = [find_ride(catalog, ref) for ref in rides]
-        if len({r.id for r in found}) < len(found):
-            raise fail("The same ride is given more than once.")
+        views = compared_rides(lib.stores, rides)
         chosen = lib.units(units)
-        athlete = athlete_profile(catalog)
-        figures = [training(catalog, r, athlete) for r in found]
+    found = [v.ride for v in views]
+    figures = [v.figures for v in views]
 
     rows = {
         "Name": [r.display_name for r in found],
@@ -463,7 +440,6 @@ def edit(
 
     with library(ctx) as lib:
         catalog = lib.stores.catalog
-        found = list({r.id: r for r in (find_ride(catalog, ref) for ref in rides)}.values())
         bike_id = find_bike(catalog, bike).id if bike is not None else None
         change = MetaEdit(
             name=None if clear_name else (KEEP if name is None else name),
@@ -473,8 +449,7 @@ def edit(
             add_tags=add,
             remove_tags=remove,
         )
-        catalog.update_metas({r.id: apply_edit(r.meta, change) for r in found})
-        updated = [catalog.get_ride(r.id) for r in found]
+        updated = ride_service.edit_rides(lib.stores, rides, change)
         bikes = {b.id: b.name for b in catalog.list_bikes()}
 
     table = Table("ID", "Name", "Bike", "Effort", "Tags", box=None)
@@ -521,7 +496,7 @@ def delete(
         ):
             out.print("Nothing deleted.")
             raise typer.Exit(1)
-        delete_rides(s.catalog, s.blobs, s.streams, list(found))
+        ride_service.delete_rides(s, list(found))
     out.print(f"Deleted {count}.")
 
 
