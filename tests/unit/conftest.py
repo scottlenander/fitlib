@@ -6,8 +6,8 @@ from dataclasses import dataclass
 
 import pytest
 
-from fitlib.importer import Importer, ImportReport
 from fitlib.models import Ride
+from fitlib.services.importing import Importer, ImportReport
 from fitlib.store.factory import Stores
 from fitlib.store.memory import MemoryBlobStore, MemoryCatalog
 from fitlib.store.streams import StreamStore

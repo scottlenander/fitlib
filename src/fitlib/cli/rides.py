@@ -27,7 +27,6 @@ from fitlib.cli.common import (
     tags_from,
 )
 from fitlib.cli.output import print_report, print_ride, print_tss_notes, section, tss_text
-from fitlib.importer import Importer
 from fitlib.ingest.scanner import scan
 from fitlib.ingest.summarize import METRICS_VERSION
 from fitlib.metadata import KEEP, MetaEdit
@@ -37,9 +36,10 @@ from fitlib.models import (
     SortKey,
     Source,
 )
-from fitlib.recompute import Recomputer
 from fitlib.services import rides as ride_service
 from fitlib.services.compare import MAX_RIDES, MIN_RIDES, compared_rides
+from fitlib.services.importing import Importer
+from fitlib.services.recompute import Recomputer
 from fitlib.store.interfaces import (
     AmbiguousRideId,
     RideNotFound,

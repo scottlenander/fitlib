@@ -29,8 +29,8 @@ from fitlib.api.routers import watch as watch_routes
 from fitlib.api.security import LOOPBACK_HOSTS, LocalOnly
 from fitlib.api.static import default_static_dir, mount_app
 from fitlib.config import Config
+from fitlib.services.watching import Watcher
 from fitlib.store.factory import open_stores
-from fitlib.watcher import Watcher
 
 
 def create_app(

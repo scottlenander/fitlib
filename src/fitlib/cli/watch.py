@@ -10,9 +10,9 @@ from rich.table import Table
 
 from fitlib.cli.common import app, fail, library, out
 from fitlib.cli.output import print_report, section
-from fitlib.importer import ImportReport
 from fitlib.models import WatchOutcome
-from fitlib.watcher import BadWatchFolder, check_folder, scan, watch_folder
+from fitlib.services.importing import ImportReport
+from fitlib.services.watching import BadWatchFolder, check_folder, scan, watch_folder
 
 watch_app = typer.Typer(
     help="Folders whose new rides are imported while `fitlib serve` runs.",

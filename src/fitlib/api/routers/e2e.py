@@ -19,9 +19,9 @@ from fastapi import APIRouter, HTTPException, Request, Response
 from fitlib.api.deps import ConfigDep, StoresDep
 from fitlib.api.routers.imports import ImportResult, import_result
 from fitlib.config import Config
-from fitlib.importer import Importer
 from fitlib.metadata import default_bike
 from fitlib.models import RideMeta
+from fitlib.services.importing import Importer
 from fitlib.services.rides import delete_rides, find_ride
 from fitlib.store.factory import open_stores
 

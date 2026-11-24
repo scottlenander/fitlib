@@ -9,10 +9,10 @@ import typer
 from rich.table import Table
 
 from fitlib import display
-from fitlib.analysis.bikes import NO_BIKE
 from fitlib.cli.common import UnitsOption, bikes_app, fail, find_bike, library, out
 from fitlib.models import BikeDefault, BikeKind, BikeSlot
 from fitlib.services import bikes as bike_service
+from fitlib.services.bikes import NO_BIKE
 from fitlib.store.interfaces import DuplicateBike
 
 

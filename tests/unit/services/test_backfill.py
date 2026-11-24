@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from datetime import date
 
-from fitlib.analysis.bikes import NO_BIKE, backfill_bikes
 from fitlib.models import Bike, BikeDefault, BikeSlot, Filters, RideMeta
+from fitlib.services.bikes import NO_BIKE, backfill_bikes
 from tests.unit.conftest import ImportedLibrary
 
 GIANT = Bike(id="b1000000-0000-4000-8000-000000000001", name="Giant Contend 1")

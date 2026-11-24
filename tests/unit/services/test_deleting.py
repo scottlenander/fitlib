@@ -6,8 +6,8 @@ from datetime import UTC, datetime
 
 import pytest
 
-from fitlib.delete import delete_rides
-from fitlib.importer import Importer
+from fitlib.services.deleting import delete_rides
+from fitlib.services.importing import Importer
 from fitlib.store.interfaces import RideNotFound
 from fitlib.store.streams import raw_key
 from tests.fixtures.generate import FIT_DIR

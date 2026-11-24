@@ -8,7 +8,6 @@ from typing import Literal
 
 import polars as pl
 
-from fitlib import delete as deleting
 from fitlib.analysis import similar as matching
 from fitlib.analysis import trends
 from fitlib.ingest.normalize import VALUE_COLUMNS
@@ -16,6 +15,7 @@ from fitlib.metadata import MetaEdit, apply_edit
 from fitlib.metrics.track import Track, ride_track
 from fitlib.metrics.zwift import world_by_slug, zwift_world
 from fitlib.models import Filters, Page, Ride, SortKey, Source
+from fitlib.services import deleting
 from fitlib.services.context import RideContext, RideView
 from fitlib.services.errors import NothingToChange, UnknownStreamFields, WorldNeedsZwift
 from fitlib.store.factory import Stores

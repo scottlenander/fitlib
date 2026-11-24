@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from fitlib.config import Config
-from fitlib.importer import Importer
+from fitlib.services.importing import Importer
 from fitlib.store.factory import (
     Stores,
     latest_schema_version,

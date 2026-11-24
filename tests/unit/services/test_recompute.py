@@ -6,7 +6,7 @@ from dataclasses import replace
 
 from fitlib.ingest.summarize import METRICS_VERSION
 from fitlib.models import OffsetSource, RideMeta
-from fitlib.recompute import Recomputer
+from fitlib.services.recompute import Recomputer
 from fitlib.store.streams import raw_key
 from tests.unit.conftest import ImportedLibrary
 

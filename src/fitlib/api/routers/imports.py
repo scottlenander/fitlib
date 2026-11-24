@@ -17,8 +17,8 @@ from fastapi import APIRouter, File, Query, Request, UploadFile
 from pydantic import BaseModel
 
 from fitlib.api.deps import StoresDep
-from fitlib.importer import Importer, ImportReport
 from fitlib.ingest.scanner import FIT_SUFFIX, ZIP_SUFFIX
+from fitlib.services.importing import Importer, ImportReport
 
 router = APIRouter(prefix="/imports", tags=["imports"])
 
