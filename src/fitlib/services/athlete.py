@@ -48,7 +48,7 @@ def athlete_today(catalog: CatalogStore, today: date | None = None) -> AthleteTo
     day = today or date.today()
     profile = athlete_profile(catalog)
     history = sorted(profile.history, key=lambda e: e.effective_from)
-    threshold, source = threshold_today(catalog, profile, day)
+    threshold, source = threshold_today(profile, day)
     return AthleteToday(
         history=history,
         today=day,

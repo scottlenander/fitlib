@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import shutil
+import statistics
 import sys
 import tempfile
 import time
@@ -23,9 +24,12 @@ from pathlib import Path
 # Make the repo root importable (for tests.fixtures), also in spawned worker processes.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from fastapi.testclient import TestClient  # noqa: E402
+
 from fitlib.analysis import trends  # noqa: E402
 from fitlib.analysis.similar import similar_efforts, similar_routes  # noqa: E402
 from fitlib.analysis.training import athlete_profile, training  # noqa: E402
+from fitlib.api.app import create_app  # noqa: E402
 from fitlib.config import Config  # noqa: E402
 from fitlib.models import Filters, SortKey  # noqa: E402
 from fitlib.services.importing import Importer  # noqa: E402
@@ -67,6 +71,17 @@ def timed(label: str, fn):
     result = fn()
     print(f"  {label:<40} {time.perf_counter() - started:8.3f} s")
     return result
+
+
+def timed_median(label: str, fn, runs: int = 20) -> None:
+    """Time a quick call: the median of several runs, after one to warm up."""
+    fn()
+    times = []
+    for _ in range(runs):
+        started = time.perf_counter()
+        fn()
+        times.append(time.perf_counter() - started)
+    print(f"  {label:<40} {statistics.median(times):8.3f} s  (median of {runs})")
 
 
 def main() -> None:
@@ -111,6 +126,13 @@ def main() -> None:
                 return [training(c, ride, athlete) for ride in page.items]
 
             timed("library page of 50 with training figures", page_with_training)
+            # Whole requests, as the browser makes them: opening the stores, the figures, JSON.
+            client = TestClient(create_app(Config(library=library)), base_url="http://127.0.0.1")
+            ride_id = c.search(limit=1).items[0].id
+            timed_median(
+                "API: library page of 50", lambda: client.get("/api/rides", params={"limit": 50})
+            )
+            timed_median("API: one ride's page", lambda: client.get(f"/api/rides/{ride_id}"))
             timed(
                 "one year, outdoor, > 1 h",
                 lambda: c.search(

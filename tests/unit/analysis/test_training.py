@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 
 from fitlib.analysis.training import (
     AthleteProfile,
     BadBirthYear,
+    EffortHistory,
     athlete_profile,
     set_birth_year,
     threshold_today,
@@ -327,5 +328,73 @@ def test_threshold_today():
     catalog = library(steady(1), steady(2), steady(3))
     athlete = athlete_profile(catalog)
 
-    assert threshold_today(catalog, athlete, date(2025, 8, 10)) == (180, ThresholdSource.RIDES)
-    assert threshold_today(catalog, athlete, date(2025, 12, 1)) == (None, None)
+    assert threshold_today(athlete, date(2025, 8, 10)) == (180, ThresholdSource.RIDES)
+    assert threshold_today(athlete, date(2025, 12, 1)) == (None, None)
+
+
+AUG_1 = datetime(2025, 8, 1, 7, 0, tzinfo=UTC)
+
+
+def efforts(*pairs: tuple[int, float]) -> EffortHistory:
+    """An effort history from ``(days after 1 Aug 2025 07:00, best 20 min)`` pairs.
+
+    Args:
+        *pairs: Each ride's day offset and best 20-minute power.
+
+    Returns:
+        The history.
+    """
+    rides = sorted((AUG_1 + timedelta(days=d), watts) for d, watts in pairs)
+    return EffortHistory(tuple(r[0] for r in rides), tuple(r[1] for r in rides))
+
+
+def test_effort_window_includes_both_ends():
+    """The estimate takes rides from exactly six weeks before up to the moment itself.
+
+    Given: 300 W exactly 42 days before the moment, 200 W at the moment, 400 W a second after.
+    Expect: 0.95 × 300 W; a second later, the 300 W ride is out of the window and the 400 W one in.
+    """
+    history = efforts((0, 300.0), (42, 200.0))
+    later = EffortHistory(
+        (*history.starts, AUG_1 + timedelta(days=42, seconds=1)), (*history.best, 400.0)
+    )
+    moment = AUG_1 + timedelta(days=42)
+
+    assert later.estimated_ftp(moment) == pytest.approx(0.95 * 300)
+    assert later.estimated_ftp(moment + timedelta(seconds=1)) == pytest.approx(0.95 * 400)
+
+
+def test_effort_window_with_nothing_in_it():
+    """No ride in the six weeks up to a moment means no estimate.
+
+    Given: One ride 50 days before the moment, and an empty history.
+    Expect: ``None`` for both.
+    """
+    moment = AUG_1 + timedelta(days=50)
+
+    assert efforts((0, 300.0)).estimated_ftp(moment) is None
+    assert EffortHistory().estimated_ftp(moment) is None
+
+
+def test_effort_history_matches_a_brute_force_over_every_fixture_ride(imported: ImportedLibrary):
+    """Each ride's estimate from the profile is the best stored 20 minutes in its window.
+
+    Given: The fixture library (no FTP set), and a brute force over every ride's stored power
+        curve.
+    Expect: The same estimate for every ride; rides without power skipped.
+    """
+    rides = [imported.catalog.get_ride(i) for i in imported.catalog.ride_ids()]
+    history = athlete_profile(imported.catalog).efforts
+
+    for ride in rides:
+        start = ride.summary.start
+        window = [
+            dict(other.summary.power_curve).get(20 * 60)
+            for other in rides
+            if start - timedelta(days=42) <= other.summary.start <= start
+        ]
+        best = max((w for w in window if w is not None), default=None)
+        expected = 0.95 * best if best else None
+        assert history.estimated_ftp(start) == pytest.approx(expected), (
+            f"{ride.source_name} should have the brute-force estimate"
+        )

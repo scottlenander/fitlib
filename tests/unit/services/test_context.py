@@ -99,3 +99,21 @@ def test_a_view_names_the_bike_and_the_zwift_world(imported: ImportedLibrary):
 
     assert (view.bike, view.world) == (bike, "Watopia")
     assert outdoor.world is None, "An outdoor ride should have no Zwift world"
+
+
+def test_a_page_makes_the_same_queries_whatever_its_size(imported: ImportedLibrary):
+    """Figures for more rides need no more queries: estimates come from the loaded profile.
+
+    Given: The fixture library (no FTP set, so every ride with power estimates one), listed
+        one ride to a page, then eight.
+    Expect: The same catalog calls, the same number of times, for both pages.
+    """
+
+    def calls_for(limit: int) -> Counter[str]:
+        counting = CountingCatalog(imported.catalog)
+        stores = Stores(counting, imported.blobs, imported.streams)  # type: ignore[arg-type]
+        found = rides.list_rides(stores, Filters(), limit=limit)
+        assert len(found.views) == limit
+        return counting.calls
+
+    assert calls_for(1) == calls_for(8)

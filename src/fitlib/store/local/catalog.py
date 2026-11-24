@@ -1066,28 +1066,6 @@ class SqliteCatalog:
             rows = self._db.execute(query + " ORDER BY start_ts, id", params).fetchall()
         return [r["id"] for r in rows]
 
-    def best_effort_between(
-        self, kind: str, duration_s: int, start: datetime, end: datetime
-    ) -> float | None:
-        """Find the best effort over one duration among rides in a time window.
-
-        Args:
-            kind: ``"power"`` or ``"hr"``.
-            duration_s: One of ``CURVE_DURATIONS_S``.
-            start: Earliest ride start (inclusive).
-            end: Latest ride start (inclusive).
-
-        Returns:
-            The highest best average, or ``None`` if no ride in the window has one.
-        """
-        with self._lock:
-            row = self._db.execute(
-                "SELECT MAX(c.value) FROM ride_curves c JOIN rides r ON r.id = c.ride_id "
-                "WHERE c.kind = ? AND c.duration_s = ? AND r.start_ts BETWEEN ? AND ?",
-                (kind, duration_s, _ts(start), _ts(end)),
-            ).fetchone()
-        return row[0]
-
     def trend_rows(self, start: datetime | None, end: datetime | None) -> list[TrendRow]:
         """Read the figures trends need for every ride in a time window, in one go.
 

@@ -225,22 +225,6 @@ class CatalogStore(Protocol):
         """
         ...
 
-    def best_effort_between(
-        self, kind: str, duration_s: int, start: datetime, end: datetime
-    ) -> float | None:
-        """Find the best effort over one duration among rides in a time window.
-
-        Args:
-            kind: ``"power"`` or ``"hr"``.
-            duration_s: One of ``CURVE_DURATIONS_S``.
-            start: Earliest ride start (inclusive).
-            end: Latest ride start (inclusive).
-
-        Returns:
-            The highest best average, or ``None`` if no ride in the window has one.
-        """
-        ...
-
     def trend_rows(self, start: datetime | None, end: datetime | None) -> list[TrendRow]:
         """Read the figures trends need for every ride in a time window, in one go.
 

@@ -575,24 +575,6 @@ def test_ride_ids_by_metrics_version(catalog: CatalogStore):
     assert outdated == [rides[0].id, rides[2].id], "only version-1 rides need recomputing"
 
 
-def test_best_effort_between(catalog: CatalogStore):
-    """The best effort over a duration is found among rides in a time window.
-
-    Given: rides on days 0, 10 and 50 with best 20-minute power of 250, 270 and 300 W.
-    Expect: 270 W for days 0-42; ``None`` for a window with no rides or no such duration.
-    """
-    for day, best in ((0, 250.0), (10, 270.0), (50, 300.0)):
-        catalog.add_ride(make_ride(start=at(day), power_curve=((1200, best),)))
-
-    found = catalog.best_effort_between("power", 1200, at(0), at(42))
-    no_rides = catalog.best_effort_between("power", 1200, at(100), at(142))
-    no_duration = catalog.best_effort_between("power", 3600, at(0), at(42))
-
-    assert found == 270.0
-    assert no_rides is None, "no rides in the window means no best effort"
-    assert no_duration is None, "no ride had a 60-minute effort"
-
-
 def test_trend_rows(catalog: CatalogStore):
     """Trend rows carry each ride's light figures, oldest first, inside the window.
 

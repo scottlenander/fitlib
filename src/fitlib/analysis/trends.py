@@ -7,8 +7,6 @@ local dates, inclusive at both ends.
 
 from __future__ import annotations
 
-from bisect import bisect_left, bisect_right
-from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
 from enum import StrEnum
@@ -295,32 +293,6 @@ def next_period(start: date, period: Period) -> date:
     return (start.replace(day=28) + timedelta(days=4)).replace(day=1)
 
 
-def _estimates(rows: Sequence[TrendRow]) -> list[float | None]:
-    """Estimate FTP for each ride exactly as ``training.estimated_ftp`` does.
-
-    That is ``EFTP_FACTOR`` × the best 20 minutes among rides starting in the
-    ``EFTP_LOOKBACK_DAYS`` up to and including the ride's start.
-
-    Args:
-        rows: Rides, oldest first, including every ride in each one's lookback.
-
-    Returns:
-        The estimate for each row, in order.
-    """
-    starts = [r.start for r in rows]
-    lookback = timedelta(days=load.EFTP_LOOKBACK_DAYS)
-    estimates: list[float | None] = []
-    for row in rows:
-        lo = bisect_left(starts, row.start - lookback)
-        hi = bisect_right(starts, row.start)
-        best = max(
-            (r.best_20min_power for r in rows[lo:hi] if r.best_20min_power is not None),
-            default=None,
-        )
-        estimates.append(load.estimated_ftp(best))
-    return estimates
-
-
 def ride_loads(
     catalog: CatalogStore,
     since: date | None,
@@ -344,14 +316,11 @@ def ride_loads(
     """
     if athlete is None:
         athlete = athlete_profile(catalog)
-    start, end = utc_bounds(since, until)
-    if start is not None:
-        start -= timedelta(days=load.EFTP_LOOKBACK_DAYS)  # the first rides' estimates need these
-    rows = catalog.trend_rows(start, end)
     loads = []
-    for row, estimate in zip(rows, _estimates(rows), strict=True):
+    for row in catalog.trend_rows(*utc_bounds(since, until)):
         if not _in_range(row.local_date, since, until):
             continue
+        estimate = athlete.efforts.estimated_ftp(row.start)
         ftp: float | None = load.values_on(athlete.history, row.local_date).ftp
         estimated = False
         if ftp is None and row.np is not None:
