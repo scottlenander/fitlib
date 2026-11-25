@@ -14,7 +14,7 @@ from fitlib.analysis.trends import BadRange
 from fitlib.ingest.localtime import UnknownTimeZone
 from fitlib.metadata import InvalidTag
 from fitlib.metrics.zwift import UnknownWorld
-from fitlib.services.errors import NotFound, ServiceError
+from fitlib.services.errors import MissingRides, NotFound, ServiceError
 from fitlib.services.watching import AlreadyWatched, BadWatchFolder, NotWatched
 from fitlib.store.interfaces import (
     AmbiguousBike,
@@ -22,7 +22,6 @@ from fitlib.store.interfaces import (
     BikeNotFound,
     BlobNotFound,
     DuplicateBike,
-    MissingRides,
     RideNotFound,
 )
 

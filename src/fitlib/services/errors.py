@@ -7,6 +7,8 @@ app and the command line.
 
 from __future__ import annotations
 
+from fitlib.store.interfaces import RideNotFound
+
 
 class ServiceError(ValueError):
     """A request that can't be done as asked; the message says why."""
@@ -14,6 +16,33 @@ class ServiceError(ValueError):
 
 class NotFound(LookupError):
     """Something asked for isn't in the library; the message says what."""
+
+
+class MissingRides(RideNotFound):
+    """Some of several rides asked for at once aren't in the library.
+
+    A ``RideNotFound``, so anything handling one ride not being found handles this too.
+
+    Args:
+        refs: The ids or prefixes that match no ride.
+
+    Attributes:
+        refs: The ids or prefixes that match no ride, in the order asked.
+    """
+
+    def __init__(self, refs: list[str]):
+        super().__init__(*refs)
+        self.refs = refs
+
+    def __str__(self) -> str:
+        """Say how many rides weren't found, readably.
+
+        Returns:
+            E.g. "2 rides are no longer in the library (they may have been deleted)".
+        """
+        if len(self.refs) == 1:
+            return "1 ride is no longer in the library (it may have been deleted)"
+        return f"{len(self.refs)} rides are no longer in the library (they may have been deleted)"
 
 
 class NothingToChange(ServiceError):
