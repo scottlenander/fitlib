@@ -7,7 +7,7 @@ from dataclasses import replace
 from fitlib.ingest.summarize import METRICS_VERSION
 from fitlib.models import OffsetSource, RideMeta
 from fitlib.services.recompute import Recomputer
-from fitlib.store.streams import raw_key
+from fitlib.store.streams import raw_key, stream_key
 from tests.unit.conftest import ImportedLibrary
 
 ZWIFT = "2025-08-02-08-29-42.fit"
@@ -150,3 +150,61 @@ def test_missing_original_file_is_reported(imported: ImportedLibrary):
 
     assert report.failed == [(first.id, "the original file is missing")]
     assert report.updated == [second.id]
+
+
+def test_stopping_starts_no_more_rides(imported: ImportedLibrary):
+    """Once asked to stop, the recompute starts no more rides, and the rest stay outdated.
+
+    Given: two downgraded rides; ``should_stop`` false before the first, true before the second.
+    Expect: the first updated; the second not touched and still outdated.
+    """
+    first = downgrade(imported, ZWIFT)
+    second = downgrade(imported, "garmin_nord_pause_10min.fit")
+    answers = iter([False, True])
+    rc = recomputer(imported)
+
+    report = rc.run([first, second], should_stop=lambda: next(answers))
+
+    assert report.updated == [first]
+    assert rc.outdated() == [second], "the ride not started should still be outdated"
+
+
+def test_a_ride_deleted_before_its_turn_is_skipped(imported: ImportedLibrary):
+    """A ride deleted before the recompute reaches it is counted as gone, not as a failure.
+
+    Given: two rides, the first deleted before the run.
+    Expect: the first in ``gone`` (and reported to ``on_progress``), the second updated.
+    """
+    first = imported.ride(ZWIFT).id
+    second = imported.ride("garmin_nord_pause_10min.fit").id
+    imported.catalog.delete_rides([first], remember=False)
+    handled: list[str] = []
+
+    report = recomputer(imported).run([first, second], on_progress=handled.append)
+
+    assert report.gone == [first]
+    assert (report.updated, report.failed) == ([second], [])
+    assert handled == [first, second], "progress should count the deleted ride too"
+
+
+def test_a_ride_deleted_while_being_worked_out_is_skipped(imported: ImportedLibrary):
+    """A ride deleted after its file was read leaves no stream behind.
+
+    Given: two rides worked out in this process; the second deleted from the catalog as soon
+    as the first has been stored (both are already read by then).
+    Expect: the second in ``gone`` and its new stream removed; the first updated.
+    """
+    first = imported.ride(ZWIFT)
+    second = imported.ride("garmin_nord_pause_10min.fit")
+
+    def delete_second(ride_id: str) -> None:
+        if ride_id == first.id:
+            imported.catalog.delete_rides([second.id], remember=False)
+
+    report = recomputer(imported).run([first.id, second.id], on_progress=delete_second)
+
+    assert report.updated == [first.id]
+    assert report.gone == [second.id]
+    assert not imported.blobs.exists(stream_key(second.id, second.summary.start)), (
+        "the deleted ride's new stream should be removed"
+    )

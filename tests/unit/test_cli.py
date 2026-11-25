@@ -14,6 +14,7 @@ from typer.testing import CliRunner
 
 from fitlib.cli import EXIT_ERROR, EXIT_IMPORT_FAILURES, app
 from fitlib.config import Config
+from fitlib.services.recompute import Recomputer, RecomputeReport
 from fitlib.services.watching import Watcher
 from fitlib.store.factory import open_stores
 from tests.clients import LOCAL
@@ -1332,3 +1333,23 @@ def test_import_skips_deleted_rides_unless_asked(imported: Path):
     assert "deleted before 1" in skipped.output
     assert "--include-deleted brings them back" in skipped.output
     assert "Imported 1," in back.output
+
+
+def test_recompute_says_when_rides_were_deleted_meanwhile(
+    imported: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """``fitlib recompute`` says how many rides went while it ran, without failing.
+
+    Given: a recompute whose report has one ride gone (deleted from the browser app meanwhile).
+    Expect: "1 ride was deleted meanwhile, so skipped." and exit code 0.
+    """
+    ride_id = ride_prefix(imported, "2025-08-12", "2025-08-13")
+
+    def run_gone(self, ride_ids, on_progress=None, should_stop=None):
+        return RecomputeReport(gone=list(ride_ids))
+
+    monkeypatch.setattr(Recomputer, "run", run_gone)
+    result = run(imported, "recompute", ride_id)
+
+    assert "1 ride was deleted meanwhile, so skipped." in result.output
+    assert result.exit_code == 0, "a deleted ride should not count as a failure"
