@@ -478,7 +478,7 @@ search find rides by their new names (with the start time).
 | `fitlib/sync/` | Optional encrypted backup: `crypto.py` (sealed objects, object names, the passphrase keyfile), `keys.py` (Keychain), `engine.py` (setup, push, status, restore) |
 | `fitlib/api/` | FastAPI app: `app.py` builds it, `routers/` one per area (endpoints only), `schemas/` the request/response models and the code building them, one module per router, `errors.py` error responses, `security.py` refusing other sites and adding security headers, `static.py` the browser app's files |
 | `fitlib/cli/` | The `fitlib` command: `rides`, `bikes`, `athlete`, `timezone`, `trends`, `watch`, `sync` and `serve` commands, shared `common` helpers and `output` printing |
-| `web/` | The browser app (React, Vite, TanStack Query, ECharts, Leaflet for maps): `src/pages/`, `src/components/`, `src/api/` (typed client; `schema.d.ts` is generated), `src/format.ts` (units and figures, as `display.py`) |
+| `web/` | The browser app (React, Vite, TanStack Query, ECharts, Leaflet for maps): one folder per feature in `src/` holding its page and components (`library/`, `ride/`, `compare/`, `trends/`, `map/`, `bikes/`, `settings/`, `imports/`), the shell in `app/`, shared parts in `shared/` (e.g. `format.ts`, units and figures as `display.py`) and `charts/`, and `src/api/` (`client.ts` for requests and errors, one module of types and hooks per resource; `schema.d.ts` is generated). ESLint keeps `api/`, `shared/` and `charts/` from importing a feature |
 | `tests/e2e/` | Playwright tests for the browser app; conventions in `.claude/skills/playwright-tests/` |
 
 Only `store/factory.py` chooses a backend; everything else depends on the interfaces. The API
@@ -527,7 +527,7 @@ npm run report                  # the HTML report of the last run
 
 - `tests/unit/` covers the Python modules; `tests/api/` drives the web API through FastAPI's
   test client. Both use the synthetic rides in `tests/fixtures/`.
-- `web/src/*.test.ts` are Vitest unit tests for the browser app's logic.
+- `web/src/**/*.test.ts` are Vitest unit tests for the browser app's logic, next to the module each tests.
 - `tests/e2e/` drives the built app in Chromium. `scripts/e2e-server` builds `web/` if its
   sources changed, imports the fixtures into a fresh temp library and serves it in e2e mode.
   Locally Playwright reuses a server that's already running (without re-importing); stop it
@@ -745,7 +745,7 @@ being written, and nothing watched),
   then one copied in, and e2e mode keeping to the temp folder) and route progress (the loop
   oldest first, rides alone or without GPS,
   unknown rides).
-- **Browser app unit tests** (`web/src/*.test.ts`): durations, distances, speeds, heights and
+- **Browser app unit tests** (`web/src/**/*.test.ts`): durations, distances, speeds, heights and
   weights in both unit systems, and weights typed in either; local versus UTC start times; the
   library's URL state (reading, writing, defaults, every filter, turning it into an API
   query, the World filter dropping another source and the other way round); where a ride's

@@ -22,7 +22,7 @@ All commands run from `tests/e2e/` unless noted.
 | `libs/constants.ts` | `RIDES` (the fixture rides, with who uses them) and `UPLOADS` (fixture files that are never in the library). |
 | `libs/testData.ts` | `TestData`: ride ids and set-up shortcuts through the `/e2e/...` routes. |
 
-The app side: React pages in `web/src/pages/`, components in `web/src/components/`; e2e-only routes in `src/fitlib/api/routers/e2e.py`; the fixture rides are generated from `tests/fixtures/specs.py`.
+The app side: one folder per feature in `web/src/` (`library/`, `ride/`, `compare/`, `trends/`, `map/`, `bikes/`, `settings/`, `imports/`, with the shell in `app/` and shared parts in `shared/` and `charts/`), each holding its page and components; e2e-only routes in `src/fitlib/api/routers/e2e.py`; the fixture rides are generated from `tests/fixtures/specs.py`.
 
 ## Writing or changing a test
 

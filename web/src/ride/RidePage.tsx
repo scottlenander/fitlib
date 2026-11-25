@@ -1,0 +1,255 @@
+import { lazy, Suspense, useState } from 'react'
+import { Link, useParams } from 'react-router'
+import { ApiError } from '../api/client'
+import { useRide, type RideDetail } from '../api/rides'
+import { useSettings } from '../api/settings'
+import { RideDetails } from './RideDetails'
+import { RideMapSection } from '../map/RideMapSection'
+import { RouteProgress } from './RouteProgress'
+import { ScrollBox } from '../shared/ScrollBox'
+import { SimilarRides } from './SimilarRides'
+import { Stats, type Stat } from '../shared/Stats'
+import { ZoneTable } from './ZoneTable'
+import * as f from '../shared/format'
+import { timeZoneNote } from './timeZone'
+import { THRESHOLD_NOTES } from '../shared/tss'
+import { useUnits } from '../shared/units'
+import { usePageTitle } from '../app/usePageTitle'
+
+// Charts (and ECharts with them) load only when a ride is opened.
+const TraceChart = lazy(() => import('./TraceChart').then((m) => ({ default: m.TraceChart })))
+const BestEfforts = lazy(() => import('./CurveChart').then((m) => ({ default: m.BestEfforts })))
+
+const SOURCE_LABELS: Record<string, string> = { zwift: 'Zwift', garmin: 'Garmin', other: 'Other' }
+
+export function RidePage() {
+  const { id = '' } = useParams()
+  const ride = useRide(id)
+  usePageTitle(ride.data?.name ?? (ride.isError ? 'Ride not found' : 'Ride'))
+
+  if (ride.isPending) return <p>Loading ride…</p>
+  if (ride.isError) {
+    const notFound = ride.error instanceof ApiError && ride.error.status === 404
+    return (
+      <>
+        <h1>{notFound ? 'Ride not found' : "Couldn't load this ride"}</h1>
+        <p role="alert">{ride.error.message}</p>
+        <p>
+          <Link to="/">Back to the library</Link>
+        </p>
+      </>
+    )
+  }
+  return <Ride ride={ride.data} />
+}
+
+function Ride({ ride }: { ride: RideDetail }) {
+  const { units } = useUnits()
+  const t = ride.training
+  const where = ride.indoor ? 'Indoor' : 'Outdoor'
+
+  const summary: Stat[] = [
+    { label: 'Moving time', value: f.duration(ride.moving_s) },
+    { label: 'Elapsed time', value: f.duration(ride.elapsed_s) },
+    { label: 'Distance', value: f.distance(ride.distance_m, units) },
+    { label: 'Climbing', value: f.elevation(ride.ascent_m, units) },
+    { label: 'Avg speed', value: f.speed(ride.avg_speed_mps, units) },
+    { label: 'Max speed', value: f.speed(ride.max_speed_mps, units) },
+    ...(ride.has_power
+      ? [
+          { label: 'Avg power', value: f.watts(ride.avg_power) },
+          { label: 'Max power', value: f.watts(ride.max_power) },
+          { label: 'NP', value: f.watts(ride.np) },
+          { label: 'Work', value: f.kilojoules(ride.kj) },
+        ]
+      : []),
+    ...(ride.has_hr
+      ? [
+          { label: 'Avg heart rate', value: f.bpm(ride.avg_hr) },
+          { label: 'Max heart rate', value: f.bpm(ride.max_hr) },
+        ]
+      : []),
+    ...(ride.avg_cadence !== null ? [{ label: 'Cadence', value: f.rpm(ride.avg_cadence) }] : []),
+  ]
+
+  const training: Stat[] = [
+    // FTP-based figures only mean something for rides with power.
+    ...(ride.has_power && t.ftp !== null
+      ? [
+          {
+            label: 'FTP',
+            value: f.watts(t.ftp),
+            note: t.ftp_estimated ? '(estimated)' : undefined,
+          },
+        ]
+      : []),
+    ...(ride.has_power
+      ? [
+          { label: 'IF', value: f.ratio(t.intensity_factor) },
+          { label: 'TSS', value: f.tss(t.tss) },
+          { label: 'VI', value: f.ratio(ride.vi) },
+        ]
+      : []),
+    // Without power, TSS comes from heart rate against the threshold heart rate.
+    ...(!ride.has_power && t.tss_source === 'hr'
+      ? [
+          { label: 'TSS', value: f.tss(t.tss), note: '(from heart rate)' },
+          {
+            label: 'Threshold HR',
+            value: f.bpm(t.threshold_hr),
+            note: THRESHOLD_NOTES[t.threshold_hr_source ?? 'set'],
+          },
+        ]
+      : []),
+    ...(t.watts_per_kg !== null ? [{ label: 'W/kg', value: f.wattsPerKg(t.watts_per_kg) }] : []),
+    ...(ride.decoupling_pct !== null
+      ? [{ label: 'Decoupling', value: f.signedPercent(ride.decoupling_pct) }]
+      : []),
+  ]
+
+  return (
+    <article className="ride">
+      <header>
+        <h1>{ride.name}</h1>
+        <p className="subtitle" data-testid="ride-subtitle">
+          {f.startTime(ride.start, ride.local_start)} · {SOURCE_LABELS[ride.source]}
+          {ride.zwift_world ? ` · ${ride.zwift_world}` : ''} · {ride.device ?? 'Unknown device'} ·{' '}
+          {where}
+        </p>
+        <TimeZoneNote ride={ride} />
+      </header>
+
+      <section aria-labelledby="summary-heading">
+        <h2 id="summary-heading">Summary</h2>
+        <Stats stats={summary} testId="summary-stats" />
+      </section>
+
+      {training.length > 0 && (
+        <section aria-labelledby="training-heading">
+          <h2 id="training-heading">Training</h2>
+          <Stats stats={training} testId="training-stats" />
+        </section>
+      )}
+
+      <RideDetails ride={ride} />
+
+      <StatsAndMap ride={ride} />
+
+      {(ride.power_zones || ride.hr_zones) && (
+        <section aria-labelledby="zones-heading" className="zones-section">
+          <h2 id="zones-heading">Zones</h2>
+          {ride.power_zones && <ZoneTable title="Power zones" zones={ride.power_zones} />}
+          {ride.hr_zones && <ZoneTable title="Heart-rate zones" zones={ride.hr_zones} />}
+        </section>
+      )}
+
+      {(ride.power_curve.length > 0 || ride.hr_curve.length > 0) && (
+        <section aria-labelledby="efforts-heading">
+          <h2 id="efforts-heading">Best efforts</h2>
+          <Suspense fallback={<p>Loading chart…</p>}>
+            <BestEfforts power={ride.power_curve} hr={ride.hr_curve} />
+          </Suspense>
+        </section>
+      )}
+
+      {ride.laps.length > 1 && (
+        <section aria-labelledby="laps-heading">
+          <h2 id="laps-heading">Laps</h2>
+          <ScrollBox label="Laps">
+            <table data-testid="laps-table">
+              <caption className="visually-hidden">Laps</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Lap</th>
+                  <th scope="col" className="num">
+                    Start
+                  </th>
+                  <th scope="col" className="num">
+                    Time
+                  </th>
+                  <th scope="col" className="num">
+                    Distance
+                  </th>
+                  <th scope="col" className="num">
+                    Avg power
+                  </th>
+                  <th scope="col" className="num">
+                    Max power
+                  </th>
+                  <th scope="col" className="num">
+                    Avg HR
+                  </th>
+                  <th scope="col" className="num">
+                    Max HR
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {ride.laps.map((lap) => (
+                  <tr key={lap.index}>
+                    <th scope="row">{lap.index + 1}</th>
+                    <td className="num">{f.duration(lap.start_offset_s)}</td>
+                    <td className="num">{f.duration(lap.elapsed_s)}</td>
+                    <td className="num">{f.distance(lap.distance_m, units)}</td>
+                    <td className="num">{f.watts(lap.avg_power)}</td>
+                    <td className="num">{f.watts(lap.max_power)}</td>
+                    <td className="num">{f.bpm(lap.avg_hr)}</td>
+                    <td className="num">{f.bpm(lap.max_hr)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </ScrollBox>
+        </section>
+      )}
+
+      <SimilarRides ride={ride} />
+      <RouteProgress ride={ride} />
+    </article>
+  )
+}
+
+// Where the start time's time zone came from, with a way to Settings when it's the default
+// (or there's none).
+function TimeZoneNote({ ride }: { ride: RideDetail }) {
+  const settings = useSettings()
+  const note = timeZoneNote(ride.time_zone_source, settings.data?.timezone)
+  return (
+    <p className="hint" data-testid="time-zone-note">
+      {note.text}
+      {note.settings && (
+        <>
+          {' '}
+          {note.settings} <Link to="/settings">Settings</Link>.
+        </>
+      )}
+    </p>
+  )
+}
+
+// Ride Stats with the map beside it (when the ride has positions): pointing at the charts
+// shows where on the route that was, and zooming them highlights the stretch. The state
+// lives here so pointer moves redraw only these two.
+function StatsAndMap({ ride }: { ride: RideDetail }) {
+  const [moment, setMoment] = useState<number | null>(null)
+  const [span, setSpan] = useState<[number, number] | null>(null)
+  return (
+    <div className={ride.has_gps ? 'stats-and-map' : undefined}>
+      {ride.has_gps && <RideMapSection ride={ride} moment={moment} span={span} />}
+      <section aria-labelledby="traces-heading" className="stats-section">
+        <h2 id="traces-heading">Ride Stats</h2>
+        <Suspense fallback={<p>Loading chart…</p>}>
+          <TraceChart
+            rideId={ride.id}
+            elapsedS={ride.elapsed_s}
+            hasPower={ride.has_power}
+            hasHr={ride.has_hr}
+            hasDistance={ride.distance_m !== null && ride.distance_m > 0}
+            onMoment={setMoment}
+            onSpan={setSpan}
+          />
+        </Suspense>
+      </section>
+    </div>
+  )
+}
