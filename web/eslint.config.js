@@ -20,6 +20,24 @@ export default tseslint.config(
     files: ['eslint.config.js'],
     ...tseslint.configs.disableTypeChecked,
   },
+  // Shared code never reaches into a feature: api/, shared/ and charts/ are used by the
+  // feature folders (and app/), not the other way round.
+  {
+    files: ['src/api/**', 'src/shared/**', 'src/charts/**'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              regex: '^\\.\\./(app|library|ride|compare|trends|map|imports|bikes|settings)(/|$)',
+              message: 'Shared code must not import from a feature folder or app/.',
+            },
+          ],
+        },
+      ],
+    },
+  },
   // Last: turn off rules that conflict with Prettier's formatting.
   prettier,
 )
