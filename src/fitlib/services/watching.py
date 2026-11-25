@@ -19,7 +19,6 @@ import os
 import threading
 import time
 from collections.abc import Callable, Iterator
-from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -31,7 +30,7 @@ from watchdog.observers.api import BaseObserver, ObservedWatch
 
 from fitlib.models import WatchedFile, WatchFolder, WatchOutcome
 from fitlib.services.importing import Importer, ImportReport
-from fitlib.store.factory import Stores
+from fitlib.store.factory import OpenStores, Stores
 
 log = logging.getLogger(__name__)
 
@@ -48,8 +47,6 @@ TICK_S = 1.0
 SUFFIXES = (".fit", ".zip")
 # Zwift rewrites this file all through a ride; the finished ride gets its own file.
 IGNORED_NAMES = ("inprogressactivity.fit",)
-
-OpenStores = Callable[[], AbstractContextManager[Stores]]
 
 
 class BadWatchFolder(ValueError):

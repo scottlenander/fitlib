@@ -40,6 +40,13 @@ def serve(
             help="Import new rides from the watched folders (fitlib watch add) while serving.",
         ),
     ] = True,
+    recompute: Annotated[
+        bool,
+        typer.Option(
+            "--recompute/--no-recompute",
+            help="Bring rides computed with older calculations up to date in the background.",
+        ),
+    ] = True,
 ) -> None:
     """Serve the API and browser app until stopped.
 
@@ -53,6 +60,7 @@ def serve(
         port: Port to listen on.
         open_browser: Open the app in the default browser (``--open``).
         watch: Watch the library's watched folders while serving (``--no-watch`` to not).
+        recompute: Recompute outdated rides in the background (``--no-recompute`` to not).
 
     Raises:
         typer.Exit: The config is invalid, or e2e mode lacks its fixtures folder or was
@@ -74,6 +82,7 @@ def serve(
             config,
             e2e_fixtures=fixtures,
             watch=watch,
+            recompute=recompute,
             allowed_hosts=None if host not in LOOPBACK else LOOPBACK_HOSTS,
         )
     except UnsafeLibrary as exc:

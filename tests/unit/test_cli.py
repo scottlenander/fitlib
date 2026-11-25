@@ -14,7 +14,7 @@ from typer.testing import CliRunner
 
 from fitlib.cli import EXIT_ERROR, EXIT_IMPORT_FAILURES, app
 from fitlib.config import Config
-from fitlib.services.recompute import Recomputer, RecomputeReport
+from fitlib.services.recompute import BackgroundRecompute, Recomputer, RecomputeReport
 from fitlib.services.watching import Watcher
 from fitlib.store.factory import open_stores
 from tests.clients import LOCAL
@@ -773,6 +773,20 @@ def test_serve_watches_folders_unless_told_not_to(config: Path, served: dict):
 
     assert isinstance(watching, Watcher)
     assert served["app"].state.watcher is None
+
+
+def test_serve_recomputes_outdated_rides_unless_told_not_to(config: Path, served: dict):
+    """``fitlib serve`` brings outdated rides up to date in the background, unless told not to.
+
+    Given: ``serve``, then ``serve --no-recompute``.
+    Expect: a background recompute in the first app, none in the second.
+    """
+    run(config, "serve")
+    recomputing = served["app"].state.recompute
+    run(config, "serve", "--no-recompute")
+
+    assert isinstance(recomputing, BackgroundRecompute)
+    assert served["app"].state.recompute is None
 
 
 def test_serve_warns_when_listening_beyond_this_computer(config: Path, served: dict):

@@ -31,6 +31,6 @@ cd "$ROOT"
 uv run fitlib --config "$WORK/config.toml" import "$FIXTURES" --workers 1 >/dev/null || [[ $? -eq 1 ]]
 
 FITLIB_E2E=1 FITLIB_E2E_FIXTURES="$FIXTURES" \
-  uv run fitlib --config "$WORK/config.toml" serve --port "$PORT" &
+  uv run fitlib --config "$WORK/config.toml" serve --port "$PORT" --no-recompute &
 SERVER=$!
 wait "$SERVER"
