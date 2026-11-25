@@ -15,8 +15,15 @@ export function useSettings() {
   })
 }
 
+// How often to ask again while the server recomputes rides, for the progress.
+export const RECOMPUTE_POLL_MS = 2000
+
 export function useHealth() {
-  return useQuery({ queryKey: ['health'], queryFn: () => request<Health>('/api/health') })
+  return useQuery({
+    queryKey: ['health'],
+    queryFn: () => request<Health>('/api/health'),
+    refetchInterval: (query) => (query.state.data?.recompute ? RECOMPUTE_POLL_MS : false),
+  })
 }
 
 // The Zwift worlds the library can be filtered on.

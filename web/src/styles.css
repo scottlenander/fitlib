@@ -558,6 +558,16 @@ textarea {
   gap: 0.75rem;
 }
 /* The header's toggle is at the window's right edge, so its hint lines up with its right side. */
+/* Quit sits with the header's switches; its own page once the server has stopped. */
+.header-switches {
+  align-items: center;
+}
+
+.stopped {
+  max-width: 36rem;
+  margin: 4rem auto;
+}
+
 .site-header .theme-toggle .tooltip {
   left: auto;
   right: 0;
@@ -590,6 +600,22 @@ textarea {
   border-left: 4px solid var(--accent);
   padding: 0.5rem 0.75rem;
   border-radius: 4px;
+}
+
+/* The server's recompute progress, in a notice. */
+div.notice {
+  margin: 1rem 0;
+}
+
+.notice p {
+  margin: 0;
+}
+
+.notice progress {
+  display: block;
+  width: 100%;
+  margin-top: 0.4rem;
+  accent-color: var(--accent);
 }
 
 /* Compare: picking rides in the library, and the compare page. */

@@ -2,7 +2,8 @@
 # Serve fitlib for the Playwright tests (tests/e2e/): a fresh library in a temp folder with the
 # fixture rides imported, in e2e mode (the /e2e shortcuts on), on $PORT (default 3200).
 # Builds web/ first if it hasn't been built or its sources changed since. The library is
-# deleted when the server stops.
+# deleted when the server stops. The Quit button is on (--allow-quit), but the specs never
+# press its final Quit, which would stop this shared server.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -31,6 +32,6 @@ cd "$ROOT"
 uv run fitlib --config "$WORK/config.toml" import "$FIXTURES" --workers 1 >/dev/null || [[ $? -eq 1 ]]
 
 FITLIB_E2E=1 FITLIB_E2E_FIXTURES="$FIXTURES" \
-  uv run fitlib --config "$WORK/config.toml" serve --port "$PORT" &
+  uv run fitlib --config "$WORK/config.toml" serve --port "$PORT" --no-recompute --allow-quit &
 SERVER=$!
 wait "$SERVER"

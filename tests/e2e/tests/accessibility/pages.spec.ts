@@ -134,6 +134,15 @@ for (const theme of THEMES) {
       await expectNoViolations(page)
     })
 
+    await test.step('The Quit dialog', async () => {
+      await library.goto()
+      await library.header.quit.click()
+      await expect(library.header.quitDialog).toBeVisible()
+      await expectNoViolations(page)
+      // Never confirm: that would stop the shared test server.
+      await library.header.quitCancel.click()
+    })
+
     await test.step('Ride not found', async () => {
       await ride.goto('does-not-exist')
       await expect(ride.notFound).toBeVisible()

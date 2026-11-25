@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import threading
 import webbrowser
+from functools import partial
 from pathlib import Path
 from typing import Annotated
 
@@ -40,6 +41,21 @@ def serve(
             help="Import new rides from the watched folders (fitlib watch add) while serving.",
         ),
     ] = True,
+    recompute: Annotated[
+        bool,
+        typer.Option(
+            "--recompute/--no-recompute",
+            help="Bring rides computed with older calculations up to date in the background.",
+        ),
+    ] = True,
+    allow_quit: Annotated[
+        bool,
+        typer.Option(
+            "--allow-quit",
+            hidden=True,
+            help="Let the browser app stop the server (its Quit button). For the launcher.",
+        ),
+    ] = False,
 ) -> None:
     """Serve the API and browser app until stopped.
 
@@ -53,6 +69,8 @@ def serve(
         port: Port to listen on.
         open_browser: Open the app in the default browser (``--open``).
         watch: Watch the library's watched folders while serving (``--no-watch`` to not).
+        recompute: Recompute outdated rides in the background (``--no-recompute`` to not).
+        allow_quit: Let the browser app stop the server (``--allow-quit``, for the launcher).
 
     Raises:
         typer.Exit: The config is invalid, or e2e mode lacks its fixtures folder or was
@@ -74,6 +92,8 @@ def serve(
             config,
             e2e_fixtures=fixtures,
             watch=watch,
+            recompute=recompute,
+            allow_quit=allow_quit,
             allowed_hosts=None if host not in LOOPBACK else LOOPBACK_HOSTS,
         )
     except UnsafeLibrary as exc:
@@ -88,4 +108,6 @@ def serve(
     err.print(f"fitlib is serving {config.library} at {url}  (Ctrl+C to stop)")
     if open_browser:
         threading.Timer(OPEN_DELAY_S, webbrowser.open, args=[url]).start()
-    uvicorn.run(web, host=host, port=port)
+    server = uvicorn.Server(uvicorn.Config(web, host=host, port=port))
+    web.state.quit = partial(setattr, server, "should_exit", True)
+    server.run()

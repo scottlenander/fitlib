@@ -9,11 +9,13 @@ from datetime import date
 from pathlib import Path
 
 import pytest
+import uvicorn
 from fastapi.testclient import TestClient
 from typer.testing import CliRunner
 
 from fitlib.cli import EXIT_ERROR, EXIT_IMPORT_FAILURES, app
 from fitlib.config import Config
+from fitlib.services.recompute import BackgroundRecompute, Recomputer, RecomputeReport
 from fitlib.services.watching import Watcher
 from fitlib.store.factory import open_stores
 from tests.clients import LOCAL
@@ -712,17 +714,17 @@ def served(monkeypatch: pytest.MonkeyPatch) -> dict:
     """
     calls: dict = {}
 
-    def fake_run(web, host: str, port: int) -> None:
-        """Record the server's arguments instead of running it.
+    def fake_run(server: uvicorn.Server) -> None:
+        """Record the server's settings instead of running it.
 
         Args:
-            web: The app.
-            host: The address.
-            port: The port.
+            server: The server ``serve`` would run.
         """
-        calls.update(app=web, host=host, port=port)
+        calls.update(
+            app=server.config.app, host=server.config.host, port=server.config.port, server=server
+        )
 
-    monkeypatch.setattr("fitlib.cli.serve.uvicorn.run", fake_run)
+    monkeypatch.setattr(uvicorn.Server, "run", fake_run)
     monkeypatch.delenv("FITLIB_E2E", raising=False)
     return calls
 
@@ -772,6 +774,39 @@ def test_serve_watches_folders_unless_told_not_to(config: Path, served: dict):
 
     assert isinstance(watching, Watcher)
     assert served["app"].state.watcher is None
+
+
+def test_serve_recomputes_outdated_rides_unless_told_not_to(config: Path, served: dict):
+    """``fitlib serve`` brings outdated rides up to date in the background, unless told not to.
+
+    Given: ``serve``, then ``serve --no-recompute``.
+    Expect: a background recompute in the first app, none in the second.
+    """
+    run(config, "serve")
+    recomputing = served["app"].state.recompute
+    run(config, "serve", "--no-recompute")
+
+    assert isinstance(recomputing, BackgroundRecompute)
+    assert served["app"].state.recompute is None
+
+
+def test_serve_lets_the_browser_app_quit_only_when_asked(config: Path, served: dict):
+    """``fitlib serve --allow-quit`` lets the Quit button stop this server; plain serve doesn't.
+
+    Given: ``serve``, then ``serve --allow-quit``.
+    Expect: health says ``can_quit`` false, then true; quitting the second tells its server
+    to exit.
+    """
+    run(config, "serve")
+    with TestClient(served["app"], base_url=LOCAL) as client:
+        plain = client.get("/api/health").json()["can_quit"]
+    run(config, "serve", "--allow-quit")
+    with TestClient(served["app"], base_url=LOCAL) as client:
+        allowed = client.get("/api/health").json()["can_quit"]
+        client.post("/api/app/quit")
+
+    assert (plain, allowed) == (False, True)
+    assert served["server"].should_exit, "the server should be told to exit"
 
 
 def test_serve_warns_when_listening_beyond_this_computer(config: Path, served: dict):
@@ -1332,3 +1367,23 @@ def test_import_skips_deleted_rides_unless_asked(imported: Path):
     assert "deleted before 1" in skipped.output
     assert "--include-deleted brings them back" in skipped.output
     assert "Imported 1," in back.output
+
+
+def test_recompute_says_when_rides_were_deleted_meanwhile(
+    imported: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """``fitlib recompute`` says how many rides went while it ran, without failing.
+
+    Given: a recompute whose report has one ride gone (deleted from the browser app meanwhile).
+    Expect: "1 ride was deleted meanwhile, so skipped." and exit code 0.
+    """
+    ride_id = ride_prefix(imported, "2025-08-12", "2025-08-13")
+
+    def run_gone(self, ride_ids, on_progress=None, should_stop=None):
+        return RecomputeReport(gone=list(ride_ids))
+
+    monkeypatch.setattr(Recomputer, "run", run_gone)
+    result = run(imported, "recompute", ride_id)
+
+    assert "1 ride was deleted meanwhile, so skipped." in result.output
+    assert result.exit_code == 0, "a deleted ride should not count as a failure"

@@ -129,13 +129,14 @@ uv run fitlib --help                        # every command and option
 - **tags** lists tags with their ride counts. `list` filters with `--tag` (repeat to require
   several), `--bike`, `--min-rpe` and `--max-rpe`; text search also matches bike names.
 - **recompute** rebuilds rides from their archived original files. It's only needed when
-  fitlib's calculations change (`import` says so); by default it updates just the rides that
-  need it, or give ride ids or `--all`.
+  fitlib's calculations change (`import` says so), and `fitlib serve` does it on its own;
+  by default it updates just the rides that need it, or give ride ids or `--all`. Rides
+  deleted while it runs are skipped.
 
 ### Browser app
 
 ```bash
-uv run fitlib serve --open     # http://localhost:8000/ ; --port, --host, --no-watch
+uv run fitlib serve --open     # http://localhost:8000/ ; --port, --host, --no-watch, --no-recompute
 ```
 
 - **Library** (`/`): search (name, notes, tags, bike, device), filters (source, indoor/outdoor,
@@ -205,6 +206,14 @@ uv run fitlib serve --open     # http://localhost:8000/ ; --port, --host, --no-w
 - **Light or dark**: one button in the header (and in Settings) showing the mode in use, a sun
   or a moon, named in a hint on hover; clicking switches mode. The theme follows your system
   until you choose; units start from the config. Both choices are remembered in this browser.
+- **Updating figures**: when the server starts after an update that changed fitlib's
+  calculations, it recomputes the rides that need it in the background (`--no-recompute`
+  to not). The library shows the progress ("Updating figures after an update: 40 of 120
+  rides"), and pages refresh when it's done. Stopping the server partway keeps the rides
+  done; the rest are done next time.
+- **Quit**: when the server is started with `--allow-quit` (the desktop launcher does), a
+  Quit button in the header stops it after asking; the page then says fitlib has stopped.
+  A server started in a terminal has no Quit button: stop it with Ctrl+C.
 
 The server listens on this computer only (127.0.0.1) and has no login, so don't expose it.
 Without a build of `web/` it shows a page saying how to build one.
@@ -221,7 +230,8 @@ Interactive docs are at `/docs`. Everything is under `/api`, and every figure is
 
 | Endpoint | What |
 |---|---|
-| `GET /api/health` | Status, version, ride count and how many rides need `fitlib recompute` |
+| `GET /api/health` | Status, version, ride count, how many rides have older figures, the background recompute's progress (`recompute`: `total`, `done`), `build` (which code the server runs) and `can_quit` |
+| `POST /api/app/quit` | Stops the server once it has answered (202). Only with `fitlib serve --allow-quit` |
 | `GET /api/rides` | The library: `q` text search, `since`/`until`, `source`, `indoor`, `min_duration_s`/`max_duration_s`, `has_power`, `tag` (repeat for all of several), `bike_id`, `has_bike`, `min_rpe`/`max_rpe`, `world` (Zwift rides in one world), `sort`, `desc`, `offset`, `limit` (≤ 200). Each ride says where its time zone came from (`time_zone_source`) and, for Zwift rides, its `zwift_world` |
 | `GET /api/zwift-worlds` | The Zwift worlds the `world` filter takes (`slug`, `name`) |
 | `GET /api/rides/{id}` | One ride (id or 4+ character prefix): summary, training figures, zones, power/HR curves, laps, location box, metadata |
@@ -455,8 +465,9 @@ Ride ids are random. Location (start point and area, and the route fingerprint: 
 cells a ride passed through) is kept in its own tables, and coordinates are never written to
 logs.
 
-**After upgrading** to a version with new calculations, run `fitlib recompute` (the CLI and
-the library page say when). Rides imported before phase 4a need it for route matching.
+**After upgrading** to a version with new calculations, `fitlib serve` updates the rides in
+the background when it starts, or run `fitlib recompute` (the CLI and the library page say
+when). Rides imported before phase 4a need it for route matching.
 Zwift rides imported before the local-time fix showed the date 30 Dec 1989 (Zwift writes the
 FIT epoch as its local time); recompute dates them correctly, falling back to UTC. Zwift
 rides imported before the distance fix had no distance (Zwift writes the odometer on only a
@@ -668,7 +679,10 @@ date.
   the athlete today; removing entries that aren't there.
 - **Recompute** (`tests/unit/services/test_recompute.py`): outdated rides brought up to date with metadata
   kept; streams rewritten; a Zwift ride dated 1989 repaired (its time zone from its name); a Zwift ride without distance
-  given it; missing raw files reported.
+  given it; missing raw files reported; stopping between rides; rides deleted before or
+  while being worked out skipped (no stream left behind). The server's background recompute:
+  progress while it runs, every outdated ride current after, nothing to do, and stopped partway
+  leaving the rest outdated.
 - **Encrypted backup** (`tests/unit/sync/`, `tests/unit/store/test_snapshot.py`): sealed objects
   round trip; a changed byte in any part, another key, or another object's place refused;
   object names stable and revealing nothing; the keyfile opening only with its passphrase,
@@ -728,7 +742,10 @@ being written, and nothing watched),
   birth and its estimate, impossible years refused, heart-rate TSS on rides and the
   library list, and the threshold from your rides ahead of the age (on a ride, and today's
   from age with no recent rides); uploads (`.fit`, `.zip`, duplicates, bad
-  and non-FIT files, unsafe file names, default bikes, no coordinates in logs); settings; the
+  and non-FIT files, unsafe file names, default bikes, no coordinates in logs); settings; health
+  (the background recompute's progress, the build id changing only with the code); quitting
+  (absent unless allowed, 202 then the server told to stop, refused from another site, and a
+  real `fitlib serve --allow-quit` process exiting cleanly); the
   placeholder page, app-route fallback and 404s for unknown API paths and missing assets;
   `/e2e` shortcuts (including deleting a ride so it can be imported again) only in e2e mode
   and never over a library outside the temp folder; the built app served when present;
@@ -813,6 +830,9 @@ being written, and nothing watched),
   - *Settings*: the theme button showing the system's mode until clicked, its hover hint,
     switching and staying switched across reloads and pages, header and Settings in sync;
     metric units switched in Settings only and applying everywhere.
+  - *Quit*: the button in the header, its dialog with Cancel focused, and Cancel and Escape
+    keeping fitlib running (pressing Quit would stop the shared server; the API tests stop a
+    real one). An accessibility scan of the dialog.
   - *Time zone*: the ride without a time zone said to be in UTC, marked UTC in the library;
     choosing New York moves it to the evening before, said to be the default, with the link to
     Settings; clearing returns it to UTC; on a computer in Tokyo, one click picks Asia/Tokyo. The Zwift

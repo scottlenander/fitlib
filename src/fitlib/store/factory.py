@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Generator
-from contextlib import contextmanager
+from collections.abc import Callable, Generator
+from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -28,6 +28,10 @@ class Stores:
     catalog: CatalogStore
     blobs: BlobStore
     streams: StreamStore
+
+
+# Opens a library's stores for one piece of background work, closing them afterwards.
+OpenStores = Callable[[], AbstractContextManager[Stores]]
 
 
 # The library holds where you ride: only its owner may read it.

@@ -570,6 +570,11 @@ def recompute(
             report = recomputer.run(ids, on_progress=lambda _: progress.advance(task))
 
     out.print(f"Recomputed {len(report.updated)}, failed {len(report.failed)}.")
+    if report.gone:
+        gone = len(report.gone)
+        out.print(
+            f"{gone} {'ride was' if gone == 1 else 'rides were'} deleted meanwhile, so skipped."
+        )
     for ride_id, reason in report.failed:
         out.print(f"  {ride_id[:8]}  {reason}")
     if report.failed:

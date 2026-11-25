@@ -12,7 +12,9 @@ from fastapi import APIRouter, FastAPI, HTTPException
 
 from fitlib import __version__
 from fitlib.api import errors
+from fitlib.api.build import build_id
 from fitlib.api.routers import (
+    app_control,
     athlete,
     bikes,
     compare,
@@ -29,6 +31,7 @@ from fitlib.api.routers import watch as watch_routes
 from fitlib.api.security import LOOPBACK_HOSTS, LocalOnly
 from fitlib.api.static import default_static_dir, mount_app
 from fitlib.config import Config
+from fitlib.services.recompute import BackgroundRecompute
 from fitlib.services.watching import Watcher
 from fitlib.store.factory import open_stores
 
@@ -40,6 +43,9 @@ def create_app(
     e2e_fixtures: Path | None = None,
     watch: bool = False,
     watcher: Watcher | None = None,
+    recompute: bool = False,
+    recomputer: BackgroundRecompute | None = None,
+    allow_quit: bool = False,
     allowed_hosts: Iterable[str] | None = LOOPBACK_HOSTS,
 ) -> FastAPI:
     """Build the app for one library.
@@ -55,6 +61,12 @@ def create_app(
             Watched folders must then be inside the temp folder too.
         watch: Import new rides from the watched folders while the app runs.
         watcher: The watcher to run instead of a new one (for tests); implies ``watch``.
+        recompute: Bring rides computed with older calculations up to date in the
+            background while the app runs.
+        recomputer: The background recompute to run instead of a new one (for tests);
+            implies ``recompute``.
+        allow_quit: Offer ``POST /api/app/quit``, for the Quit button. The server sets
+            ``app.state.quit`` to what stops it.
         allowed_hosts: Host names requests may name (loopback by default, against DNS
             rebinding); ``None`` allows any, for serving on a network address.
 
@@ -68,21 +80,31 @@ def create_app(
         e2e.check_library(config)
     if watcher is None and watch:
         watcher = Watcher(partial(open_stores, config))
+    if recomputer is None and recompute:
+        recomputer = BackgroundRecompute(partial(open_stores, config), workers)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-        """Run the watcher, if any, while the app serves."""
+        """Run the watcher and the background recompute, if any, while the app serves."""
         if watcher is not None:
             watcher.start()
+        if recomputer is not None:
+            recomputer.start()
         try:
             yield
         finally:
+            if recomputer is not None:
+                recomputer.stop()
             if watcher is not None:
                 watcher.stop()
 
     app = FastAPI(title="fitlib", version=__version__, lifespan=lifespan)
     app.state.config = config
     app.state.watcher = watcher
+    app.state.recompute = recomputer
+    app.state.can_quit = allow_quit
+    app.state.build = build_id()
+    app.state.quit = None
     app.state.watch_root = (
         Path(tempfile.gettempdir()).resolve() if e2e_fixtures is not None else None
     )
@@ -103,6 +125,8 @@ def create_app(
     api.include_router(trends.router)
     api.include_router(watch_routes.router)
     api.include_router(worlds.router)
+    if allow_quit:
+        api.include_router(app_control.router)
 
     @api.api_route(
         "/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"], include_in_schema=False

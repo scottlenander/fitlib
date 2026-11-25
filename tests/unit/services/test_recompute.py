@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import threading
+from contextlib import nullcontext
 from dataclasses import replace
+
+import pytest
 
 from fitlib.ingest.summarize import METRICS_VERSION
 from fitlib.models import OffsetSource, RideMeta
-from fitlib.services.recompute import Recomputer
-from fitlib.store.streams import raw_key
+from fitlib.services import recompute as recompute_module
+from fitlib.services.recompute import BackgroundRecompute, Recomputer, RecomputeState
+from fitlib.store.streams import raw_key, stream_key
 from tests.unit.conftest import ImportedLibrary
 
 ZWIFT = "2025-08-02-08-29-42.fit"
@@ -150,3 +155,169 @@ def test_missing_original_file_is_reported(imported: ImportedLibrary):
 
     assert report.failed == [(first.id, "the original file is missing")]
     assert report.updated == [second.id]
+
+
+def test_stopping_starts_no_more_rides(imported: ImportedLibrary):
+    """Once asked to stop, the recompute starts no more rides, and the rest stay outdated.
+
+    Given: two downgraded rides; ``should_stop`` false before the first, true before the second.
+    Expect: the first updated; the second not touched and still outdated.
+    """
+    first = downgrade(imported, ZWIFT)
+    second = downgrade(imported, "garmin_nord_pause_10min.fit")
+    answers = iter([False, True])
+    rc = recomputer(imported)
+
+    report = rc.run([first, second], should_stop=lambda: next(answers))
+
+    assert report.updated == [first]
+    assert rc.outdated() == [second], "the ride not started should still be outdated"
+
+
+def test_a_ride_deleted_before_its_turn_is_skipped(imported: ImportedLibrary):
+    """A ride deleted before the recompute reaches it is counted as gone, not as a failure.
+
+    Given: two rides, the first deleted before the run.
+    Expect: the first in ``gone`` (and reported to ``on_progress``), the second updated.
+    """
+    first = imported.ride(ZWIFT).id
+    second = imported.ride("garmin_nord_pause_10min.fit").id
+    imported.catalog.delete_rides([first], remember=False)
+    handled: list[str] = []
+
+    report = recomputer(imported).run([first, second], on_progress=handled.append)
+
+    assert report.gone == [first]
+    assert (report.updated, report.failed) == ([second], [])
+    assert handled == [first, second], "progress should count the deleted ride too"
+
+
+def test_a_ride_deleted_while_being_worked_out_is_skipped(imported: ImportedLibrary):
+    """A ride deleted after its file was read leaves no stream behind.
+
+    Given: two rides worked out in this process; the second deleted from the catalog as soon
+    as the first has been stored (both are already read by then).
+    Expect: the second in ``gone`` and its new stream removed; the first updated.
+    """
+    first = imported.ride(ZWIFT)
+    second = imported.ride("garmin_nord_pause_10min.fit")
+
+    def delete_second(ride_id: str) -> None:
+        if ride_id == first.id:
+            imported.catalog.delete_rides([second.id], remember=False)
+
+    report = recomputer(imported).run([first.id, second.id], on_progress=delete_second)
+
+    assert report.updated == [first.id]
+    assert report.gone == [second.id]
+    assert not imported.blobs.exists(stream_key(second.id, second.summary.start)), (
+        "the deleted ride's new stream should be removed"
+    )
+
+
+class Gate:
+    """Holds up the first ride's figures until released, so a test can look mid-run.
+
+    Attributes:
+        entered: Set once the first ride is being worked out.
+        release: Set by the test to let it finish.
+    """
+
+    def __init__(self) -> None:
+        self.entered = threading.Event()
+        self.release = threading.Event()
+        self._first = True
+
+    def install(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Wrap ``analyse`` so its first call waits for ``release``.
+
+        Args:
+            monkeypatch: Pytest's monkeypatch fixture.
+        """
+        real = recompute_module.analyse
+
+        def gated(*args, **kwargs):
+            if self._first:
+                self._first = False
+                self.entered.set()
+                assert self.release.wait(10), "the test should release the gate"
+            return real(*args, **kwargs)
+
+        monkeypatch.setattr(recompute_module, "analyse", gated)
+
+
+def background(lib: ImportedLibrary) -> BackgroundRecompute:
+    """Build a background recompute over a library, working out rides in its thread.
+
+    Args:
+        lib: The imported library.
+
+    Returns:
+        The background recompute, not started.
+    """
+    return BackgroundRecompute(lambda: nullcontext(lib.stores), workers=1)
+
+
+def test_background_recompute_brings_outdated_rides_up_to_date(
+    imported: ImportedLibrary, monkeypatch: pytest.MonkeyPatch
+):
+    """The server's background recompute updates every outdated ride and reports progress.
+
+    Given: two downgraded rides; the first ride held up mid-run.
+    Expect: progress 0 of 2 while held; once released, both rides current and no progress
+    reported any more.
+    """
+    downgrade(imported, ZWIFT)
+    downgrade(imported, "garmin_nord_pause_10min.fit")
+    gate = Gate()
+    gate.install(monkeypatch)
+    job = background(imported)
+
+    job.start()
+    assert gate.entered.wait(10), "the first ride should be started"
+    during = job.state()
+    gate.release.set()
+    finished = job.wait(10)
+
+    assert during == RecomputeState(total=2, done=0)
+    assert finished, "the recompute should finish"
+    assert job.state() is None, "a finished recompute should report no progress"
+    assert recomputer(imported).outdated() == []
+
+
+def test_background_recompute_with_nothing_to_do(imported: ImportedLibrary):
+    """A library with every ride current needs no recompute.
+
+    Given: the imported fixtures, all current.
+    Expect: the recompute finishes at once and never reports progress.
+    """
+    job = background(imported)
+
+    job.start()
+
+    assert job.wait(10), "the recompute should finish"
+    assert job.state() is None
+
+
+def test_stopping_the_background_recompute_leaves_the_rest_for_next_time(
+    imported: ImportedLibrary, monkeypatch: pytest.MonkeyPatch
+):
+    """Stopping the server partway keeps the rides done and leaves the rest outdated.
+
+    Given: two downgraded rides; the recompute asked to stop while the first is held up.
+    Expect: the first ride current, the second still outdated.
+    """
+    first = downgrade(imported, ZWIFT)
+    second = downgrade(imported, "garmin_nord_pause_10min.fit")
+    gate = Gate()
+    gate.install(monkeypatch)
+    job = background(imported)
+
+    job.start()
+    assert gate.entered.wait(10), "the first ride should be started"
+    job.stop(timeout=0)
+    gate.release.set()
+
+    assert job.wait(10), "the recompute should finish"
+    assert recomputer(imported).outdated() == [second]
+    assert imported.catalog.get_ride(first).metrics_version == METRICS_VERSION

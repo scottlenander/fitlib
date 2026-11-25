@@ -2,10 +2,17 @@
 
 from __future__ import annotations
 
+import re
+from typing import cast
+
 import pytest
 from fastapi.testclient import TestClient
 
 from fitlib import __version__
+from fitlib.api import create_app
+from fitlib.config import Config
+from fitlib.services.recompute import BackgroundRecompute, RecomputeState
+from tests.clients import LOCAL
 
 
 def test_health_reports_ok_and_the_ride_count(client: TestClient):
@@ -15,14 +22,49 @@ def test_health_reports_ok_and_the_ride_count(client: TestClient):
     Expect: 200 with status ``ok``, fitlib's version, 0 rides and none outdated.
     """
     response = client.get("/api/health")
+    body = response.json()
 
     assert response.status_code == 200
-    assert response.json() == {
+    assert re.fullmatch(r"[0-9a-f]{12}", body.pop("build")), "build should be 12 hex digits"
+    assert body == {
         "status": "ok",
         "version": __version__,
         "rides": 0,
         "outdated_rides": 0,
+        "recompute": None,
+        "can_quit": False,
     }
+
+
+class FakeRecompute:
+    """Stands in for the server's background recompute, partway through."""
+
+    def start(self) -> None:
+        """Pretend to start."""
+
+    def stop(self) -> None:
+        """Pretend to stop."""
+
+    def state(self) -> RecomputeState:
+        """Report two of five rides done.
+
+        Returns:
+            The progress.
+        """
+        return RecomputeState(total=5, done=2)
+
+
+def test_health_reports_the_background_recompute(config: Config):
+    """While the server recomputes outdated rides, health says how far it has got.
+
+    Given: an app whose background recompute has done 2 of 5 rides.
+    Expect: ``recompute`` is ``{"total": 5, "done": 2}``.
+    """
+    app = create_app(config, workers=1, recomputer=cast(BackgroundRecompute, FakeRecompute()))
+    with TestClient(app, base_url=LOCAL) as client:
+        body = client.get("/api/health").json()
+
+    assert body["recompute"] == {"total": 5, "done": 2}
 
 
 def test_openapi_description_lists_the_api(client: TestClient):

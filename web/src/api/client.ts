@@ -90,3 +90,6 @@ export const NEW_RIDE_KEYS = [
   'tags',
   'health',
 ]
+
+// Everything new figures for existing rides can change (after the server's recompute).
+export const RECOMPUTED_KEYS = [...NEW_RIDE_KEYS, 'compare', 'streams', 'map']
