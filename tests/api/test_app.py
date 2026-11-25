@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import cast
 
 import pytest
@@ -21,9 +22,11 @@ def test_health_reports_ok_and_the_ride_count(client: TestClient):
     Expect: 200 with status ``ok``, fitlib's version, 0 rides and none outdated.
     """
     response = client.get("/api/health")
+    body = response.json()
 
     assert response.status_code == 200
-    assert response.json() == {
+    assert re.fullmatch(r"[0-9a-f]{12}", body.pop("build")), "build should be 12 hex digits"
+    assert body == {
         "status": "ok",
         "version": __version__,
         "rides": 0,

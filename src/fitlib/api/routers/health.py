@@ -33,5 +33,6 @@ def health(request: Request, stores: StoresDep) -> Health:
         recompute=RecomputeProgress.of(
             None if (job := request.app.state.recompute) is None else job.state()
         ),
+        build=request.app.state.build,
         can_quit=request.app.state.can_quit,
     )

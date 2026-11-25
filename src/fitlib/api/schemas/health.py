@@ -41,6 +41,8 @@ class Health(BaseModel):
         outdated_rides: Rides computed with older calculations; the server brings them up
             to date in the background, or ``fitlib recompute`` does.
         recompute: The background recompute's progress while it runs.
+        build: Which code the server was started from (its Python code and built browser
+            app); changes after an update, so the launcher can restart an old server.
         can_quit: Whether the browser app may stop the server (``POST /api/app/quit``): only
             when the desktop launcher started it.
     """
@@ -50,4 +52,5 @@ class Health(BaseModel):
     rides: int
     outdated_rides: int
     recompute: RecomputeProgress | None
+    build: str
     can_quit: bool

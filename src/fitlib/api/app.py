@@ -12,6 +12,7 @@ from fastapi import APIRouter, FastAPI, HTTPException
 
 from fitlib import __version__
 from fitlib.api import errors
+from fitlib.api.build import build_id
 from fitlib.api.routers import (
     app_control,
     athlete,
@@ -102,6 +103,7 @@ def create_app(
     app.state.watcher = watcher
     app.state.recompute = recomputer
     app.state.can_quit = allow_quit
+    app.state.build = build_id()
     app.state.quit = None
     app.state.watch_root = (
         Path(tempfile.gettempdir()).resolve() if e2e_fixtures is not None else None
