@@ -20,6 +20,8 @@ node_modules/
 
 # Local fitlib library data (rides imported from real files)
 library/
+# ...except the browser app's library page, which is code.
+!web/src/library/
 
 # OS / editors
 .DS_Store
