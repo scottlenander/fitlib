@@ -1,6 +1,6 @@
 // The trends page's range and choices, kept in the URL so links, reloads and the back button
 // all work, and the date sums behind them. Dates are the rider's local dates as YYYY-MM-DD.
-import type { VolumeBucket } from '../api/client'
+import type { VolumeBucket } from '../api/trends'
 import * as f from '../shared/format'
 
 export const PRESETS = [

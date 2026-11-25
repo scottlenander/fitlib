@@ -5,11 +5,9 @@ import {
   useDeleteAthlete,
   useSetAthlete,
   useSetBirthYear,
-  useSettings,
-  useSetTimeZone,
-  useTimeZones,
   type AthleteValues,
-} from '../api/client'
+} from '../api/athlete'
+import { useSettings, useSetTimeZone, useTimeZones } from '../api/settings'
 import { DisplaySwitches } from './DisplaySwitches'
 import { Stats } from '../shared/Stats'
 import { WatchedFolders } from './WatchedFolders'

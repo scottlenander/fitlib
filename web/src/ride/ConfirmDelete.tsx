@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
-import { missingRides, useDeleteRides } from '../api/client'
+import { missingRides } from '../api/client'
+import { useDeleteRides } from '../api/rides'
 import { missingText, rideCount } from '../library/bulkEdit'
 
 type Props = {

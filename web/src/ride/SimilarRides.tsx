@@ -1,6 +1,6 @@
 import { useRef, useState, type KeyboardEvent } from 'react'
 import { Link } from 'react-router'
-import { useSimilar, type RideDetail, type SimilarRide } from '../api/client'
+import { useSimilar, type RideDetail, type SimilarRide } from '../api/rides'
 import { MAX_RIDES, compareUrl } from '../compare/compare'
 import * as f from '../shared/format'
 import { TssNotes, TssValue } from '../shared/TssDisplay'

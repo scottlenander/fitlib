@@ -1,4 +1,4 @@
-import type { ZoneTime } from '../api/client'
+import type { ZoneTime } from '../api/rides'
 import { duration } from '../shared/format'
 import { ScrollBox } from '../shared/ScrollBox'
 

@@ -2,14 +2,8 @@
 // them hold the same numbers. Loaded only when needed, with ECharts.
 import { useMemo } from 'react'
 import { useNavigate } from 'react-router'
-import type {
-  CurveBest,
-  EfficiencyPoint,
-  FitnessDay,
-  Ftp,
-  RideItem,
-  VolumeBucket,
-} from '../api/client'
+import type { RideItem } from '../api/rides'
+import type { CurveBest, EfficiencyPoint, FitnessDay, Ftp, VolumeBucket } from '../api/trends'
 import * as f from '../shared/format'
 import { rollingAverage, volumeUnit, volumeValue, type Metric, type Period } from './trendsQuery'
 import { useTheme } from '../shared/theme'

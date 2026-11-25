@@ -1,6 +1,6 @@
 import { useState, type DragEvent, type FormEvent, type ReactNode } from 'react'
 import { Link } from 'react-router'
-import { useImport, type ImportResult } from '../api/client'
+import { useImport, type ImportResult } from '../api/imports'
 import { usePageTitle } from '../app/usePageTitle'
 
 const ACCEPTED = /\.(fit|zip)$/i

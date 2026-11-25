@@ -1,5 +1,5 @@
 // Bike kinds and the kinds of ride a default bike applies to, with their labels.
-import type { BikeKind, BikeSlot } from '../api/client'
+import type { BikeKind, BikeSlot } from '../api/bikes'
 
 export const KIND_LABELS: Record<BikeKind, string> = {
   road: 'Road',

@@ -1,7 +1,8 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
-import { NEW_RIDE_KEYS, useWatch } from '../api/client'
+import { NEW_RIDE_KEYS } from '../api/client'
+import { useWatch } from '../api/watch'
 
 // Under the header on every page: says when the server's watcher has imported new rides
 // since this page was opened, and refreshes the lists and charts they change. Rides imported

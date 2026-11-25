@@ -4,7 +4,7 @@
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { useEffect, useRef } from 'react'
-import type { MapPoint } from '../api/client'
+import type { MapPoint } from '../api/rides'
 import { positionAt, stretch } from './mapTrack'
 import { useTheme } from '../shared/theme'
 import { seriesColours } from '../shared/Swatch'

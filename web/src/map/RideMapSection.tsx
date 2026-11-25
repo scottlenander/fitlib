@@ -1,6 +1,6 @@
 import { lazy, Suspense } from 'react'
 import { Link } from 'react-router'
-import { useRideMap, type RideDetail } from '../api/client'
+import { useRideMap, type RideDetail } from '../api/rides'
 import * as f from '../shared/format'
 import { useStreetMap } from './streetMap'
 import { useUnits } from '../shared/units'

@@ -10,7 +10,7 @@ import {
   type BikeKind,
   type BikeSlot,
   type BikeWithTotals,
-} from '../api/client'
+} from '../api/bikes'
 import { KINDS, KIND_LABELS, SLOTS, SLOT_LABELS } from './bikes'
 import * as f from '../shared/format'
 import { useUnits } from '../shared/units'

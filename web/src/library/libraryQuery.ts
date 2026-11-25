@@ -1,6 +1,6 @@
 // The library's search, filters, sort and page, kept in the URL so links, reloads and the
 // back button all work. Turns URL parameters into an API query and back.
-import type { RideQuery, SortKey } from '../api/client'
+import type { RideQuery, SortKey } from '../api/rides'
 
 export const PAGE_SIZES = [10, 25, 50, 100]
 export const DEFAULT_LIMIT = 25

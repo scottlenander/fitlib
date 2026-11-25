@@ -1,14 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router'
-import {
-  useBikes,
-  useHealth,
-  useRides,
-  useTags,
-  useZwiftWorlds,
-  type RideItem,
-  type SortKey,
-} from '../api/client'
+import { useBikes } from '../api/bikes'
+import { useRides, useTags, type RideItem, type SortKey } from '../api/rides'
+import { useHealth, useZwiftWorlds } from '../api/settings'
 import { missingText, rideCount } from './bulkEdit'
 import { BulkEditPanel } from './BulkEditPanel'
 import { ConfirmDelete } from '../ride/ConfirmDelete'

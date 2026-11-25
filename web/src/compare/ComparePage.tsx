@@ -1,12 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
-import {
-  missingRides,
-  useCompare,
-  type Align,
-  type ComparedRide,
-  type Comparison,
-} from '../api/client'
+import { missingRides } from '../api/client'
+import { useCompare, type Align, type ComparedRide, type Comparison } from '../api/compare'
 import { CompareMap } from '../map/CompareMap'
 import { ScrollBox } from '../shared/ScrollBox'
 import { Swatch } from '../shared/Swatch'

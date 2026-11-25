@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router'
-import { useBikes, useUpdateMeta, type MetaPatch, type RideDetail } from '../api/client'
+import { useBikes } from '../api/bikes'
+import { useUpdateMeta, type MetaPatch, type RideDetail } from '../api/rides'
 import { forgetDeleted } from '../library/selection'
 import { parseTags } from '../shared/tags'
 import { ConfirmDelete } from './ConfirmDelete'

@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
-import type { Comparison, CurvePoint } from '../api/client'
+import type { Comparison } from '../api/compare'
+import type { CurvePoint } from '../api/rides'
 import * as f from '../shared/format'
 import { useTheme } from '../shared/theme'
 import { useUnits } from '../shared/units'

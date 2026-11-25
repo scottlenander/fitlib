@@ -1,5 +1,6 @@
 import { lazy, Suspense } from 'react'
-import { useRideMaps, type ComparedRide, type RideMap } from '../api/client'
+import type { ComparedRide } from '../api/compare'
+import { useRideMaps, type RideMap } from '../api/rides'
 import { useStreetMap } from './streetMap'
 import type { MapRoute } from './RouteMap'
 

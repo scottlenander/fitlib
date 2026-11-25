@@ -1,5 +1,5 @@
 // Finding moments of a ride on its simplified route, for the map.
-import type { MapPoint } from '../api/client'
+import type { MapPoint } from '../api/rides'
 
 // The position at a moment: between the two points around it, in proportion.
 export function positionAt(points: MapPoint[], t: number): [number, number] | null {

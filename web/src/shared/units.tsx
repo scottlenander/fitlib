@@ -1,7 +1,7 @@
 // The units figures are shown in. Starts from the config's units (GET /api/settings); a
 // choice made in the header is remembered in this browser.
 import { createContext, useContext, useState, type ReactNode } from 'react'
-import { useSettings } from '../api/client'
+import { useSettings } from '../api/settings'
 import type { Units } from './format'
 
 const STORAGE_KEY = 'fitlib.units'

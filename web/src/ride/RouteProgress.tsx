@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState } from 'react'
 import { Link } from 'react-router'
-import { useRouteProgress, type RideDetail, type RideItem } from '../api/client'
+import { useRouteProgress, type RideDetail, type RideItem } from '../api/rides'
 import * as f from '../shared/format'
 import { TssNotes, TssValue } from '../shared/TssDisplay'
 import { useUnits } from '../shared/units'

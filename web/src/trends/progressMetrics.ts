@@ -1,6 +1,6 @@
 // What the route progress chart can show, and each ride's figure for it. Kept apart from the
 // charts so the ride page can offer the choice without loading ECharts.
-import type { RideItem } from '../api/client'
+import type { RideItem } from '../api/rides'
 import * as f from '../shared/format'
 
 export const PROGRESS_METRICS = [

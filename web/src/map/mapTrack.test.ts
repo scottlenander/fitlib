@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { MapPoint } from '../api/client'
+import type { MapPoint } from '../api/rides'
 import { positionAt, stretch } from './mapTrack'
 
 // Due east along the equator: 0.001° every 10 s.

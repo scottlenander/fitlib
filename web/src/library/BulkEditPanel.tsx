@@ -1,5 +1,7 @@
 import { useState, type FormEvent } from 'react'
-import { missingRides, useBikes, useBulkEdit, useTags } from '../api/client'
+import { useBikes } from '../api/bikes'
+import { missingRides } from '../api/client'
+import { useBulkEdit, useTags } from '../api/rides'
 import { KEEP_ALL, bulkChange, rideCount, type BulkForm } from './bulkEdit'
 
 const EFFORTS = Array.from({ length: 10 }, (_, i) => String(i + 1))

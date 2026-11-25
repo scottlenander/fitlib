@@ -8,7 +8,7 @@ import {
   type ScanResult,
   type WatchFolder,
   type WatchedFile,
-} from '../api/client'
+} from '../api/watch'
 import * as f from '../shared/format'
 import { ScrollBox } from '../shared/ScrollBox'
 

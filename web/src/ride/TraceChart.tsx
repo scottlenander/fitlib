@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useStreams, type Streams } from '../api/client'
+import { useStreams, type Streams } from '../api/rides'
 import * as f from '../shared/format'
 import { useUnits } from '../shared/units'
 import { EChart, type ChartOption } from '../charts/EChart'

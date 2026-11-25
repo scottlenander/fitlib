@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import type { CurvePoint } from '../api/client'
+import type { CurvePoint } from '../api/rides'
 import * as f from '../shared/format'
 import { EChart, type ChartOption } from '../charts/EChart'
 

@@ -12,7 +12,7 @@ import {
   type FitnessDay,
   type Ftp,
   type Volume,
-} from '../api/client'
+} from '../api/trends'
 import { ScrollBox } from '../shared/ScrollBox'
 import { ShowTable } from '../shared/ShowTable'
 import { Stats, type Stat } from '../shared/Stats'
