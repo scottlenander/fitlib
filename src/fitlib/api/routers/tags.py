@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from fitlib.api.deps import StoresDep
-from fitlib.api.schemas import TagCount
+from fitlib.api.schemas.tags import TagCount
 
 router = APIRouter(prefix="/tags", tags=["tags"])
 

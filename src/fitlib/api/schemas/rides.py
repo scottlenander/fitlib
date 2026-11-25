@@ -1,24 +1,21 @@
-"""What the API sends and accepts, built from fitlib's domain objects.
+"""Rides: the library list and one ride's detail.
 
-Every figure is in SI units (metres, seconds, m/s, kg); the browser app formats them. Start
-times are UTC; ``local_start`` is the rider's clock time with no time zone attached.
+Also its streams, map, similar rides and route progress, and editing and deleting rides.
 """
 
 from __future__ import annotations
 
-from datetime import date, datetime
-from typing import Annotated, Literal
+from datetime import datetime
+from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from fitlib.api.schemas.common import BikeRef, bike_ref
 from fitlib.metadata import MAX_BULK_RIDES
 from fitlib.metrics import zones
 from fitlib.metrics.load import ThresholdSource, TssSource
 from fitlib.metrics.track import Track
 from fitlib.models import (
-    Bike,
-    BikeKind,
-    BikeSlot,
     Curve,
     GeoSummary,
     Lap,
@@ -26,18 +23,6 @@ from fitlib.models import (
     Source,
 )
 from fitlib.services.context import RideView
-
-
-class BikeRef(BaseModel):
-    """A bike, as named on a ride.
-
-    Attributes:
-        id: The bike's id.
-        name: The bike's name.
-    """
-
-    id: str
-    name: str
 
 
 class RideItem(BaseModel):
@@ -350,69 +335,6 @@ class Streams(BaseModel):
     columns: dict[str, list[float | int | bool | None]]
 
 
-class ComparedRide(BaseModel):
-    """One ride in a comparison: its figures and its samples on the shared axis.
-
-    Attributes:
-        ride: Everything about the ride, for the side-by-side table.
-        series: Each channel the ride recorded (of power, heart_rate, cadence, speed and
-            altitude), one value per point of ``Comparison.x``; ``null`` where it has none.
-        gap: Lined up by distance only: seconds the ride took to reach each point, minus
-            the first ride's. Positive means behind the first ride.
-    """
-
-    ride: RideDetail
-    series: dict[str, list[float | None]]
-    gap: list[float | None] | None
-
-
-class Comparison(BaseModel):
-    """Rides lined up on one axis, for overlaid charts.
-
-    Attributes:
-        align: ``time`` (x in seconds from the start) or ``distance`` (x in metres).
-        smooth: Seconds power and heart rate were averaged over; 0 for raw samples.
-        can_align_distance: Whether every ride recorded distance, so they can be lined up
-            by it.
-        x: The shared axis.
-        rides: The rides, in the order asked for; gaps are measured against the first.
-    """
-
-    align: Literal["time", "distance"]
-    smooth: int
-    can_align_distance: bool
-    x: list[float]
-    rides: list[ComparedRide]
-
-
-class TagCount(BaseModel):
-    """A tag in use.
-
-    Attributes:
-        name: The tag.
-        rides: How many rides have it.
-    """
-
-    name: str
-    rides: int
-
-
-class BikeOut(BaseModel):
-    """A bike.
-
-    Attributes:
-        id: The bike's id.
-        name: The bike's name.
-        kind: Road, gravel, TT and so on, if set.
-        retired: Whether the bike is retired.
-    """
-
-    id: str
-    name: str
-    kind: BikeKind | None
-    retired: bool
-
-
 def _naive(moment: datetime | None) -> datetime | None:
     """Drop a time zone label, for clock times that aren't really UTC.
 
@@ -423,18 +345,6 @@ def _naive(moment: datetime | None) -> datetime | None:
         The same wall-clock time with no time zone, or ``None``.
     """
     return moment.replace(tzinfo=None) if moment is not None else None
-
-
-def bike_ref(bike: Bike | None) -> BikeRef | None:
-    """Name a ride's bike.
-
-    Args:
-        bike: The bike, if the ride has one.
-
-    Returns:
-        The bike's id and name, or ``None``.
-    """
-    return BikeRef(id=bike.id, name=bike.name) if bike is not None else None
 
 
 def ride_item(view: RideView) -> RideItem:
@@ -609,21 +519,6 @@ def ride_detail(view: RideView) -> RideDetail:
     )
 
 
-def bike_out(bike: Bike) -> BikeOut:
-    """Copy a bike.
-
-    Args:
-        bike: The bike.
-
-    Returns:
-        The bike for the API.
-    """
-    return BikeOut(id=bike.id, name=bike.name, kind=bike.kind, retired=bike.retired)
-
-
-# -- requests and write responses --------------------------------------------------------------
-
-
 def _clean_text(value: str | None) -> str | None:
     """Trim free text; blank text means no value.
 
@@ -725,207 +620,6 @@ class BulkMetaResult(BaseModel):
     updated: int
 
 
-def _bike_name(value: str) -> str:
-    """Tidy a bike name: runs of spaces become one, and it can't be blank.
-
-    Args:
-        value: The name as sent.
-
-    Returns:
-        The tidied name.
-
-    Raises:
-        ValueError: The name is blank.
-    """
-    clean = " ".join(value.split())
-    if not clean:
-        raise ValueError("Bike names can't be empty")
-    return clean
-
-
-class BikeCreate(BaseModel):
-    """A new bike.
-
-    Attributes:
-        name: The bike's name; spaces are tidied and it can't be blank.
-        kind: Road, gravel, TT and so on.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    name: str
-    kind: BikeKind | None = None
-
-    @field_validator("name")
-    @classmethod
-    def _tidy(cls, value: str) -> str:
-        """Tidy the name.
-
-        Args:
-            value: The name as sent.
-
-        Returns:
-            The tidied name.
-        """
-        return _bike_name(value)
-
-
-class BikePatch(BaseModel):
-    """Changes to a bike. Fields left out stay as they are.
-
-    Attributes:
-        name: A new name; spaces are tidied and it can't be blank.
-        kind: A new kind; ``null`` clears it.
-        retired: Retire (true) or bring back (false) the bike.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    name: str | None = None
-    kind: BikeKind | None = None
-    retired: bool | None = None
-
-    @field_validator("name")
-    @classmethod
-    def _tidy(cls, value: str | None) -> str | None:
-        """Tidy the name, if one was sent.
-
-        Args:
-            value: The name as sent, or ``None``.
-
-        Returns:
-            The tidied name, or ``None``.
-        """
-        return None if value is None else _bike_name(value)
-
-
-class BikeWithTotals(BikeOut):
-    """A bike and how much it has been ridden.
-
-    Attributes:
-        rides: Rides on the bike.
-        distance_m: Their total distance.
-        moving_s: Their total moving time.
-    """
-
-    rides: int
-    distance_m: float
-    moving_s: int
-
-
-class DefaultOut(BaseModel):
-    """One entry in the default-bike timeline.
-
-    Attributes:
-        slot: Which kind of ride: zwift, indoor or outdoor.
-        effective_from: The first day the entry applies.
-        bike: The default bike from that day, or ``None`` to stop defaulting.
-    """
-
-    slot: BikeSlot
-    effective_from: date
-    bike: BikeRef | None
-
-
-class DefaultSet(BaseModel):
-    """The bike to default to from a date.
-
-    Attributes:
-        bike_id: The bike, or ``null`` to stop defaulting from that date.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    bike_id: str | None
-
-
-class BackfillChange(BaseModel):
-    """How many rides a backfill gives (or would give) one bike.
-
-    Attributes:
-        bike: The bike, or ``None`` for rides that lose their default bike.
-        rides: How many rides.
-    """
-
-    bike: BikeRef | None
-    rides: int
-
-
-class BackfillResult(BaseModel):
-    """What a backfill changed, or would change on a dry run.
-
-    Attributes:
-        dry_run: Whether nothing was saved.
-        changes: Rides per bike, most first.
-    """
-
-    dry_run: bool
-    changes: list[BackfillChange]
-
-
-class AthleteValuesIn(BaseModel):
-    """Athlete values from a date. Values left out carry forward from earlier entries.
-
-    Attributes:
-        ftp: FTP in watts.
-        weight_kg: Body weight in kilograms.
-        max_hr: Max heart rate in bpm.
-        threshold_hr: Threshold heart rate in bpm, for TSS on rides without power.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    ftp: Annotated[int | None, Field(gt=0, le=2000)] = None
-    weight_kg: Annotated[float | None, Field(gt=0, le=300)] = None
-    max_hr: Annotated[int | None, Field(gt=0, le=250)] = None
-    threshold_hr: Annotated[int | None, Field(gt=0, le=250)] = None
-
-
-class AthleteEntryOut(AthleteValuesIn):
-    """One dated entry in the athlete history.
-
-    Attributes:
-        effective_from: The first day the entry applies.
-    """
-
-    effective_from: date
-
-
-class Athlete(BaseModel):
-    """The athlete history and the values in effect today.
-
-    Attributes:
-        history: Every entry, oldest first.
-        today: FTP, weight, max and threshold heart rate in effect today, each from the
-            latest entry that sets it.
-        birth_year: The rider's year of birth, if given.
-        estimated_threshold_hr: Today's threshold heart rate estimated from age; ``null``
-            without a year of birth.
-        threshold_hr_today: The threshold heart rate a ride today would use: set, from your
-            rides, or from your age.
-        threshold_hr_source_today: Where ``threshold_hr_today`` comes from.
-    """
-
-    history: list[AthleteEntryOut]
-    today: AthleteValuesIn
-    birth_year: int | None
-    estimated_threshold_hr: int | None
-    threshold_hr_today: int | None
-    threshold_hr_source_today: ThresholdSource | None
-
-
-class BirthYearIn(BaseModel):
-    """The rider's year of birth.
-
-    Attributes:
-        birth_year: The year, or ``null`` to clear it.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    birth_year: int | None
-
-
 class MapPoint(BaseModel):
     """One point of a ride's route on the map.
 
@@ -997,176 +691,3 @@ class RouteProgress(BaseModel):
 
     has_route: bool
     items: list[RideItem]
-
-
-class VolumeBucketOut(BaseModel):
-    """What was ridden in one week or month.
-
-    Attributes:
-        start: The first day of the week (Monday) or month.
-        rides: Number of rides.
-        moving_s: Riding time.
-        distance_m: Distance.
-        ascent_m: Climbing.
-        kj: Work in kilojoules.
-        tss: Total Training Stress Score.
-        rides_without_tss: Rides adding no TSS (neither from power nor heart rate).
-    """
-
-    start: date
-    rides: int
-    moving_s: int
-    distance_m: float
-    ascent_m: float
-    kj: float
-    tss: float
-    rides_without_tss: int
-
-
-class Volume(BaseModel):
-    """Riding per week or month.
-
-    Attributes:
-        period: ``week`` or ``month``.
-        since: First day asked for (the first bucket starts on or before it).
-        until: Last day.
-        buckets: One per week or month, oldest first, empty ones included.
-    """
-
-    period: Literal["week", "month"]
-    since: date
-    until: date
-    buckets: list[VolumeBucketOut]
-
-
-class FitnessDayOut(BaseModel):
-    """Training load on one day.
-
-    Attributes:
-        day: The local date.
-        tss: TSS ridden that day.
-        fitness: Chronic training load (CTL, 42-day average) at the end of the day.
-        fatigue: Acute training load (ATL, 7-day average) at the end of the day.
-        form: Training stress balance (TSB): yesterday's fitness minus fatigue.
-    """
-
-    day: date
-    tss: float
-    fitness: float
-    fatigue: float
-    form: float
-
-
-class FitnessOut(BaseModel):
-    """Fitness, fatigue and form for each day of a range.
-
-    Attributes:
-        since: First day.
-        until: Last day.
-        rides_without_tss: Rides in the range that add no TSS (neither from power nor heart
-            rate).
-        days: One per day, oldest first.
-    """
-
-    since: date
-    until: date
-    rides_without_tss: int
-    days: list[FitnessDayOut]
-
-
-class FtpPointOut(BaseModel):
-    """FTP at the end of one week or month.
-
-    Attributes:
-        day: The last day of the week or month (or of the range).
-        ftp: The FTP set in the athlete history on that day, if any.
-        estimated: 0.95 × the best 20 minutes in the six weeks up to that day, if any.
-    """
-
-    day: date
-    ftp: int | None
-    estimated: float | None
-
-
-class FtpOut(BaseModel):
-    """Set and estimated FTP over time.
-
-    Attributes:
-        period: ``week`` or ``month``.
-        since: First day asked for.
-        until: Last day.
-        points: One per week or month, oldest first.
-    """
-
-    period: Literal["week", "month"]
-    since: date
-    until: date
-    points: list[FtpPointOut]
-
-
-class EfficiencyPointOut(BaseModel):
-    """One ride's efficiency factor.
-
-    Attributes:
-        ride_id: The ride.
-        day: Its local date.
-        efficiency: Normalized Power / average heart rate, in W per bpm.
-        np: Normalized Power.
-        avg_hr: Average heart rate.
-        decoupling_pct: Aerobic decoupling, if worked out.
-        indoor: Whether it was ridden indoors.
-    """
-
-    ride_id: str
-    day: date
-    efficiency: float
-    np: float
-    avg_hr: float
-    decoupling_pct: float | None
-    indoor: bool
-
-
-class EfficiencyOut(BaseModel):
-    """Efficiency of each ride with power and heart rate lasting 20 minutes or more.
-
-    Attributes:
-        since: First day.
-        until: Last day.
-        points: One per ride, oldest first.
-    """
-
-    since: date
-    until: date
-    points: list[EfficiencyPointOut]
-
-
-class CurveBestOut(BaseModel):
-    """The best effort over one duration in a period.
-
-    Attributes:
-        duration_s: The duration.
-        value: Best average power (W) or heart rate (bpm).
-        ride_id: The ride it came from.
-        start: That ride's start, UTC.
-    """
-
-    duration_s: int
-    value: float
-    ride_id: str
-    start: datetime
-
-
-class CurveOut(BaseModel):
-    """Best efforts at every duration in a period.
-
-    Attributes:
-        kind: ``power`` or ``hr``.
-        since: First day.
-        until: Last day.
-        points: One per duration, shortest first.
-    """
-
-    kind: Literal["power", "hr"]
-    since: date
-    until: date
-    points: list[CurveBestOut]

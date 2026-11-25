@@ -12,7 +12,7 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Query
 
 from fitlib.api.deps import StoresDep
-from fitlib.api.schemas import (
+from fitlib.api.schemas.rides import (
     BulkDelete,
     BulkMetaPatch,
     BulkMetaResult,

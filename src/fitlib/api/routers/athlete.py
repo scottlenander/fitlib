@@ -13,7 +13,7 @@ from fastapi import APIRouter, HTTPException, Response
 
 from fitlib.analysis.training import set_birth_year
 from fitlib.api.deps import StoresDep
-from fitlib.api.schemas import Athlete, AthleteEntryOut, AthleteValuesIn, BirthYearIn
+from fitlib.api.schemas.athlete import Athlete, AthleteEntryOut, AthleteValuesIn, BirthYearIn
 from fitlib.models import AthleteEntry
 from fitlib.services import athlete as athlete_service
 from fitlib.store.interfaces import CatalogStore

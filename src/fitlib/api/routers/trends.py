@@ -16,7 +16,7 @@ from pydantic import BaseModel
 from fitlib.analysis import trends
 from fitlib.analysis.trends import Period, View, resolve_range
 from fitlib.api.deps import StoresDep
-from fitlib.api.schemas import (
+from fitlib.api.schemas.trends import (
     CurveBestOut,
     CurveOut,
     EfficiencyOut,
