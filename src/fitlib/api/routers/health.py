@@ -17,7 +17,8 @@ def health(request: Request, stores: StoresDep) -> Health:
     """Report that the server is up, with the library's ride counts.
 
     Args:
-        request: The current request, whose app holds the background recompute.
+        request: The current request, whose app holds the background recompute and
+            whether it may be stopped.
         stores: The library's stores.
 
     Returns:
@@ -32,4 +33,5 @@ def health(request: Request, stores: StoresDep) -> Health:
         recompute=RecomputeProgress.of(
             None if (job := request.app.state.recompute) is None else job.state()
         ),
+        can_quit=request.app.state.can_quit,
     )

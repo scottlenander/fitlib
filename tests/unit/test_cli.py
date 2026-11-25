@@ -9,6 +9,7 @@ from datetime import date
 from pathlib import Path
 
 import pytest
+import uvicorn
 from fastapi.testclient import TestClient
 from typer.testing import CliRunner
 
@@ -713,17 +714,17 @@ def served(monkeypatch: pytest.MonkeyPatch) -> dict:
     """
     calls: dict = {}
 
-    def fake_run(web, host: str, port: int) -> None:
-        """Record the server's arguments instead of running it.
+    def fake_run(server: uvicorn.Server) -> None:
+        """Record the server's settings instead of running it.
 
         Args:
-            web: The app.
-            host: The address.
-            port: The port.
+            server: The server ``serve`` would run.
         """
-        calls.update(app=web, host=host, port=port)
+        calls.update(
+            app=server.config.app, host=server.config.host, port=server.config.port, server=server
+        )
 
-    monkeypatch.setattr("fitlib.cli.serve.uvicorn.run", fake_run)
+    monkeypatch.setattr(uvicorn.Server, "run", fake_run)
     monkeypatch.delenv("FITLIB_E2E", raising=False)
     return calls
 
@@ -787,6 +788,25 @@ def test_serve_recomputes_outdated_rides_unless_told_not_to(config: Path, served
 
     assert isinstance(recomputing, BackgroundRecompute)
     assert served["app"].state.recompute is None
+
+
+def test_serve_lets_the_browser_app_quit_only_when_asked(config: Path, served: dict):
+    """``fitlib serve --allow-quit`` lets the Quit button stop this server; plain serve doesn't.
+
+    Given: ``serve``, then ``serve --allow-quit``.
+    Expect: health says ``can_quit`` false, then true; quitting the second tells its server
+    to exit.
+    """
+    run(config, "serve")
+    with TestClient(served["app"], base_url=LOCAL) as client:
+        plain = client.get("/api/health").json()["can_quit"]
+    run(config, "serve", "--allow-quit")
+    with TestClient(served["app"], base_url=LOCAL) as client:
+        allowed = client.get("/api/health").json()["can_quit"]
+        client.post("/api/app/quit")
+
+    assert (plain, allowed) == (False, True)
+    assert served["server"].should_exit, "the server should be told to exit"
 
 
 def test_serve_warns_when_listening_beyond_this_computer(config: Path, served: dict):

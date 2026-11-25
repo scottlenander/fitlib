@@ -13,6 +13,7 @@ from fastapi import APIRouter, FastAPI, HTTPException
 from fitlib import __version__
 from fitlib.api import errors
 from fitlib.api.routers import (
+    app_control,
     athlete,
     bikes,
     compare,
@@ -43,6 +44,7 @@ def create_app(
     watcher: Watcher | None = None,
     recompute: bool = False,
     recomputer: BackgroundRecompute | None = None,
+    allow_quit: bool = False,
     allowed_hosts: Iterable[str] | None = LOOPBACK_HOSTS,
 ) -> FastAPI:
     """Build the app for one library.
@@ -62,6 +64,8 @@ def create_app(
             background while the app runs.
         recomputer: The background recompute to run instead of a new one (for tests);
             implies ``recompute``.
+        allow_quit: Offer ``POST /api/app/quit``, for the Quit button. The server sets
+            ``app.state.quit`` to what stops it.
         allowed_hosts: Host names requests may name (loopback by default, against DNS
             rebinding); ``None`` allows any, for serving on a network address.
 
@@ -97,6 +101,8 @@ def create_app(
     app.state.config = config
     app.state.watcher = watcher
     app.state.recompute = recomputer
+    app.state.can_quit = allow_quit
+    app.state.quit = None
     app.state.watch_root = (
         Path(tempfile.gettempdir()).resolve() if e2e_fixtures is not None else None
     )
@@ -117,6 +123,8 @@ def create_app(
     api.include_router(trends.router)
     api.include_router(watch_routes.router)
     api.include_router(worlds.router)
+    if allow_quit:
+        api.include_router(app_control.router)
 
     @api.api_route(
         "/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"], include_in_schema=False

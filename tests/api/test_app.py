@@ -29,6 +29,7 @@ def test_health_reports_ok_and_the_ride_count(client: TestClient):
         "rides": 0,
         "outdated_rides": 0,
         "recompute": None,
+        "can_quit": False,
     }
 
 
