@@ -1,9 +1,11 @@
 import { NavLink, Outlet } from 'react-router'
 import { NewRidesNotice } from './NewRidesNotice'
+import { QuitButton } from './QuitButton'
 import { useRecomputeRefresh } from './useRecomputeRefresh'
 import { ThemeToggle } from '../shared/ThemeToggle'
 
-// Header with the app's name, the main navigation and the light/dark toggle, around each page.
+// Header with the app's name, the main navigation, the light/dark toggle and (when the
+// launcher started the server) Quit, around each page.
 export function Layout() {
   useRecomputeRefresh()
   return (
@@ -26,6 +28,7 @@ export function Layout() {
         </nav>
         <div className="header-switches">
           <ThemeToggle />
+          <QuitButton />
         </div>
       </header>
       <main id="main" tabIndex={-1}>
