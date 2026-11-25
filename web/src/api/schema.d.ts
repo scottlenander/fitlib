@@ -4,6 +4,38 @@
  */
 
 export interface paths {
+  '/api/app/quit': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * Quit App
+     * @description Stop the server once this answer has been sent.
+     *
+     *     The watcher and the background recompute stop cleanly as the server shuts down.
+     *
+     *     Args:
+     *         request: The current request, whose app holds how to stop the server.
+     *         background: Runs the stop after the answer has gone out.
+     *
+     *     Returns:
+     *         That the server is stopping.
+     *
+     *     Raises:
+     *         HTTPException: 503 when the app isn't running under a server it can stop.
+     */
+    post: operations['quit_app_api_app_quit_post']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/athlete': {
     parameters: {
       query?: never
@@ -327,6 +359,8 @@ export interface paths {
      * @description Report that the server is up, with the library's ride counts.
      *
      *     Args:
+     *         request: The current request, whose app holds the background recompute and
+     *             whether it may be stopped.
      *         stores: The library's stores.
      *
      *     Returns:
@@ -1731,12 +1765,22 @@ export interface components {
      *         status: Always ``"ok"`` when the server answers.
      *         version: fitlib's version.
      *         rides: How many rides the library holds.
-     *         outdated_rides: Rides computed with older calculations; ``fitlib recompute`` brings
-     *             them up to date.
+     *         outdated_rides: Rides computed with older calculations; the server brings them up
+     *             to date in the background, or ``fitlib recompute`` does.
+     *         recompute: The background recompute's progress while it runs.
+     *         build: Which code the server was started from (its Python code and built browser
+     *             app); changes after an update, so the launcher can restart an old server.
+     *         can_quit: Whether the browser app may stop the server (``POST /api/app/quit``): only
+     *             when the desktop launcher started it.
      */
     Health: {
+      /** Build */
+      build: string
+      /** Can Quit */
+      can_quit: boolean
       /** Outdated Rides */
       outdated_rides: number
+      recompute: components['schemas']['RecomputeProgress'] | null
       /** Rides */
       rides: number
       /** Status */
@@ -1877,6 +1921,20 @@ export interface components {
      * @enum {string}
      */
     OffsetSource: 'device' | 'file_name' | 'default' | 'none'
+    /**
+     * RecomputeProgress
+     * @description How far the server's background recompute has got.
+     *
+     *     Attributes:
+     *         total: Rides it set out to recompute.
+     *         done: Rides handled so far.
+     */
+    RecomputeProgress: {
+      /** Done */
+      done: number
+      /** Total */
+      total: number
+    }
     /**
      * RideDetail
      * @description Everything about one ride, for its detail page.
@@ -2277,6 +2335,20 @@ export interface components {
       last: string | null
     }
     /**
+     * Stopping
+     * @description The server's answer to being asked to quit.
+     *
+     *     Attributes:
+     *         stopping: Always true: the server stops once this answer has gone out.
+     */
+    Stopping: {
+      /**
+       * Stopping
+       * @default true
+       */
+      stopping: boolean
+    }
+    /**
      * Streams
      * @description A ride's samples, one per second (or every ``step`` seconds), as columns.
      *
@@ -2613,6 +2685,26 @@ export interface components {
 }
 export type $defs = Record<string, never>
 export interface operations {
+  quit_app_api_app_quit_post: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      202: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Stopping']
+        }
+      }
+    }
+  }
   get_athlete_api_athlete_get: {
     parameters: {
       query?: never
