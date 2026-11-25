@@ -1,9 +1,11 @@
 import { NavLink, Outlet } from 'react-router'
 import { NewRidesNotice } from './NewRidesNotice'
+import { useRecomputeRefresh } from './useRecomputeRefresh'
 import { ThemeToggle } from '../shared/ThemeToggle'
 
 // Header with the app's name, the main navigation and the light/dark toggle, around each page.
 export function Layout() {
+  useRecomputeRefresh()
   return (
     <>
       <a className="skip-link" href="#main">

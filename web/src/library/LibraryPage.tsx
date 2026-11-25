@@ -8,6 +8,7 @@ import { TssNotes } from '../shared/TssDisplay'
 import { useUnits } from '../shared/units'
 import { BulkEditPanel } from './BulkEditPanel'
 import { Filters, SearchBox } from './LibraryFilters'
+import { OutdatedNotice } from './OutdatedNotice'
 import { hasFilters, toQuery } from './libraryQuery'
 import { Pager, RideTable } from './RideTable'
 import { SelectionBar } from './SelectionBar'
@@ -21,7 +22,6 @@ export function LibraryPage() {
   const rides = useRides(toQuery(state))
   const health = useHealth()
   const { units } = useUnits()
-  const outdated = health.data?.outdated_rides ?? 0
   const selection = usePicked()
   const notices = useLibraryNotices(selection)
   const [editing, setEditing] = useState(false)
@@ -33,12 +33,7 @@ export function LibraryPage() {
   return (
     <>
       <h1>Library</h1>
-      {outdated > 0 && (
-        <p className="notice" data-testid="outdated-notice">
-          {outdated} {outdated === 1 ? 'ride was' : 'rides were'} computed with older calculations.
-          Run <code>fitlib recompute</code> to bring {outdated === 1 ? 'it' : 'them'} up to date.
-        </p>
-      )}
+      <OutdatedNotice health={health.data} />
       <div aria-live="polite">
         {notices.deletedNotice && (
           <p className="notice" data-testid="deleted-notice">

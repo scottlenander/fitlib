@@ -592,6 +592,18 @@ textarea {
   border-radius: 4px;
 }
 
+/* The server's recompute progress, in a notice. */
+.notice p {
+  margin: 0;
+}
+
+.notice progress {
+  display: block;
+  width: 100%;
+  margin-top: 0.4rem;
+  accent-color: var(--accent);
+}
+
 /* Compare: picking rides in the library, and the compare page. */
 .selection-bar {
   display: flex;
