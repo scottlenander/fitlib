@@ -179,3 +179,15 @@ class CurveOut(BaseModel):
     since: date
     until: date
     points: list[CurveBestOut]
+
+
+class Span(BaseModel):
+    """The local dates of the first and latest rides, for an "all time" range.
+
+    Attributes:
+        first: The first ride's local date, or ``null`` for an empty library.
+        last: The latest ride's local date, or ``null``.
+    """
+
+    first: date | None
+    last: date | None

@@ -11,7 +11,6 @@ from datetime import date
 from typing import Literal
 
 from fastapi import APIRouter
-from pydantic import BaseModel
 
 from fitlib.analysis import trends
 from fitlib.analysis.trends import Period, View, resolve_range
@@ -25,23 +24,12 @@ from fitlib.api.schemas.trends import (
     FitnessOut,
     FtpOut,
     FtpPointOut,
+    Span,
     Volume,
     VolumeBucketOut,
 )
 
 router = APIRouter(prefix="/trends", tags=["trends"])
-
-
-class Span(BaseModel):
-    """The local dates of the first and latest rides, for an "all time" range.
-
-    Attributes:
-        first: The first ride's local date, or ``null`` for an empty library.
-        last: The latest ride's local date, or ``null``.
-    """
-
-    first: date | None
-    last: date | None
 
 
 @router.get("/span")
