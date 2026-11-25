@@ -14,9 +14,6 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError, available_timezones
 from fitlib.ingest.decoder import MAX_UTC_OFFSET_S, MIN_UTC_OFFSET_S
 from fitlib.models import OffsetSource
 
-# The library setting holding the default time zone, an IANA name like "America/New_York".
-DEFAULT_ZONE_SETTING = "default_time_zone"
-
 # A local date and time, then anything (e.g. " (1)" for a copy), then ".fit".
 _NAME = re.compile(r"^(\d{4})-(\d{2})-(\d{2})-(\d{2})-(\d{2})-(\d{2})(?!\d).*\.fit$", re.IGNORECASE)
 # Every real time zone is a whole number of quarter hours from UTC, and its minutes past the

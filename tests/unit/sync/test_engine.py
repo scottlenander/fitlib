@@ -24,9 +24,9 @@ from fitlib.store.factory import (
 )
 from fitlib.store.interfaces import BlobStore
 from fitlib.store.local import FsBlobStore
+from fitlib.store.settings import SYNC_GENERATION
 from fitlib.sync.crypto import CannotDecrypt, WrongPassphrase, open_sealed
 from fitlib.sync.engine import (
-    GENERATION_SETTING,
     KEYFILE,
     MANIFEST,
     KeyMissing,
@@ -300,7 +300,7 @@ def test_push_interrupted_after_its_manifest_is_not_another_computer(synced: Syn
     """
     push_once(synced)
     with open_stores(synced.config) as stores:
-        stores.catalog.set_setting(GENERATION_SETTING, None)
+        SYNC_GENERATION.set(stores.catalog, None)
 
     assert push_once(synced).generation == 2
 

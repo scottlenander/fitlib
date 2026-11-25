@@ -23,6 +23,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 
 from fitlib.store.interfaces import BlobNotFound, BlobStore, CatalogStore, SettingsStore
+from fitlib.store.settings import LIBRARY_ID, MACHINE_LOCAL, SYNC_DEVICE, SYNC_GENERATION
 from fitlib.sync.crypto import (
     DEFAULT_KDF,
     CannotDecrypt,
@@ -45,14 +46,6 @@ KEYFILE = "keyfile"
 MANIFEST = "manifest"
 OBJECTS = "objects/"
 CATALOG_KEY = "catalog.sqlite3"
-
-# Library settings. Those starting with SYNC_PREFIX belong to this computer and are left out
-# of the catalog snapshot; the library id travels with the library.
-LIBRARY_ID = "library_id"
-SYNC_PREFIX = "sync_"
-REMOTE_SETTING = "sync_remote"
-GENERATION_SETTING = "sync_generation"
-DEVICE_SETTING = "sync_device"
 
 
 class RemoteInUse(SyncError):
@@ -164,13 +157,13 @@ class LocalLibrary:
     Attributes:
         catalog: The catalog, for settings.
         blobs: Original files and streams.
-        snapshot: Makes a catalog snapshot, given the prefix of settings to leave out.
+        snapshot: Makes a catalog snapshot, given the keys of the settings to leave out.
         schema_version: The catalog's schema version.
     """
 
     catalog: CatalogStore
     blobs: BlobStore
-    snapshot: Callable[[str], bytes]
+    snapshot: Callable[[frozenset[str]], bytes]
     schema_version: int
 
 
@@ -258,10 +251,10 @@ def library_id(catalog: SettingsStore) -> str:
     Returns:
         A random UUID, kept in the library's settings.
     """
-    found = catalog.get_setting(LIBRARY_ID)
+    found = LIBRARY_ID.get(catalog)
     if found is None:
         found = str(uuid.uuid4())
-        catalog.set_setting(LIBRARY_ID, found)
+        LIBRARY_ID.set(catalog, found)
     return found
 
 
@@ -274,10 +267,10 @@ def _device(catalog: SettingsStore) -> str:
     Returns:
         A random UUID; machine-local, so never in a snapshot.
     """
-    found = catalog.get_setting(DEVICE_SETTING)
+    found = SYNC_DEVICE.get(catalog)
     if found is None:
         found = str(uuid.uuid4())
-        catalog.set_setting(DEVICE_SETTING, found)
+        SYNC_DEVICE.set(catalog, found)
     return found
 
 
@@ -290,7 +283,7 @@ def local_generation(catalog: SettingsStore) -> int:
     Returns:
         The number, 0 if it never synced.
     """
-    return int(catalog.get_setting(GENERATION_SETTING) or 0)
+    return SYNC_GENERATION.get(catalog) or 0
 
 
 def setup(
@@ -494,7 +487,7 @@ def push(library: LocalLibrary, remote: BlobStore, keys: Keys, force: bool = Fal
     lid = library_id(catalog)
     # Snapshot first: blobs are written before the catalog rows that point at them, so
     # every blob this snapshot needs is in the listing taken after it.
-    snapshot = library.snapshot(SYNC_PREFIX)
+    snapshot = library.snapshot(MACHINE_LOCAL)
     before = remote_manifest(remote, keys)
     if before is not None and before.library_id != lid:
         raise RemoteInUse("This sync folder holds another library's copy.")
@@ -531,7 +524,7 @@ def push(library: LocalLibrary, remote: BlobStore, keys: Keys, force: bool = Fal
         objects=entries,
     )
     remote.put(MANIFEST, seal(keys, MANIFEST, manifest.to_bytes()))
-    catalog.set_setting(GENERATION_SETTING, str(generation))
+    SYNC_GENERATION.set(catalog, generation)
 
     needed = {e.name for e in entries.values()} | {cat_entry.name}
     stale = [name for name in remote.list(OBJECTS) if name not in needed]
@@ -642,7 +635,7 @@ def adopt(catalog: CatalogStore, keystore: KeyStore, restored: Restored) -> None
         restored: What ``restore`` returned.
     """
     keystore.put(restored.manifest.library_id, restored.master_key)
-    catalog.set_setting(GENERATION_SETTING, str(restored.manifest.generation))
+    SYNC_GENERATION.set(catalog, restored.manifest.generation)
     _device(catalog)
 
 

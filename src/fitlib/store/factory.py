@@ -127,12 +127,12 @@ def remove_empty_catalog(config: Config) -> None:
         Path(f"{catalog_path(config)}{suffix}").unlink(missing_ok=True)
 
 
-def snapshot_catalog(stores: Stores, local_settings_prefix: str) -> bytes:
+def snapshot_catalog(stores: Stores, local_settings: frozenset[str]) -> bytes:
     """Copy a library's catalog for sync, without this computer's own data.
 
     Args:
         stores: The open library.
-        local_settings_prefix: Settings with names starting with this are left out.
+        local_settings: Keys of this computer's own settings, left out.
 
     Returns:
         The snapshot's bytes.
@@ -144,7 +144,7 @@ def snapshot_catalog(stores: Stores, local_settings_prefix: str) -> bytes:
 
     if not isinstance(stores.catalog, SqliteCatalog):
         raise ConfigError("Only the local backend can sync")
-    return stores.catalog.snapshot(local_settings_prefix)
+    return stores.catalog.snapshot(local_settings)
 
 
 def restore_catalog(config: Config, data: bytes) -> None:

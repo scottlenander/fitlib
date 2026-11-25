@@ -11,12 +11,12 @@ from pathlib import Path
 
 import pytest
 
-from fitlib.ingest.localtime import DEFAULT_ZONE_SETTING
 from fitlib.models import Bike, BikeDefault, BikeSlot, OffsetSource, Ride, Source
 from fitlib.services.importing import Importer, ImportReport, overlap_fraction
 from fitlib.store.interfaces import BlobStore, CatalogStore
 from fitlib.store.local import FsBlobStore, SqliteCatalog
 from fitlib.store.memory import MemoryBlobStore, MemoryCatalog
+from fitlib.store.settings import DEFAULT_TIME_ZONE
 from fitlib.store.streams import StreamStore, raw_key
 from tests.fixtures.generate import FIT_DIR
 from tests.fixtures.specs import RIDES, ride
@@ -398,7 +398,7 @@ def test_a_renamed_file_uses_the_default_time_zone(library: Library, tmp_path: P
     """
     renamed = tmp_path / "morning ride.fit"
     shutil.copy(FIT_DIR / ZWIFT_FILE, renamed)
-    library.catalog.set_setting(DEFAULT_ZONE_SETTING, "America/New_York")
+    DEFAULT_TIME_ZONE.set(library.catalog, "America/New_York")
 
     report = library.importer().run([renamed])
     zwift = library.ride_from("morning ride.fit", report)

@@ -27,10 +27,10 @@ from fitlib.store.factory import (
     snapshot_catalog,
 )
 from fitlib.store.interfaces import BadSnapshot, BlobStore
+from fitlib.store.settings import SYNC_REMOTE
 from fitlib.sync.crypto import DEFAULT_KDF, MIN_PASSPHRASE, Keys, SyncError
 from fitlib.sync.engine import (
     KEYFILE,
-    REMOTE_SETTING,
     KeyMissing,
     LocalLibrary,
     adopt,
@@ -115,7 +115,7 @@ def _remote(stores: Stores) -> BlobStore:
     Raises:
         typer.Exit: No sync folder is set up, or it's missing (code 2).
     """
-    folder = stores.catalog.get_setting(REMOTE_SETTING)
+    folder = SYNC_REMOTE.get(stores.catalog)
     if folder is None:
         raise fail("No sync folder yet. Set one up with `fitlib sync setup FOLDER`.")
     try:
@@ -201,7 +201,7 @@ def sync_setup(ctx: typer.Context, folder: FolderArgument) -> None:
             known = setup(lib.stores.catalog, remote, keystore, passphrase, KDF)
         except SyncError as exc:
             raise fail(str(exc)) from None
-        lib.stores.catalog.set_setting(REMOTE_SETTING, str(path))
+        SYNC_REMOTE.set(lib.stores.catalog, str(path))
     if known:
         out.print(f"Syncing to {path} again.")
     else:
@@ -252,7 +252,7 @@ def sync_status(ctx: typer.Context) -> None:
     keystore = key_store()
     with library(ctx) as lib:
         remote = _remote(lib.stores)
-        folder = lib.stores.catalog.get_setting(REMOTE_SETTING)
+        folder = SYNC_REMOTE.get(lib.stores.catalog)
         try:
             found = status(_local(lib.stores), remote, _keys(lib.stores, remote, keystore))
         except SyncError as exc:
@@ -320,7 +320,7 @@ def sync_restore(ctx: typer.Context, folder: FolderArgument) -> None:
             adopt(stores.catalog, keystore, restored)
         except SyncError as exc:
             raise fail(str(exc)) from None
-        stores.catalog.set_setting(REMOTE_SETTING, str(path))
+        SYNC_REMOTE.set(stores.catalog, str(path))
         rides = stores.catalog.count()
     copy = restored.manifest
     out.print(

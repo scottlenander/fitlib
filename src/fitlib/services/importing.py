@@ -19,13 +19,13 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from fitlib.ingest.analyse import Analysed, Failed, NotARide, analyse
-from fitlib.ingest.localtime import DEFAULT_ZONE_SETTING
 from fitlib.ingest.scanner import scan
 from fitlib.ingest.summarize import METRICS_VERSION
 from fitlib.metadata import default_bike
 from fitlib.models import BikeDefault, Ride, RideMeta, RideSummary
 from fitlib.parallel import default_workers, make_executor
 from fitlib.store.interfaces import BlobStore, CatalogStore, DuplicateRide
+from fitlib.store.settings import DEFAULT_TIME_ZONE
 from fitlib.store.streams import StreamStore, raw_key
 
 log = logging.getLogger(__name__)
@@ -148,7 +148,7 @@ class Importer:
         """
         report = ImportReport()
         defaults = self._catalog.bike_defaults()
-        default_zone = self._catalog.get_setting(DEFAULT_ZONE_SETTING)
+        default_zone = DEFAULT_TIME_ZONE.get(self._catalog)
         seen: dict[str, str] = {}  # sha256 -> file name, within this run
         # Files being analysed, oldest first. Bounded, so memory stays flat however many
         # files there are; results are stored in file order, so overlaps resolve the same

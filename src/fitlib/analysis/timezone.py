@@ -10,9 +10,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
-from fitlib.ingest.localtime import DEFAULT_ZONE_SETTING, check_zone, offset_in_zone
+from fitlib.ingest.localtime import check_zone, offset_in_zone
 from fitlib.models import OffsetSource
 from fitlib.store.interfaces import CatalogStore, SettingsStore
+from fitlib.store.settings import DEFAULT_TIME_ZONE
 
 # Rides that follow the default: those that used it, and those with no time zone at all.
 _FOLLOWS_DEFAULT = (OffsetSource.DEFAULT, OffsetSource.NONE)
@@ -44,7 +45,7 @@ def default_zone(catalog: SettingsStore) -> str | None:
     Returns:
         An IANA name such as ``"America/New_York"``, or ``None`` if none is set.
     """
-    return catalog.get_setting(DEFAULT_ZONE_SETTING)
+    return DEFAULT_TIME_ZONE.get(catalog)
 
 
 def _local_date(start: datetime, offset: int | None) -> date:
@@ -85,7 +86,7 @@ def set_default_zone(catalog: CatalogStore, zone: str | None) -> ZoneChange:
         changes[ride_id] = (new, source)
         if _local_date(start, old) != _local_date(start, new):
             moved_day.append(ride_id)
-    catalog.set_setting(DEFAULT_ZONE_SETTING, zone)
+    DEFAULT_TIME_ZONE.set(catalog, zone)
     catalog.set_utc_offsets(changes)
     bikes_to_check = sum(
         1
