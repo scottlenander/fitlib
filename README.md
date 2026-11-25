@@ -751,7 +751,10 @@ being written, and nothing watched),
   query, the World filter dropping another source and the other way round); where a ride's
   time zone came from, in words; tag parsing; which theme applies (remembered choice, else the system); picking
   rides to compare or edit (up to 500, a whole page at once, stored selections read safely),
-  what the bulk edit form sends, and the compare page's address;
+  what the bulk edit form sends, and the compare page's address; the trends summary
+  (the last day's fitness, fatigue and form, total TSS, FTP at the end, dashes with no data);
+  what the athlete form saves (blank fields left out, pounds to kilograms, a date and a value
+  needed);
   the stacked charts' spacing and their time (minutes, shown as a clock) and distance axes;
   the trends page's URL state, preset and custom ranges, the comparison ranges for best
   efforts, the 28-day average, volume figures in both unit systems, and date labels; moments
