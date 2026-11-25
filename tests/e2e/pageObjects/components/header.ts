@@ -1,6 +1,7 @@
 import type { Locator, Page } from '@playwright/test'
 
-// The header on every page: the app's name, the main navigation and the light/dark toggle.
+// The header on every page: the app's name, the main navigation, the light/dark toggle and
+// Quit (only when the server allows quitting, as the e2e server does).
 // The toggle is one button showing the mode in use (a sun or a moon), named "Light mode" or
 // "Dark mode"; clicking switches mode. The same toggle is on the Settings page, so this one
 // is scoped to the header. Units are switched on the Settings page only.
@@ -18,6 +19,12 @@ export class Header {
   readonly theme: Locator
   // The theme button's hint, shown on hover or keyboard focus: "Light mode" or "Dark mode".
   readonly themeHint: Locator
+  // Shows "Quit"; named "Quit fitlib".
+  readonly quit: Locator
+  // The dialog Quit opens. Its Quit button stops the shared test server: never press it.
+  readonly quitDialog: Locator
+  readonly quitCancel: Locator
+  readonly quitConfirm: Locator
 
   constructor(page: Page) {
     this.root = page.getByRole('banner')
@@ -29,5 +36,9 @@ export class Header {
     this.settingsLink = this.nav.getByRole('link', { name: 'Settings', exact: true })
     this.theme = this.root.getByRole('button', { name: THEME_NAME })
     this.themeHint = this.theme.getByText(THEME_NAME)
+    this.quit = this.root.getByRole('button', { name: 'Quit fitlib' })
+    this.quitDialog = page.getByRole('dialog', { name: 'Quit fitlib?' })
+    this.quitCancel = this.quitDialog.getByRole('button', { name: 'Cancel' })
+    this.quitConfirm = this.quitDialog.getByRole('button', { name: 'Quit', exact: true })
   }
 }
