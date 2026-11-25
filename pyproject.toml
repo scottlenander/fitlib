@@ -127,9 +127,10 @@ allow_indirect_imports = true
 ignore_imports = [
     "fitlib.api.errors -> fitlib.ingest.localtime",  # UnknownTimeZone
     "fitlib.api.errors -> fitlib.metrics.zwift",  # UnknownWorld
-    "fitlib.api.schemas -> fitlib.metrics.zones",  # zone names
-    "fitlib.api.schemas -> fitlib.metrics.load",  # ThresholdSource, TssSource
-    "fitlib.api.schemas -> fitlib.metrics.track",  # Track
+    "fitlib.api.schemas.rides -> fitlib.metrics.zones",  # zone names
+    "fitlib.api.schemas.rides -> fitlib.metrics.load",  # ThresholdSource, TssSource
+    "fitlib.api.schemas.rides -> fitlib.metrics.track",  # Track
+    "fitlib.api.schemas.athlete -> fitlib.metrics.load",  # ThresholdSource
     "fitlib.api.routers.worlds -> fitlib.metrics.zwift",  # WORLDS
     "fitlib.api.routers.imports -> fitlib.ingest.scanner",  # FIT_SUFFIX, ZIP_SUFFIX
     "fitlib.api.routers.health -> fitlib.ingest.summarize",  # METRICS_VERSION
@@ -144,6 +145,19 @@ ignore_imports = [
     "fitlib.cli.rides -> fitlib.ingest.scanner",  # scan, counting files for `import`'s progress bar
     "fitlib.cli.timezone -> fitlib.ingest.localtime",  # UnknownTimeZone
 ]
+
+[[tool.importlinter.contracts]]
+name = "API routers hold endpoints; request and response models live in api.schemas"
+type = "forbidden"
+source_modules = ["fitlib.api.routers"]
+forbidden_modules = ["pydantic"]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "API schemas don't depend on routers"
+type = "forbidden"
+source_modules = ["fitlib.api.schemas"]
+forbidden_modules = ["fitlib.api.routers"]
 
 [[tool.importlinter.contracts]]
 name = "Inside services: compare <- request-level services <- workers <- errors"
