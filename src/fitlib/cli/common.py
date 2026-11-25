@@ -26,14 +26,13 @@ from fitlib.models import (
     Units,
 )
 from fitlib.services import rides
-from fitlib.services.errors import NotFound, ServiceError
+from fitlib.services.errors import MissingRides, NotFound, ServiceError
 from fitlib.store.factory import Stores, open_stores
 from fitlib.store.interfaces import (
     AmbiguousBike,
     AmbiguousRideId,
     BikeCatalog,
     BikeNotFound,
-    MissingRides,
     RideCatalog,
     RideNotFound,
 )

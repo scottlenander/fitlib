@@ -6,8 +6,13 @@ import polars as pl
 import pytest
 
 from fitlib.services.compare import compare, compared_rides
-from fitlib.services.errors import BadSmoothing, CantAlignByDistance, RideTwice, WrongRideCount
-from fitlib.store.interfaces import MissingRides
+from fitlib.services.errors import (
+    BadSmoothing,
+    CantAlignByDistance,
+    MissingRides,
+    RideTwice,
+    WrongRideCount,
+)
 from tests.unit.conftest import ImportedLibrary
 
 ZWIFT = "2025-08-02-08-29-42.fit"

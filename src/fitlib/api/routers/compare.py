@@ -7,7 +7,8 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Query
 
 from fitlib.api.deps import StoresDep
-from fitlib.api.schemas import ComparedRide, Comparison, ride_detail
+from fitlib.api.schemas.compare import ComparedRide, Comparison
+from fitlib.api.schemas.rides import ride_detail
 from fitlib.services import compare as comparing
 from fitlib.services.compare import DEFAULT_POINTS, MAX_RIDES, MIN_RIDES, SMOOTHING_S
 

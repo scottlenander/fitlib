@@ -3,30 +3,13 @@
 from __future__ import annotations
 
 from fastapi import APIRouter
-from pydantic import BaseModel
 
 from fitlib import __version__
 from fitlib.api.deps import StoresDep
+from fitlib.api.schemas.health import Health
 from fitlib.ingest.summarize import METRICS_VERSION
 
 router = APIRouter(tags=["health"])
-
-
-class Health(BaseModel):
-    """The server's status.
-
-    Attributes:
-        status: Always ``"ok"`` when the server answers.
-        version: fitlib's version.
-        rides: How many rides the library holds.
-        outdated_rides: Rides computed with older calculations; ``fitlib recompute`` brings
-            them up to date.
-    """
-
-    status: str
-    version: str
-    rides: int
-    outdated_rides: int
 
 
 @router.get("/health")

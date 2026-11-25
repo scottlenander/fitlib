@@ -17,9 +17,14 @@ from fitlib.metrics.zwift import world_by_slug, zwift_world
 from fitlib.models import Filters, Page, Ride, SortKey, Source
 from fitlib.services import deleting
 from fitlib.services.context import RideContext, RideView
-from fitlib.services.errors import NothingToChange, UnknownStreamFields, WorldNeedsZwift
+from fitlib.services.errors import (
+    MissingRides,
+    NothingToChange,
+    UnknownStreamFields,
+    WorldNeedsZwift,
+)
 from fitlib.store.factory import Stores
-from fitlib.store.interfaces import MissingRides, RideCatalog, RideNotFound
+from fitlib.store.interfaces import RideCatalog, RideNotFound
 
 # Stream columns a ride's samples can be read in; positions only when asked for.
 STREAM_FIELDS = ("active", *VALUE_COLUMNS)

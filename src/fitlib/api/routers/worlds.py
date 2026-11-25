@@ -3,23 +3,11 @@
 from __future__ import annotations
 
 from fastapi import APIRouter
-from pydantic import BaseModel
 
+from fitlib.api.schemas.worlds import WorldOut
 from fitlib.metrics.zwift import WORLDS
 
 router = APIRouter(prefix="/zwift-worlds", tags=["rides"])
-
-
-class WorldOut(BaseModel):
-    """A Zwift world.
-
-    Attributes:
-        slug: Its short name, for the rides list's ``world`` filter.
-        name: Its name.
-    """
-
-    slug: str
-    name: str
 
 
 @router.get("")

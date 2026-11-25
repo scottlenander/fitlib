@@ -8,8 +8,12 @@ from fitlib.metadata import KEEP, MetaEdit
 from fitlib.metrics.zwift import UnknownWorld
 from fitlib.models import Filters, Source
 from fitlib.services import rides
-from fitlib.services.errors import NothingToChange, UnknownStreamFields, WorldNeedsZwift
-from fitlib.store.interfaces import MissingRides
+from fitlib.services.errors import (
+    MissingRides,
+    NothingToChange,
+    UnknownStreamFields,
+    WorldNeedsZwift,
+)
 from tests.unit.conftest import ImportedLibrary
 
 ZWIFT = "2025-08-02-08-29-42.fit"

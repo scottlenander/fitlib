@@ -10,7 +10,7 @@ from datetime import date
 from fastapi import APIRouter, Response
 
 from fitlib.api.deps import StoresDep
-from fitlib.api.schemas import (
+from fitlib.api.schemas.bikes import (
     BackfillChange,
     BackfillResult,
     BikeCreate,
@@ -20,8 +20,8 @@ from fitlib.api.schemas import (
     DefaultOut,
     DefaultSet,
     bike_out,
-    bike_ref,
 )
+from fitlib.api.schemas.common import bike_ref
 from fitlib.metadata import KEEP
 from fitlib.models import BikeDefault, BikeSlot
 from fitlib.services import bikes as bike_service
