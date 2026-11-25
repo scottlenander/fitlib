@@ -13,11 +13,11 @@ from concurrent.futures import Future
 from dataclasses import dataclass, field
 
 from fitlib.ingest.analyse import Analysed, Failed, NotARide, analyse
-from fitlib.ingest.localtime import DEFAULT_ZONE_SETTING
 from fitlib.ingest.summarize import METRICS_VERSION
 from fitlib.models import Ride
 from fitlib.parallel import default_workers, make_executor
 from fitlib.store.interfaces import BlobNotFound, BlobStore, CatalogStore
+from fitlib.store.settings import DEFAULT_TIME_ZONE
 from fitlib.store.streams import StreamStore, raw_key
 
 log = logging.getLogger(__name__)
@@ -81,7 +81,7 @@ class Recomputer:
             Which rides were updated and which failed, with reasons.
         """
         report = RecomputeReport()
-        default_zone = self._catalog.get_setting(DEFAULT_ZONE_SETTING)
+        default_zone = DEFAULT_TIME_ZONE.get(self._catalog)
         # Bounded, like the importer, so memory stays flat when recomputing every ride.
         in_flight: deque[tuple[Ride, Future]] = deque()
 

@@ -19,6 +19,14 @@ from fitlib.store.factory import (
 )
 from fitlib.store.interfaces import BadSnapshot
 from fitlib.store.local.catalog import latest_schema_version
+from fitlib.store.settings import (
+    DEFAULT_TIME_ZONE,
+    LIBRARY_ID,
+    MACHINE_LOCAL,
+    SYNC_DEVICE,
+    SYNC_GENERATION,
+    SYNC_REMOTE,
+)
 
 
 @pytest.fixture
@@ -35,25 +43,32 @@ def config(tmp_path: Path) -> Config:
 
 
 def test_snapshot_leaves_out_this_computers_data(config: Config, tmp_path: Path):
-    """A snapshot keeps library settings but not watched folders or sync settings.
+    """A snapshot keeps library settings but not watched folders or this computer's settings.
 
-    Given: A library with a time zone, a sync setting and a watched folder, snapshotted
-        and restored elsewhere.
-    Expect: The time zone is there; the sync setting and watched folder aren't.
+    Given: A library with a default time zone, a library id, every machine-local sync setting
+        and a watched folder, snapshotted and restored elsewhere.
+    Expect: The time zone and library id are there; the sync settings and watched folder
+        aren't.
     """
     with open_stores(config) as stores:
-        stores.catalog.set_setting("time_zone", "Europe/Paris")
-        stores.catalog.set_setting("sync_remote", "/Volumes/Backup")
+        DEFAULT_TIME_ZONE.set(stores.catalog, "Europe/Paris")
+        LIBRARY_ID.set(stores.catalog, "a-library")
+        SYNC_REMOTE.set(stores.catalog, "/Volumes/Backup")
+        SYNC_GENERATION.set(stores.catalog, 4)
+        SYNC_DEVICE.set(stores.catalog, "this-computer")
         stores.catalog.add_watch_folder(watch_folder(tmp_path / "watched"))
-        data = snapshot_catalog(stores, "sync_")
+        data = snapshot_catalog(stores, MACHINE_LOCAL)
     copy = Config(library=tmp_path / "copy")
 
     restore_catalog(copy, data)
 
     with open_stores(copy) as stores:
-        assert stores.catalog.get_setting("time_zone") == "Europe/Paris"
-        assert stores.catalog.get_setting("sync_remote") is None
-        assert stores.catalog.watch_folders() == []
+        catalog = stores.catalog
+        assert DEFAULT_TIME_ZONE.get(catalog) == "Europe/Paris"
+        assert LIBRARY_ID.get(catalog) == "a-library", "The library id should travel with it"
+        local = [SYNC_REMOTE.get(catalog), SYNC_GENERATION.get(catalog), SYNC_DEVICE.get(catalog)]
+        assert local == [None, None, None], "This computer's sync settings should stay here"
+        assert catalog.watch_folders() == []
 
 
 def test_unchanged_catalog_gives_the_same_snapshot(config: Config):
@@ -63,9 +78,9 @@ def test_unchanged_catalog_gives_the_same_snapshot(config: Config):
     Expect: Identical bytes, so a push can skip the catalog.
     """
     with open_stores(config) as stores:
-        first = snapshot_catalog(stores, "sync_")
+        first = snapshot_catalog(stores, MACHINE_LOCAL)
         stores.catalog.set_setting("sync_generation", "4")
-        second = snapshot_catalog(stores, "sync_")
+        second = snapshot_catalog(stores, MACHINE_LOCAL)
 
     assert first == second
 
@@ -78,7 +93,7 @@ def test_snapshot_is_a_plain_sqlite_file(config: Config, tmp_path: Path):
     """
     with open_stores(config) as stores:
         path = tmp_path / "snap.sqlite3"
-        path.write_bytes(snapshot_catalog(stores, "sync_"))
+        path.write_bytes(snapshot_catalog(stores, MACHINE_LOCAL))
     db = sqlite3.connect(path)
 
     assert db.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
@@ -107,7 +122,7 @@ def test_restore_refuses_a_newer_schema(config: Config, tmp_path: Path):
     Expect: ``BadSnapshot`` naming a newer fitlib.
     """
     with open_stores(Config(library=tmp_path / "source")) as stores:
-        data = snapshot_catalog(stores, "sync_")
+        data = snapshot_catalog(stores, MACHINE_LOCAL)
     path = tmp_path / "newer.sqlite3"
     path.write_bytes(data)
     db = sqlite3.connect(path)
@@ -125,7 +140,7 @@ def test_restore_never_replaces_a_catalog(config: Config):
     Expect: ``FileExistsError``.
     """
     with open_stores(config) as stores:
-        data = snapshot_catalog(stores, "sync_")
+        data = snapshot_catalog(stores, MACHINE_LOCAL)
 
     with pytest.raises(FileExistsError):
         restore_catalog(config, data)

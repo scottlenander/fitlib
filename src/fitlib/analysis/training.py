@@ -15,8 +15,8 @@ from fitlib.metrics import load, zones
 from fitlib.metrics.load import CalibrationRide, ThresholdSource, TssSource
 from fitlib.models import AthleteEntry, Ride, TrendRow
 from fitlib.store.interfaces import CatalogStore, SettingsStore
+from fitlib.store.settings import BIRTH_YEAR
 
-BIRTH_YEAR_KEY = "birth_year"
 EARLIEST_BIRTH_YEAR = 1900
 
 
@@ -98,7 +98,7 @@ def athlete_profile(catalog: CatalogStore) -> AthleteProfile:
     Returns:
         The profile (load it once when working through many rides).
     """
-    year = catalog.get_setting(BIRTH_YEAR_KEY)
+    year = BIRTH_YEAR.get(catalog)
     rows = catalog.trend_rows(None, None)
     rides = (
         load.calibration_ride(row.local_date, row.moving_s, row.np, row.hr_squared_s)
@@ -107,7 +107,7 @@ def athlete_profile(catalog: CatalogStore) -> AthleteProfile:
     calibration = sorted((r for r in rides if r is not None), key=lambda r: r.day)
     return AthleteProfile(
         tuple(catalog.athlete_history()),
-        int(year) if year else None,
+        year,
         tuple(calibration),
         EffortHistory.from_rows(rows),
     )
@@ -127,7 +127,7 @@ def set_birth_year(catalog: SettingsStore, year: int | None, today: date | None 
     this_year = (today or date.today()).year
     if year is not None and not EARLIEST_BIRTH_YEAR <= year <= this_year:
         raise BadBirthYear(f"Give a year of birth from {EARLIEST_BIRTH_YEAR} to {this_year}.")
-    catalog.set_setting(BIRTH_YEAR_KEY, str(year) if year is not None else None)
+    BIRTH_YEAR.set(catalog, year)
 
 
 def threshold_hr_on(

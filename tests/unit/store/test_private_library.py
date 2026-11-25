@@ -7,6 +7,7 @@ from pathlib import Path
 
 from fitlib.config import Config
 from fitlib.store.factory import library_blobs, open_stores, restore_catalog, snapshot_catalog
+from fitlib.store.settings import MACHINE_LOCAL
 
 
 def mode(path: Path) -> int:
@@ -59,7 +60,7 @@ def test_restored_and_blob_only_libraries_are_private(tmp_path: Path):
     Expect: Both library folders are 0700.
     """
     with open_stores(Config(library=tmp_path / "source")) as stores:
-        data = snapshot_catalog(stores, "sync_")
+        data = snapshot_catalog(stores, MACHINE_LOCAL)
     restored = Config(library=tmp_path / "restored")
     blobs_first = Config(library=tmp_path / "blobs-first")
 

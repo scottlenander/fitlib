@@ -473,7 +473,7 @@ search find rides by their new names (with the start time).
 | `fitlib/metrics/` | Ride figures from a 1 Hz stream (basic, power, HR, curves, zones), route fingerprints (`route.py`), simplified tracks for maps (`track.py`) and FTP-based formulas (`load.py`) |
 | `fitlib/analysis/` | FTP-based figures for a ride (athlete history or estimated FTP); similar rides (`similar.py`); lining rides up to compare (`compare.py`); trends over many rides (`trends.py`) |
 | `fitlib/metadata.py` | Tag rules, ride kinds for default bikes, and which dated default applies |
-| `fitlib/store/` | `CatalogStore` (the sum of its roles `RideCatalog`, `BikeCatalog`, `AthleteCatalog`, `SettingsStore` and `WatchState`; functions take the role they need) / `BlobStore` interfaces; `local/` (SQLite + files) and `memory/` backends, each catalog a package with a `base.py` and one file per role; `factory.py` picks one |
+| `fitlib/store/` | `CatalogStore` (the sum of its roles `RideCatalog`, `BikeCatalog`, `AthleteCatalog`, `SettingsStore` and `WatchState`; functions take the role they need) / `BlobStore` interfaces; `local/` (SQLite + files) and `memory/` backends, each catalog a package with a `base.py` and one file per role; `factory.py` picks one; `settings.py` declares each library setting once, with its type and whether it stays on this computer |
 | `fitlib/services/` | The tasks the browser app and the command line share: `rides.py` (finding, listing, samples, maps, similar rides, route progress, editing, deleting), `compare.py`, `bikes.py` (bikes, the default timeline and backfill), `athlete.py`, `importing.py` (hash, dedupe, analyse in worker processes, store), `recompute.py` (rebuild rides from their raw files when calculations change), `deleting.py` (rides with their streams and original files), `watching.py` (watched folders: which files, settling, scans, and the background watcher the server runs); `context.py` loads the athlete's values and the bikes once for showing many rides; `errors.py` the requests a person can fix |
 | `fitlib/sync/` | Optional encrypted backup: `crypto.py` (sealed objects, object names, the passphrase keyfile), `keys.py` (Keychain), `engine.py` (setup, push, status, restore) |
 | `fitlib/api/` | FastAPI app: `app.py` builds it, `routers/` one per area, `schemas.py` request/response models, `errors.py` error responses, `security.py` refusing other sites and adding security headers, `static.py` the browser app's files |
@@ -573,6 +573,9 @@ date.
   distance, speed, altitude, session and laps; missing channels stay missing; a truncated file
   is rejected. This guards both libraries, neither of which declares Python 3.14 support.
 - **Fixtures are current** (`tests/unit/test_fixtures_current.py`).
+- **Settings** (`tests/unit/store/test_settings.py`): values back with their types (and as
+  stored by earlier versions), clearing, the machine-local settings being exactly the sync
+  ones, and no raw setting reads or writes outside the store.
 - **Storage contracts** (`tests/unit/store/`, the catalog's in `tests/unit/store/catalog/`, one file per role): one suite runs against every catalog (SQLite, memory)
   and blob store (filesystem, memory): each catalog playing every role, round trips, duplicate hashes, id prefixes, time
   windows, every search filter (including where a ride starts), text search, sorting with missing values last, paging,

@@ -360,15 +360,15 @@ class _Base:
             meta=meta,
         )
 
-    def snapshot(self, local_settings_prefix: str) -> bytes:
+    def snapshot(self, local_settings: frozenset[str]) -> bytes:
         """Copy the whole catalog as one SQLite file, without this computer's own data.
 
-        Leaves out ``LOCAL_TABLES`` (watched folders and files) and settings whose names start
-        with ``local_settings_prefix``. Safe while others write: SQLite's backup copies one
+        Leaves out ``LOCAL_TABLES`` (watched folders and files) and the settings named in
+        ``local_settings``. Safe while others write: SQLite's backup copies one
         consistent state.
 
         Args:
-            local_settings_prefix: Settings with names starting with this are left out.
+            local_settings: Keys of this computer's own settings, left out.
 
         Returns:
             The database file's bytes, not in WAL mode.
@@ -382,9 +382,8 @@ class _Base:
                 copy.execute("PRAGMA journal_mode = DELETE")
                 for table in LOCAL_TABLES:
                     copy.execute(f"DELETE FROM {table}")
-                copy.execute(
-                    "DELETE FROM settings WHERE substr(key, 1, ?) = ?",
-                    (len(local_settings_prefix), local_settings_prefix),
+                copy.executemany(
+                    "DELETE FROM settings WHERE key = ?", [(key,) for key in local_settings]
                 )
                 copy.execute("VACUUM")
             finally:
